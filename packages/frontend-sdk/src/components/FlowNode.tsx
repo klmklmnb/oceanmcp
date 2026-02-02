@@ -1,10 +1,53 @@
 import type { FlowNode as FlowNodeType } from "../types";
+import { getRegistry } from "../registry";
 
 type FlowNodeProps = {
   node: FlowNodeType;
 };
 
+/**
+ * Format argument value for display
+ */
+function formatValue(value: unknown): string {
+  if (typeof value === "string") {
+    return `"${value}"`;
+  }
+  if (value === null || value === undefined) {
+    return String(value);
+  }
+  return JSON.stringify(value);
+}
+
+/**
+ * Format function call with actual argument values
+ * e.g., "getClusterDetails(clusterId: "cluster-1")"
+ */
+function formatFunctionCall(
+  functionId: string,
+  params: { name: string; type: string }[],
+  args: Record<string, unknown>
+): string {
+  if (params.length === 0 && Object.keys(args).length === 0) {
+    return `${functionId}()`;
+  }
+  
+  // Use params order if available, otherwise fall back to args keys
+  const paramNames = params.length > 0 
+    ? params.map((p) => p.name) 
+    : Object.keys(args);
+  
+  const paramStr = paramNames
+    .map((name) => `${name}: ${formatValue(args[name])}`)
+    .join(", ");
+  
+  return `${functionId}(${paramStr})`;
+}
+
 export function FlowNodeComponent({ node }: FlowNodeProps) {
+  const registry = getRegistry();
+  const funcDef = registry.find((f) => f.id === node.functionId);
+  const params = funcDef?.parameters ?? [];
+
   const statusLabels = {
     pending: "Pending",
     running: "Running...",
@@ -22,22 +65,9 @@ export function FlowNodeComponent({ node }: FlowNodeProps) {
   return (
     <div className={`flow-node ${node.status}`}>
       <div className="flow-node-title">{node.title}</div>
-      <div className="flow-node-function">{node.functionId}</div>
-      
-      {Object.keys(node.arguments).length > 0 && (
-        <div style={{ 
-          marginTop: "8px", 
-          fontSize: "11px", 
-          color: "#888",
-          fontFamily: "monospace",
-          background: "rgba(0,0,0,0.2)",
-          padding: "6px 8px",
-          borderRadius: "4px",
-          wordBreak: "break-all"
-        }}>
-          {JSON.stringify(node.arguments)}
-        </div>
-      )}
+      <div className="flow-node-function" style={{ wordBreak: "break-all" }}>
+        {formatFunctionCall(node.functionId, params, node.arguments)}
+      </div>
       
       <div className="flow-node-status">
         <span 
