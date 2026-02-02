@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { ChatPane } from "./ChatPane";
 import { FlowPane } from "./FlowPane";
 import { useWebSocket, syncRegistry } from "../hooks/useWebSocket";
@@ -18,19 +18,26 @@ export function SplitPane({ serverUrl, wsUrl, onClose }: SplitPaneProps) {
   const [currentPlan, setCurrentPlan] = useState<FlowPlan | null>(null);
   const [isRunningFlow, setIsRunningFlow] = useState(false);
   const [streamingContent, setStreamingContent] = useState("");
+  const registrySyncedRef = useRef(false);
 
   const ws = useWebSocket(wsUrl);
 
-  // Connect on mount and sync registry
+  // Connect on mount
   useEffect(() => {
     ws.connect();
-  }, []);
+    registrySyncedRef.current = false;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [wsUrl]);
 
-  // Sync registry when connected
+  // Sync registry when connected (only once per connection)
   useEffect(() => {
-    if (ws.status === "connected") {
+    if (ws.status === "connected" && !registrySyncedRef.current) {
       const functions = getRegistry();
-      syncRegistry(ws.sendMessage, functions);
+      const sent = syncRegistry(ws.sendMessage, functions);
+      if (sent) {
+        registrySyncedRef.current = true;
+        console.log("[SDK] Registry synced with", functions.length, "functions");
+      }
     }
   }, [ws.status, ws.sendMessage]);
 

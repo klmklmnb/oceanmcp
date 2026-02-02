@@ -13,7 +13,7 @@ type UseWebSocketReturn = {
   error: string | null;
   connect: () => void;
   disconnect: () => void;
-  sendMessage: (event: ClientEvent) => void;
+  sendMessage: (event: ClientEvent) => boolean;
   onChatStream: (callback: (content: string, done: boolean) => void) => void;
   onProposeFlow: (callback: (plan: FlowPlan) => void) => void;
   onExecuteRead: (callback: (requestId: string, reads: unknown[]) => void) => void;
@@ -27,14 +27,20 @@ export function useWebSocket(wsUrl: string): UseWebSocketReturn {
   });
 
   const wsRef = useRef<WebSocket | null>(null);
+  const connectionIdRef = useRef<number>(0);
   const chatStreamCallbackRef = useRef<((content: string, done: boolean) => void) | null>(null);
   const proposeFlowCallbackRef = useRef<((plan: FlowPlan) => void) | null>(null);
   const executeReadCallbackRef = useRef<((requestId: string, reads: unknown[]) => void) | null>(null);
 
   const connect = useCallback(() => {
-    if (wsRef.current?.readyState === WebSocket.OPEN) {
-      return;
+    // Close any existing connection
+    if (wsRef.current) {
+      wsRef.current.close();
+      wsRef.current = null;
     }
+
+    // Increment connection ID to invalidate callbacks from old connections
+    const currentConnectionId = ++connectionIdRef.current;
 
     setState((s) => ({ ...s, status: "connecting", error: null }));
 
@@ -42,11 +48,20 @@ export function useWebSocket(wsUrl: string): UseWebSocketReturn {
     const ws = new WebSocket(`${wsUrl}?sessionId=${sessionId}`);
 
     ws.onopen = () => {
+      // Only update state if this is still the current connection
+      if (connectionIdRef.current !== currentConnectionId) {
+        console.log("[SDK] Ignoring stale onopen for", sessionId);
+        ws.close();
+        return;
+      }
       setState({ status: "connected", sessionId, error: null });
       console.log("[SDK] WebSocket connected", sessionId);
     };
 
     ws.onmessage = (event) => {
+      // Ignore messages from stale connections
+      if (connectionIdRef.current !== currentConnectionId) return;
+      
       try {
         const data = JSON.parse(event.data) as ServerEvent;
         
@@ -67,10 +82,12 @@ export function useWebSocket(wsUrl: string): UseWebSocketReturn {
     };
 
     ws.onerror = () => {
+      if (connectionIdRef.current !== currentConnectionId) return;
       setState((s) => ({ ...s, status: "error", error: "WebSocket connection error" }));
     };
 
     ws.onclose = () => {
+      if (connectionIdRef.current !== currentConnectionId) return;
       setState((s) => ({ ...s, status: "disconnected" }));
       wsRef.current = null;
     };
@@ -79,16 +96,20 @@ export function useWebSocket(wsUrl: string): UseWebSocketReturn {
   }, [wsUrl]);
 
   const disconnect = useCallback(() => {
+    connectionIdRef.current++; // Invalidate current connection
     wsRef.current?.close();
     wsRef.current = null;
     setState({ status: "disconnected", sessionId: null, error: null });
   }, []);
 
   const sendMessage = useCallback((event: ClientEvent) => {
-    if (wsRef.current?.readyState === WebSocket.OPEN) {
-      wsRef.current.send(JSON.stringify(event));
+    const ws = wsRef.current;
+    if (ws && ws.readyState === WebSocket.OPEN) {
+      ws.send(JSON.stringify(event));
+      return true;
     } else {
-      console.error("[SDK] WebSocket not connected");
+      console.warn("[SDK] WebSocket not ready, state:", ws?.readyState);
+      return false;
     }
   }, []);
 
@@ -109,6 +130,7 @@ export function useWebSocket(wsUrl: string): UseWebSocketReturn {
 
   useEffect(() => {
     return () => {
+      connectionIdRef.current++; // Invalidate on unmount
       wsRef.current?.close();
     };
   }, []);
@@ -127,10 +149,10 @@ export function useWebSocket(wsUrl: string): UseWebSocketReturn {
 }
 
 export function syncRegistry(
-  sendMessage: (event: ClientEvent) => void,
+  sendMessage: (event: ClientEvent) => boolean,
   functions: FunctionDefinition[]
-): void {
-  sendMessage({
+): boolean {
+  return sendMessage({
     type: "SYNC_REGISTRY",
     functions,
   });

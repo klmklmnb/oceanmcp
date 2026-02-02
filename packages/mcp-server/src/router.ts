@@ -27,6 +27,7 @@ export async function handleChatRequest(req: Request): Promise<Response> {
     }
 
     const functions = sessionStore.getFunctions(sessionId);
+    console.log(`[Router] Chat request for ${sessionId}, available functions: ${functions.length}`);
     
     // Import agent and process the chat
     // For now, we'll use a placeholder that echoes the message

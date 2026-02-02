@@ -131,22 +131,6 @@ export function mount(container?: HTMLElement, config?: SDKConfig): () => void {
   };
 }
 
-// Auto-mount when loaded as a script
-if (typeof window !== "undefined") {
-  // Check if we should auto-mount
-  const scriptTag = document.currentScript as HTMLScriptElement | null;
-  const autoMount = scriptTag?.getAttribute("data-auto-mount") !== "false";
-  
-  if (autoMount) {
-    // Wait for DOM to be ready
-    if (document.readyState === "loading") {
-      document.addEventListener("DOMContentLoaded", () => mount());
-    } else {
-      mount();
-    }
-  }
-}
-
 // For development: render to #root if it exists
 const rootElement = document.getElementById("root");
 if (rootElement && import.meta.env.DEV) {
@@ -179,4 +163,17 @@ if (rootElement && import.meta.env.DEV) {
       <HackerAgentSDK />
     </React.StrictMode>
   );
+} else if (typeof window !== "undefined") {
+  // Auto-mount when loaded as a script (production only, not in dev mode)
+  const scriptTag = document.currentScript as HTMLScriptElement | null;
+  const shouldAutoMount = scriptTag?.getAttribute("data-auto-mount") !== "false";
+  
+  if (shouldAutoMount) {
+    // Wait for DOM to be ready
+    if (document.readyState === "loading") {
+      document.addEventListener("DOMContentLoaded", () => mount());
+    } else {
+      mount();
+    }
+  }
 }
