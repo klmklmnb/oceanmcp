@@ -1,4 +1,4 @@
-import { ChatAnthropic } from "@langchain/anthropic";
+import { ChatOpenAI } from "@langchain/openai";
 import { AgentExecutor, createToolCallingAgent } from "langchain/agents";
 import { ChatPromptTemplate, MessagesPlaceholder } from "@langchain/core/prompts";
 import type { FunctionDefinition } from "@hacker-agent/shared";
@@ -34,10 +34,13 @@ ${writeFunctions.map((f) => `- **${f.name}** (${f.id}): ${f.description}
 }
 
 export async function createAgent(context: AgentContext) {
-  const model = new ChatAnthropic({
-    modelName: "claude-sonnet-4-20250514",
+  const model = new ChatOpenAI({
+    modelName: process.env.OPENAI_MODEL_NAME || "gpt-5.2",
     temperature: 0,
-    anthropicApiKey: process.env.ANTHROPIC_API_KEY,
+    openAIApiKey: process.env.OPENAI_API_KEY,
+    configuration: {
+      baseURL: process.env.OPENAI_BASE_URL,
+    },
   });
 
   const tools = [

@@ -5,7 +5,7 @@
   "main": "./src/index.ts",
   "scripts": {
     "dev": "bun run --watch src/index.ts",
-    "build": "bun build src/index.ts --outdir dist --target bun",
+    "build": "bun build src/index.ts --outdir dist --target bun && tsc --emitDeclarationOnly --declaration",
     "start": "bun run src/index.ts"
   },
   "dependencies": {
@@ -13,6 +13,7 @@
     "zod": "^3.22.4"
   },
   "devDependencies": {
+    "@hacker-agent/agent": "workspace:*",
     "@types/bun": "latest",
     "typescript": "^5.3.3"
   }

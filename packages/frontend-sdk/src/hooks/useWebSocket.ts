@@ -16,9 +16,7 @@ type UseWebSocketReturn = {
   sendMessage: (event: ClientEvent) => void;
   onChatStream: (callback: (content: string, done: boolean) => void) => void;
   onProposeFlow: (callback: (plan: FlowPlan) => void) => void;
-  onExecuteRead: (
-    callback: (requestId: string, reads: ServerEvent extends { type: "EXECUTE_READ" } ? ServerEvent["reads"] : never) => void
-  ) => void;
+  onExecuteRead: (callback: (requestId: string, reads: unknown[]) => void) => void;
 };
 
 export function useWebSocket(wsUrl: string): UseWebSocketReturn {

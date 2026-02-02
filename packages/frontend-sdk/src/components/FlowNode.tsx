@@ -49,7 +49,7 @@ export function FlowNodeComponent({ node }: FlowNodeProps) {
         </span>
       </div>
       
-      {node.result && (
+      {node.result !== undefined && node.result !== null && (
         <div style={{
           marginTop: "8px",
           fontSize: "11px",

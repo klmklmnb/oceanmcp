@@ -4,7 +4,7 @@ import { FlowPane } from "./FlowPane";
 import { useWebSocket, syncRegistry } from "../hooks/useWebSocket";
 import { getRegistry } from "../registry";
 import { executeFlow } from "../runtime/executor";
-import type { ChatMessage, FlowPlan, FlowNode, ReadOperation } from "../types";
+import type { ChatMessage, FlowPlan, ReadOperation } from "../types";
 
 type SplitPaneProps = {
   serverUrl: string;
