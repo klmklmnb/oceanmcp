@@ -10,7 +10,7 @@ export const FunctionDefinitionSchema = z.object({
     z.object({
       name: z.string(),
       type: z.string(),
-      description: z.string().optional(),
+      description: z.string().optional().nullable(),
     })
   ),
 });
@@ -23,7 +23,7 @@ export const SyncRegistrySchema = z.object({
 export const ReadResultItemSchema = z.object({
   id: z.string(),
   result: z.unknown(),
-  error: z.string().optional(),
+  error: z.string().optional().nullable(),
 });
 
 export const ReadResultSchema = z.object({
@@ -38,8 +38,8 @@ export const FlowNodeSchema = z.object({
   title: z.string(),
   arguments: z.record(z.unknown()),
   status: z.enum(["pending", "running", "success", "failed"]),
-  result: z.unknown().optional(),
-  error: z.string().optional(),
+  result: z.unknown().optional().nullable(),
+  error: z.string().optional().nullable(),
 });
 
 export const FlowResultSchema = z.object({

@@ -109,7 +109,7 @@ export const mockFunctions: FunctionDefinition[] = [
   {
     id: "getDeployGroups",
     name: "Get Deploy Groups",
-    description: "Fetch application deploy groups information",
+    description: "Fetch application deploy groups information from a specific cluster",
     type: "read",
     code: `const url = new URL("https://api.agw.mihoyo.com/eee-prod-cn/trinity/v1/application/deploy/group");
 url.searchParams.set("app_id", ${APP_ID});
