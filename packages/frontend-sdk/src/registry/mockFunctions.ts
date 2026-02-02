@@ -72,4 +72,12 @@ export const mockFunctions: FunctionDefinition[] = [
     code: `console.log("Deleting cluster:", args.clusterId); return { success: true, deleted: args.clusterId, message: "Cluster deleted successfully" }`,
     parameters: [{ name: "clusterId", type: "string" }],
   },
+  {
+    id: "deleteClusterLog",
+    name: "Delete Cluster Log",
+    description: "Delete specific logs from a cluster",
+    type: "write",
+    code: `console.log("Deleting cluster log:", args.clusterId); return { success: true, deleted: args.clusterId, message: "Cluster log deleted successfully" }`,
+    parameters: [{ name: "clusterId", type: "string" }],
+  },
 ];

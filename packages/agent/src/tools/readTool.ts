@@ -17,7 +17,7 @@ Use result substitution with $N syntax to chain reads (e.g., $0.field references
       reads: z.array(
         z.object({
           functionId: z.string().describe("The function ID to call"),
-          arguments: z.record(z.unknown()).describe("Arguments for the function. Use $N.path syntax to reference previous read results."),
+          arguments: z.record(z.unknown()).optional().default({}).describe("Arguments for the function. Use $N.path syntax to reference previous read results."),
         })
       ).describe("Array of read operations to execute sequentially"),
     }),

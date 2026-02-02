@@ -18,7 +18,7 @@ The plan will be shown to the user for review before execution.`,
       steps: z.array(
         z.object({
           functionId: z.string().describe("The write function ID to call"),
-          arguments: z.record(z.unknown()).describe("Arguments for the function"),
+          arguments: z.record(z.unknown()).optional().default({}).describe("Arguments for the function"),
           title: z.string().describe("A human-readable title for this step"),
         })
       ).describe("Array of steps to execute in order"),
