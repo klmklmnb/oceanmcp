@@ -1,0 +1,20 @@
+{
+  "name": "hacker-agent",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev:server": "pnpm --filter mcp-server run dev",
+    "dev:agent": "pnpm --filter agent run dev",
+    "dev:sdk": "pnpm --filter frontend-sdk run dev",
+    "dev": "concurrently \"pnpm dev:server\" \"pnpm dev:agent\" \"pnpm dev:sdk\"",
+    "build": "pnpm -r build"
+  },
+  "devDependencies": {
+    "concurrently": "^8.2.2",
+    "typescript": "^5.3.3"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}
