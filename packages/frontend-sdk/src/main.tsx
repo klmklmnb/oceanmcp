@@ -136,15 +136,18 @@ if (import.meta.env.DEV) {
   // Initialize registry for development
   initRegistry();
   setTimeout(() => {
-    ReactDOM.createRoot(document.getElementById('workbench-iteration-platform') as HTMLElement).render(
-      <React.StrictMode>
-        <SplitPane
-          serverUrl={DEFAULT_SERVER_URL}
-          wsUrl={DEFAULT_WS_URL}
-          onClose={() => { }}
-        />
-      </React.StrictMode>
-    );
+    const root = document.getElementById('itr-platform-deployment') as HTMLElement
+    if (root) {
+      ReactDOM.createRoot(root).render(
+        <React.StrictMode>
+          <SplitPane
+            serverUrl={DEFAULT_SERVER_URL}
+            wsUrl={DEFAULT_WS_URL}
+            onClose={() => { }}
+          />
+        </React.StrictMode>
+      );
+    }
   }, 2000);
 } else if (typeof window !== "undefined") {
   // Auto-mount when loaded as a script (production only, not in dev mode)
