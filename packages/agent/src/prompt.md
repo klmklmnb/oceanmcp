@@ -42,6 +42,7 @@ When calling `create_plan`, your JSON payload must strictly adhere to this struc
       "title": "Human-readable step title",
       "arguments": {
         // REQUIRED: Function parameters key-value pairs.
+        // Must include all required parameters; optional parameters may be omitted.
         // Example: "env": "testing"
         // NEVER omit this object, even if empty (use {}).
       }

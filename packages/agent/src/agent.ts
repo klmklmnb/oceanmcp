@@ -24,9 +24,9 @@ function formatFunctionList(functions: FunctionDefinition[]): string {
       ? f.parameters
           .map(
             (p) =>
-              `${p.name}: ${p.type}${
-                p.description ? ` - ${p.description}` : ""
-              }`
+              `${p.name}: ${p.type} (${
+                p.required ? "required" : "optional"
+              })${p.description ? ` - ${p.description}` : ""}`
           )
           .join(", ")
       : "none"

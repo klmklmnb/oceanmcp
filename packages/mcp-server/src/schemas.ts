@@ -11,6 +11,7 @@ export const FunctionDefinitionSchema = z.object({
       name: z.string(),
       type: z.string(),
       description: z.string().optional().nullable(),
+      required: z.boolean(),
     })
   ),
 });

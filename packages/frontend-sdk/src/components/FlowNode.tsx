@@ -24,7 +24,7 @@ function formatValue(value: unknown): string {
  */
 function formatFunctionCall(
   functionId: string,
-  params: { name: string; type: string }[],
+  params: { name: string; type: string; description?: string; required: boolean }[],
   args: Record<string, unknown>
 ): string {
   if (params.length === 0 && Object.keys(args).length === 0) {

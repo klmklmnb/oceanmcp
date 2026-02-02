@@ -112,7 +112,7 @@ type FunctionDefinition = {
   name: string;
   description: string;
   code: string; // e.g. "return fetch('/api/v1/cluster/' + args.id)"
-  parameters: { name: string; type: string }[];
+  parameters: { name: string; type: string; required: boolean }[];
 };
 ```
 C. The Execution Engine

@@ -6,7 +6,12 @@ export type FunctionDefinition = {
   description: string;
   type: "read" | "write"; // read = safe/immediate, write = requires approval
   code: string; // e.g. "return fetch('/api/v1/cluster/' + args.id)"
-  parameters: { name: string; type: string; description?: string }[];
+  parameters: {
+    name: string;
+    type: string;
+    description?: string;
+    required: boolean;
+  }[];
 };
 
 export type FlowPlan = {

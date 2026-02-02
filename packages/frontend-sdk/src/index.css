@@ -97,6 +97,7 @@
   border-radius: 12px;
   font-size: 14px;
   line-height: 1.5;
+  word-break: break-all;
 }
 
 .chat-message.user {
