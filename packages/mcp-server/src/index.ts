@@ -1,3 +1,8 @@
+import dotenv from "dotenv";
+import { resolve } from "path";
+
+// Load .env from monorepo root
+dotenv.config({ path: resolve(import.meta.dir, "../../../.env") });
 import type { WebSocketData } from "./types";
 import {
   handleWebSocketOpen,
