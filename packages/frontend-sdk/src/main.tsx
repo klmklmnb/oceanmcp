@@ -20,7 +20,7 @@ type HackerAgentSDKProps = {
 
 function HackerAgentSDK({ config = {} }: HackerAgentSDKProps) {
   const [isOpen, setIsOpen] = useState(false);
-  
+
   const serverUrl = config.serverUrl || DEFAULT_SERVER_URL;
   const wsUrl = config.wsUrl || DEFAULT_WS_URL;
   const triggerKey = config.triggerKey || "k"; // Ctrl/Cmd + K
@@ -37,7 +37,7 @@ function HackerAgentSDK({ config = {} }: HackerAgentSDKProps) {
         e.preventDefault();
         setIsOpen((prev) => !prev);
       }
-      
+
       // Escape to close
       if (e.key === "Escape" && isOpen) {
         setIsOpen(false);
@@ -110,7 +110,7 @@ export type * from "./types";
 // Auto-mount function for script injection
 export function mount(container?: HTMLElement, config?: SDKConfig): () => void {
   const targetContainer = container || document.createElement("div");
-  
+
   if (!container) {
     targetContainer.id = "hacker-agent-root";
     document.body.appendChild(targetContainer);
@@ -132,31 +132,25 @@ export function mount(container?: HTMLElement, config?: SDKConfig): () => void {
 }
 
 // For development: render to #root if it exists
-const rootElement = document.getElementById("root");
-if (rootElement && import.meta.env.DEV) {
+if (import.meta.env.DEV) {
   // Initialize registry for development
   initRegistry();
-  
-  ReactDOM.createRoot(rootElement).render(
-    <React.StrictMode>
-      <div style={{ 
-        width: "100vw", 
-        height: "100vh", 
-        background: "#0a0a0a"
-      }}>
+  setTimeout(() => {
+    ReactDOM.createRoot(document.getElementById('workbench-iteration-platform') as HTMLElement).render(
+      <React.StrictMode>
         <SplitPane
           serverUrl={DEFAULT_SERVER_URL}
           wsUrl={DEFAULT_WS_URL}
-          onClose={() => {}}
+          onClose={() => { }}
         />
-      </div>
-    </React.StrictMode>
-  );
+      </React.StrictMode>
+    );
+  }, 2000);
 } else if (typeof window !== "undefined") {
   // Auto-mount when loaded as a script (production only, not in dev mode)
   const scriptTag = document.currentScript as HTMLScriptElement | null;
   const shouldAutoMount = scriptTag?.getAttribute("data-auto-mount") !== "false";
-  
+
   if (shouldAutoMount) {
     // Wait for DOM to be ready
     if (document.readyState === "loading") {
