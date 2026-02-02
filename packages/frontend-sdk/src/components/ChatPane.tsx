@@ -1,4 +1,6 @@
 import { useState, useRef, useEffect } from "react";
+import Markdown from "react-markdown";
+import remarkGfm from "remark-gfm";
 import type { ChatMessage } from "../types";
 
 type ChatPaneProps = {
@@ -66,7 +68,11 @@ export function ChatPane({ messages, isTyping, onSendMessage, disabled }: ChatPa
             key={message.id}
             className={`chat-message ${message.role}`}
           >
-            {message.content}
+            {message.role === "assistant" ? (
+              <Markdown remarkPlugins={[remarkGfm]}>{message.content}</Markdown>
+            ) : (
+              message.content
+            )}
           </div>
         ))}
         

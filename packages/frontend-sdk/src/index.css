@@ -113,6 +113,101 @@
   border-bottom-left-radius: 4px;
 }
 
+/* Markdown styles for assistant messages */
+.chat-message.assistant p {
+  margin: 0 0 0.75em;
+}
+
+.chat-message.assistant p:last-child {
+  margin-bottom: 0;
+}
+
+.chat-message.assistant h1,
+.chat-message.assistant h2,
+.chat-message.assistant h3,
+.chat-message.assistant h4 {
+  margin: 0 0 0.5em;
+  font-weight: 600;
+  color: #fff;
+}
+
+.chat-message.assistant h1 { font-size: 1.25em; }
+.chat-message.assistant h2 { font-size: 1.15em; }
+.chat-message.assistant h3 { font-size: 1.05em; }
+
+.chat-message.assistant code {
+  background: rgba(0, 0, 0, 0.3);
+  padding: 0.15em 0.4em;
+  border-radius: 4px;
+  font-family: 'SF Mono', Monaco, 'Courier New', monospace;
+  font-size: 0.9em;
+  color: #22c55e;
+}
+
+.chat-message.assistant pre {
+  background: rgba(0, 0, 0, 0.4);
+  padding: 12px;
+  border-radius: 6px;
+  overflow-x: auto;
+  margin: 0.75em 0;
+}
+
+.chat-message.assistant pre code {
+  background: none;
+  padding: 0;
+  color: #e0e0e0;
+}
+
+.chat-message.assistant ul,
+.chat-message.assistant ol {
+  margin: 0.5em 0;
+  padding-left: 1.5em;
+}
+
+.chat-message.assistant li {
+  margin: 0.25em 0;
+}
+
+.chat-message.assistant blockquote {
+  margin: 0.75em 0;
+  padding-left: 1em;
+  border-left: 3px solid #22c55e;
+  color: #aaa;
+}
+
+.chat-message.assistant a {
+  color: #22c55e;
+  text-decoration: underline;
+}
+
+.chat-message.assistant a:hover {
+  color: #4ade80;
+}
+
+.chat-message.assistant hr {
+  border: none;
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+  margin: 1em 0;
+}
+
+.chat-message.assistant table {
+  border-collapse: collapse;
+  margin: 0.75em 0;
+  width: 100%;
+}
+
+.chat-message.assistant th,
+.chat-message.assistant td {
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  padding: 0.5em 0.75em;
+  text-align: left;
+}
+
+.chat-message.assistant th {
+  background: rgba(0, 0, 0, 0.2);
+  font-weight: 600;
+}
+
 .chat-input-container {
   padding: 16px;
   border-top: 1px solid rgba(255, 255, 255, 0.1);
