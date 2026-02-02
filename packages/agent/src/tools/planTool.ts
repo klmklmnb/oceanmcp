@@ -8,8 +8,10 @@ export function createPlanTool(context: AgentContext) {
     description: `Create an execution plan for write operations that require user approval. Available WRITE functions:
 ${context.functions
   .filter((f) => f.type === "write")
-  .map((f) => `- ${f.id}: ${f.description} (params: ${f.parameters.map((p) => p.name).join(", ") || "none"})`)
+  .map((f) => `- ${f.id}: ${f.description} (params: ${f.parameters.map((p) => `${p.name}: ${p.type}`).join(", ") || "none"})`)
   .join("\n")}
+
+IMPORTANT: For each step, you MUST include the required arguments object with all necessary parameters. For example, if calling "restartCluster" for cluster-1, the step should have: { "functionId": "restartCluster", "arguments": { "clusterId": "cluster-1" }, "title": "..." }
 
 The plan will be shown to the user for review before execution.`,
     
@@ -18,10 +20,10 @@ The plan will be shown to the user for review before execution.`,
       steps: z.array(
         z.object({
           functionId: z.string().describe("The write function ID to call"),
-          arguments: z.record(z.unknown()).optional().default({}).describe("Arguments for the function"),
+          arguments: z.record(z.unknown()).optional().default({}).describe("Arguments for the function. Include all necessary parameters like clusterId, nodeCount, etc."),
           title: z.string().describe("A human-readable title for this step"),
         })
-      ).describe("Array of steps to execute in order"),
+      ).describe("Array of steps to execute in order. Each step MUST include the arguments object with required parameters."),
     }),
     
     func: async ({ intent, steps }) => {
