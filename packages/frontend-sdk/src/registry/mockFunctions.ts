@@ -1,5 +1,17 @@
 import type { FunctionDefinition } from "../types";
 
+const BIZ_ID = "73";
+const APP_ID = "5836";
+const DEPLOY_APP_ID = "1470";
+const APP_GROUP = "neone";
+const HEADERS = `{
+"accept": "application/json",
+"accept-language": "zh-CN,zh;q=0.9,en;q=0.8",
+  "cache-control": "no-cache",
+  "x-mi-clientid": "6639999cb81c0cc1",
+  "x-version": "2.21.0"
+}`;
+
 export const mockFunctions: FunctionDefinition[] = [
   // READ functions (safe, immediate execution)
   // {
@@ -85,19 +97,63 @@ export const mockFunctions: FunctionDefinition[] = [
     name: "List App Clusters",
     description: "Fetch the list of app clusters",
     type: "read",
-    code: `return fetch("https://api.agw.mihoyo.com/eee-prod-cn/trinity/v1/deploy/list_app_clusters?biz_id=71&app_id=5724", {
-      headers: {
-        "accept": "application/json",
-        "accept-language": "zh-CN,zh;q=0.9,en;q=0.8",
-        "cache-control": "no-cache",
-        "x-mi-clientid": "6639999cb81c0cc1",
-        "x-version": "2.21.0"
-      },
+    code: `return fetch("https://api.agw.mihoyo.com/eee-prod-cn/trinity/v1/deploy/list_app_clusters?biz_id=${BIZ_ID}&app_id=${APP_ID}", {
+      headers: ${HEADERS},
       method: "GET",
       credentials: "include",
     }).then(response => response.json())
       .then(res => res?.data?.clusters || []);
 `,
     parameters: [],
+  },
+  {
+    id: "getDeployGroups",
+    name: "Get Deploy Groups",
+    description: "Fetch application deploy groups information",
+    type: "read",
+    code: `const url = new URL("https://api.agw.mihoyo.com/eee-prod-cn/trinity/v1/application/deploy/group");
+url.searchParams.set("app_id", ${APP_ID});
+url.searchParams.set("biz_id", ${BIZ_ID});
+url.searchParams.set("scope_type", "app");
+url.searchParams.set("app_group", ${APP_GROUP});
+url.searchParams.set("dc", "global");
+url.searchParams.set("env", args.env);
+url.searchParams.set("cluster_id", args.cluster_id);
+return fetch(url.toString(), {
+  headers: ${HEADERS},
+  method: "GET",
+  credentials: "include",
+}).then(response => response.json()).then(res => res?.data?.groups || []);
+`,
+    parameters: [
+      { name: "env", type: "string", description: "Environment (e.g., testing, prod)" },
+      { name: "cluster_id", type: "string", description: "Cluster ID (the id field from cluster list item)" },
+    ],
+  },
+  {
+    id: "createCluster",
+    name: "Create Cluster",
+    description: "Create a new cluster",
+    type: "write",
+    code: `return fetch("https://api.agw.mihoyo.com/eee-prod-cn/trinity/v1/deploy/cluster", {
+  body: JSON.stringify({
+    app_id: ${APP_ID},
+    biz_id: ${BIZ_ID},
+    scope_type: "app",
+    environment: {},
+    cluster_tag: "",
+    chinese_name: "",
+    env: args.env,
+    deploy_app_id: ${DEPLOY_APP_ID}
+  }),
+  method: "POST",
+  mode: "cors",
+  credentials: "include",
+  headers: ${HEADERS},
+}).then(response => response.json());
+`,
+    parameters: [
+      { name: "env", type: "string", description: "Environment (e.g., testing, prod)" },
+    ],
   },
 ];

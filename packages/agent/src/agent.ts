@@ -1,36 +1,53 @@
+import { readFileSync } from "fs";
+import { join, dirname } from "path";
+import { fileURLToPath } from "url";
 import { ChatOpenAI } from "@langchain/openai";
 import { AgentExecutor, createToolCallingAgent } from "langchain/agents";
-import { ChatPromptTemplate, MessagesPlaceholder } from "@langchain/core/prompts";
+import {
+  ChatPromptTemplate,
+  MessagesPlaceholder,
+} from "@langchain/core/prompts";
 import type { FunctionDefinition } from "@hacker-agent/shared";
 import type { AgentContext } from "./types";
 import { createReadTool } from "./tools/readTool";
 import { createPlanTool } from "./tools/planTool";
 
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
+
+function formatFunctionList(functions: FunctionDefinition[]): string {
+  return functions
+    .map(
+      (f) => `- **${f.name}** (${f.id}): ${f.description}
+  Parameters: ${
+    f.parameters.length > 0
+      ? f.parameters
+          .map(
+            (p) =>
+              `${p.name}: ${p.type}${
+                p.description ? ` - ${p.description}` : ""
+              }`
+          )
+          .join(", ")
+      : "none"
+  }`
+    )
+    .join("\n");
+}
+
 function buildSystemPrompt(functions: FunctionDefinition[]): string {
   const readFunctions = functions.filter((f) => f.type === "read");
   const writeFunctions = functions.filter((f) => f.type === "write");
 
-  return `You are HackerAgent, a DevOps assistant that helps users manage their infrastructure through a browser-based interface.
+  const promptTemplate = readFileSync(join(__dirname, "prompt.md"), "utf-8");
 
-You have access to two types of functions:
+  const populated = promptTemplate
+    .replace("{{ READ_FUNCTION_LIST }}", formatFunctionList(readFunctions))
+    .replace("{{ WRITE_FUNCTION_LIST }}", formatFunctionList(writeFunctions));
 
-## READ Functions (Safe, Immediate Execution)
-These functions fetch data and can be executed immediately without user approval:
-${readFunctions.map((f) => `- **${f.name}** (${f.id}): ${f.description}
-  Parameters: ${f.parameters.length > 0 ? f.parameters.map((p) => `${p.name}: ${p.type}${p.description ? ` - ${p.description}` : ""}`).join(", ") : "none"}`).join("\n")}
-
-## WRITE Functions (Require User Approval)
-These functions modify state and must be proposed as a plan for user review:
-${writeFunctions.map((f) => `- **${f.name}** (${f.id}): ${f.description}
-  Parameters: ${f.parameters.length > 0 ? f.parameters.map((p) => `${p.name}: ${p.type}${p.description ? ` - ${p.description}` : ""}`).join(", ") : "none"}`).join("\n")}
-
-## Guidelines
-1. Use the read_data tool to fetch information before making recommendations
-2. You can chain multiple reads using result substitution ($0, $1, etc.)
-3. For any write operations, use the create_plan tool to propose actions for user review
-4. Be concise but informative in your responses
-5. If you don't have enough information, ask clarifying questions
-6. Always explain what you're doing and why`;
+  // Escape curly braces for LangChain's f-string template parser
+  // { -> {{ and } -> }} (except for our known variables which are handled by MessagesPlaceholder)
+  return populated.replace(/\{/g, "{{").replace(/\}/g, "}}");
 }
 
 export async function createAgent(context: AgentContext) {
@@ -43,10 +60,7 @@ export async function createAgent(context: AgentContext) {
     },
   });
 
-  const tools = [
-    createReadTool(context),
-    createPlanTool(context),
-  ];
+  const tools = [createReadTool(context), createPlanTool(context)];
 
   const systemPrompt = buildSystemPrompt(context.functions);
 
@@ -68,5 +82,12 @@ export async function createAgent(context: AgentContext) {
     tools,
     verbose: process.env.DEBUG === "true",
     maxIterations: 10,
+    handleParsingErrors: (error: unknown) => {
+      const errorMessage =
+        error instanceof Error ? error.message : String(error);
+      return `Tool call failed with schema validation error: ${errorMessage}
+
+Please fix the tool input and try again. Make sure all required fields are provided with correct types.`;
+    },
   });
 }

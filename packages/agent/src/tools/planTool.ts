@@ -5,25 +5,38 @@ import type { AgentContext } from "../types";
 export function createPlanTool(context: AgentContext) {
   return new DynamicStructuredTool({
     name: "create_plan",
-    description: `Create an execution plan for write operations that require user approval. Available WRITE functions:
+    description: `Create an execution plan for write operations.
+
+Available WRITE functions:
 ${context.functions
   .filter((f) => f.type === "write")
-  .map((f) => `- ${f.id}: ${f.description} (params: ${f.parameters.map((p) => `${p.name}: ${p.type}`).join(", ") || "none"})`)
+  .map((f) => {
+    const params = f.parameters.length > 0 
+      ? f.parameters.map((p) => `"${p.name}": <${p.type}>`).join(", ")
+      : "";
+    return `- ${f.id}: ${f.description}
+  Required arguments: { ${params || "none"} }`;
+  })
   .join("\n")}
 
-IMPORTANT: For each step, you MUST include the required arguments object with all necessary parameters. For example, if calling "restartCluster" for cluster-1, the step should have: { "functionId": "restartCluster", "arguments": { "clusterId": "cluster-1" }, "title": "..." }
+CRITICAL: Each step MUST include an "arguments" field with all required parameters. Example:
+{
+  "functionId": "createCluster",
+  "arguments": { "env": "testing" },
+  "title": "Create testing cluster"
+}
 
-The plan will be shown to the user for review before execution.`,
+The plan will be sent to the user.`,
     
     schema: z.object({
       intent: z.string().describe("A brief description of what this plan aims to accomplish"),
       steps: z.array(
         z.object({
           functionId: z.string().describe("The write function ID to call"),
-          arguments: z.record(z.unknown()).optional().default({}).describe("Arguments for the function. Include all necessary parameters like clusterId, nodeCount, etc."),
+          arguments: z.record(z.string(), z.any()).describe("REQUIRED object with function parameters. For createCluster use {\"env\": \"testing\"}. Never omit this field."),
           title: z.string().describe("A human-readable title for this step"),
         })
-      ).describe("Array of steps to execute in order. Each step MUST include the arguments object with required parameters."),
+      ).describe("Steps to execute. Each step MUST have functionId, arguments, and title."),
     }),
     
     func: async ({ intent, steps }) => {
@@ -44,7 +57,7 @@ The plan will be shown to the user for review before execution.`,
       const success = context.sendProposeFlow(plan);
       
       if (success) {
-        return `Plan "${intent}" sent to user for review. The plan contains ${steps.length} step(s). Waiting for user approval before execution.`;
+        return `Plan "${intent}" created with ${steps.length} step(s).`;
       } else {
         return "Failed to send plan to user. The WebSocket connection may be unavailable.";
       }
