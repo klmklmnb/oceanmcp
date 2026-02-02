@@ -4,10 +4,10 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev:server": "bun run --filter '@hacker-agent/mcp-server' dev",
-    "dev:agent": "bun run --filter '@hacker-agent/agent' dev",
-    "dev:sdk": "bun run --filter '@hacker-agent/frontend-sdk' dev",
-    "dev": "concurrently \"bun run dev:server\" \"bun run dev:agent\" \"bun run dev:sdk\"",
+    "dev:server": "bun run --elide-lines=0 --filter '@hacker-agent/mcp-server' dev",
+    "dev:agent": "bun run --elide-lines=0 --filter '@hacker-agent/agent' dev",
+    "dev:sdk": "bun run --elide-lines=0 --filter '@hacker-agent/frontend-sdk' dev",
+    "dev": "concurrently \"bun run dev:server\" \"bun run --elide-lines=0 dev:agent\" \"bun run --elide-lines=0 dev:sdk\"",
     "build": "bun run --filter '*' build"
   },
   "devDependencies": {
