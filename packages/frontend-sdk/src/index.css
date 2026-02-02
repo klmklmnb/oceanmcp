@@ -2,6 +2,10 @@
 @tailwind components;
 @tailwind utilities;
 
+#itr-platform-deployment {
+  height: 100%;
+}
+
 /* HackerAgent SDK Styles */
 .hacker-agent-overlay {
   position: fixed;

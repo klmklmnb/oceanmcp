@@ -4,13 +4,10 @@ import { mockFunctions } from "./mockFunctions";
 const STORAGE_KEY = "hacker-agent-functions";
 
 /**
- * Initialize the registry with mock functions if empty
+ * Initialize the registry with mock functions (always replaces localStorage)
  */
 export function initRegistry(): void {
-  const existing = localStorage.getItem(STORAGE_KEY);
-  if (!existing) {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(mockFunctions));
-  }
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(mockFunctions));
 }
 
 /**
