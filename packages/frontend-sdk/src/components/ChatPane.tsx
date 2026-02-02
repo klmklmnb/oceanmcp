@@ -11,6 +11,14 @@ type ChatPaneProps = {
 export function ChatPane({ messages, isTyping, onSendMessage, disabled }: ChatPaneProps) {
   const [input, setInput] = useState("");
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  // Auto-focus input when enabled
+  useEffect(() => {
+    if (!disabled) {
+      inputRef.current?.focus();
+    }
+  }, [disabled]);
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -75,6 +83,7 @@ export function ChatPane({ messages, isTyping, onSendMessage, disabled }: ChatPa
 
       <form className="chat-input-container" onSubmit={handleSubmit}>
         <input
+          ref={inputRef}
           type="text"
           className="chat-input"
           placeholder="Ask me anything about your infrastructure..."

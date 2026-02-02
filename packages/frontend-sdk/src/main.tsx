@@ -134,33 +134,22 @@ export function mount(container?: HTMLElement, config?: SDKConfig): () => void {
 // For development: render to #root if it exists
 const rootElement = document.getElementById("root");
 if (rootElement && import.meta.env.DEV) {
+  // Initialize registry for development
+  initRegistry();
+  
   ReactDOM.createRoot(rootElement).render(
     <React.StrictMode>
       <div style={{ 
-        minHeight: "100vh", 
-        background: "#0a0a0a",
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "center",
-        color: "#fff",
-        fontFamily: "system-ui, sans-serif"
+        width: "100vw", 
+        height: "100vh", 
+        background: "#0a0a0a"
       }}>
-        <div style={{ textAlign: "center" }}>
-          <h1 style={{ fontSize: "48px", marginBottom: "16px" }}>⚡ HackerAgent SDK</h1>
-          <p style={{ color: "#888", marginBottom: "24px" }}>
-            Press <kbd style={{ 
-              background: "#333", 
-              padding: "4px 8px", 
-              borderRadius: "4px",
-              border: "1px solid #444"
-            }}>Ctrl+K</kbd> or click the button to open
-          </p>
-          <p style={{ color: "#666", fontSize: "14px" }}>
-            Make sure the MCP server is running on port 4000
-          </p>
-        </div>
+        <SplitPane
+          serverUrl={DEFAULT_SERVER_URL}
+          wsUrl={DEFAULT_WS_URL}
+          onClose={() => {}}
+        />
       </div>
-      <HackerAgentSDK />
     </React.StrictMode>
   );
 } else if (typeof window !== "undefined") {
