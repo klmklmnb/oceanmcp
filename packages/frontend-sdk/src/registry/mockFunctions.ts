@@ -84,6 +84,33 @@ return fetch(url.toString(), {
     ],
   },
   {
+    id: "getDeployGroupDetailMihoyo",
+    name: "Get Deploy Group Detail For Mihoyo",
+    description:
+      "Fetch the detail of a specific deploy group by group_id. Use this to get full configuration of a deploy group.",
+    type: "read",
+    code: `const url = new URL("https://api.agw.mihoyo.com/eee-prod-cn/trinity/v1/application/deploy/group");
+url.searchParams.set("group_id", args.group_id);
+url.searchParams.set("app_id", "${MIHOYO_APP_ID}");
+url.searchParams.set("biz_id", "${MIHOYO_BIZ_ID}");
+return fetch(url.toString(), {
+  method: "GET",
+  mode: "cors",
+  credentials: "include",
+  headers: ${HEADERS},
+}).then(response => response.json()).then(res => res?.data || null);
+`,
+    parameters: [
+      {
+        name: "group_id",
+        type: "string",
+        description:
+          "Deploy group id (extract from the target item in the deploy group list).",
+        required: true,
+      },
+    ],
+  },
+  {
     id: "getDeployGroupArchivesMihoyo",
     name: "Get Deploy Group Archives For Mihoyo",
     description:
