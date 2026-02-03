@@ -346,4 +346,73 @@ return fetch("https://api.agw.mihoyo.com/eee-prod-cn/trinity/v1/deploy/group/bul
       },
     ],
   },
+  {
+    id: "createDeployWorkOrder",
+    name: "Create Deploy Work Order",
+    description:
+      "Create a new deploy work order to deploy an archive to a specific deploy group; first fetch the deploy group list to get group_id, then fetch the archive list to get archive_id",
+    type: "write",
+    code: `const name = "【" + args.env + "】【${APP_NAME}】" + args.deploy_group_name;
+const reason = "申请发布【" + args.env + "】";
+
+return fetch("https://api.agw.mihoyo.com/eee-prod-cn/trinity/v1/deploy_workflow/workflow/create", {
+  body: JSON.stringify({
+    app_id: ${APP_ID},
+    biz_id: ${BIZ_ID},
+    scope_type: "app",
+    name,
+    reason,
+    is_use_new_deployment_stream: true,
+    env: args.env,
+    service_type: "frontend-static",
+    params: {
+      cluster_id: Number(args.cluster_id),
+      group_id: Number(args.group_id),
+      job_type: 1,
+      archive_id: Number(args.archive_id),
+    },
+    task_type: "frontend_static_deploy",
+  }),
+  method: "POST",
+  mode: "cors",
+  credentials: "include",
+  headers: ${HEADERS},
+}).then(response => response.json());
+`,
+    parameters: [
+      {
+        name: "env",
+        type: "string",
+        description: CLUSTER_ENV_DESC,
+        required: true,
+      },
+      {
+        name: "cluster_id",
+        type: "string",
+        description: CLUSTER_ID_DESC,
+        required: true,
+      },
+      {
+        name: "group_id",
+        type: "string",
+        description:
+          "Deploy group id (extract from the target item in the deploy group list for the same env).",
+        required: true,
+      },
+      {
+        name: "archive_id",
+        type: "string",
+        description:
+          "Archive id (the id field from the archive list item to deploy).",
+        required: true,
+      },
+      {
+        name: "deploy_group_name",
+        type: "string",
+        description:
+          "Deploy group name (used for generating the work order name).",
+        required: true,
+      },
+    ],
+  },
 ];
