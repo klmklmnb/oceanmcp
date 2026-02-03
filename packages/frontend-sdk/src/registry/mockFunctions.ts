@@ -139,7 +139,13 @@ return fetch(url.toString(), {
   mode: "cors",
   credentials: "include",
   headers: ${HEADERS},
-}).then(response => response.json()).then(res => res?.data || { id: '' });
+}).then(response => response.json()).then(res => {
+  const r = res?.data || { id: '' };
+  if (r.cluster_id) {
+    r.id = r.cluster_id;
+  }
+  return r;
+});
 `,
     parameters: [
       {
@@ -180,6 +186,18 @@ if (clusterEnv === "testing") {
     ossUploadBucket = clusterTag === "uat" ? "ee-infra-seed-ydy-uat" : "ee-infra-seed-ydy-test";
   } else {
     ossUploadBucket = clusterTag === "uat" ? "ee-infra-seed-uat" : "ee-infra-seed-test";
+  }
+} else if (clusterEnv === "prod") {
+  if (bucketTag === "intranet") {
+    ossUploadBucket = "ee-infra-seed-ydy-prod";
+  } else {
+    ossUploadBucket = "ee-infra-seed-prod";
+  }
+} else if (clusterEnv === "pre") {
+  if (bucketTag === "intranet") {
+    ossUploadBucket = "ee-infra-seed-ydy-pp";
+  } else {
+    ossUploadBucket = "ee-infra-seed-pp";
   }
 } else {
   throw new Error("oss_upload_bucket rules not defined for env: " + clusterEnv);
@@ -459,7 +477,13 @@ return fetch(url.toString(), {
   mode: "cors",
   credentials: "include",
   headers: ${HEADERS},
-}).then(response => response.json());
+}).then(response => response.json()).then(res => {
+  const r = res?.data || { id: '' };
+  if (r.cluster_id) {
+    r.id = r.cluster_id;
+  }
+  return r;
+});
 `,
     parameters: [
       {
