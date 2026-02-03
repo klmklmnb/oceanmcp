@@ -89,6 +89,25 @@ export function substituteReferences(
       } else {
         result[key] = value;
       }
+    } else if (Array.isArray(value)) {
+      // Recursively substitute in array elements
+      result[key] = value.map((item) => {
+        if (typeof item === "string" && item.startsWith("$")) {
+          // Handle string references in arrays
+          return substituteReferences({ _: item }, previousResults)._;
+        }
+        if (Array.isArray(item)) {
+          // Handle nested arrays
+          return substituteReferences({ _: item }, previousResults)._;
+        }
+        if (typeof item === "object" && item !== null) {
+          return substituteReferences(
+            item as Record<string, unknown>,
+            previousResults
+          );
+        }
+        return item;
+      });
     } else if (typeof value === "object" && value !== null) {
       // Recursively substitute in nested objects
       result[key] = substituteReferences(

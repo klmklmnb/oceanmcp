@@ -139,7 +139,7 @@ return fetch(url.toString(), {
   mode: "cors",
   credentials: "include",
   headers: ${HEADERS},
-}).then(response => response.json());
+}).then(response => response.json()).then(res => res?.data || { id: '' });
 `,
     parameters: [
       {
