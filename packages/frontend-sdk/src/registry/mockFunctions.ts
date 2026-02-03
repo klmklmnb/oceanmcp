@@ -120,6 +120,36 @@ return fetch(url.toString(), {
     ],
   },
   {
+    id: "listAllReviewStreamsMihoyo",
+    name: "List All Review Streams For Mihoyo",
+    description:
+      "Fetch all review streams for the app. MUST be called before creating a deploy work order in prod env to check review requirements.",
+    type: "read",
+    code: `const url = new URL("https://api.agw.mihoyo.com/eee-prod-cn/trinity/v1/custom_review/list_all_review_stream");
+url.searchParams.set("app_id", "${MIHOYO_APP_ID}");
+url.searchParams.set("biz_id", "${MIHOYO_BIZ_ID}");
+url.searchParams.set("scope_type", "app");
+url.searchParams.set("review_stream_type", "3");
+url.searchParams.set("env", args.env);
+return fetch(url.toString(), {
+  body: null,
+  method: "GET",
+  mode: "cors",
+  credentials: "include",
+  headers: ${HEADERS},
+}).then(response => response.json());
+`,
+    parameters: [
+      {
+        name: "env",
+        type: "string",
+        description:
+          "Environment to query review streams for (typically 'prod' for production deployments).",
+        required: true,
+      },
+    ],
+  },
+  {
     id: "createClusterMihoyo",
     name: "Create Cluster For Mihoyo",
     description: "Create a new cluster",
@@ -301,7 +331,7 @@ return fetch("https://api.agw.mihoyo.com/eee-prod-cn/trinity/v1/deploy/group/bul
     id: "createDeployWorkOrderMihoyo",
     name: "Create Deploy Work Order For Mihoyo",
     description:
-      "Create a new deploy work order to deploy an archive to a specific deploy group; first fetch the deploy group list to get group_id, then fetch the archive list to get archive_id",
+      "Create a new deploy work order to deploy an archive to a specific deploy group; first fetch the deploy group list to get group_id, then fetch the archive list to get archive_id. For prod env, MUST call listAllReviewStreamsMihoyo first to get review_stream_id before creating the work order.",
     type: "write",
     code: `const name = "【" + args.env + "】【${MIHOYO_APP_NAME}】" + args.deploy_group_name;
 const reason = "申请发布【" + args.env + "】";
@@ -323,6 +353,7 @@ return fetch("https://api.agw.mihoyo.com/eee-prod-cn/trinity/v1/deploy_workflow/
       archive_id: Number(args.archive_id),
     },
     task_type: "frontend_static_deploy",
+    review_stream_id: args.review_stream_id ? Number(args.review_stream_id) : undefined,
   }),
   method: "POST",
   mode: "cors",
@@ -363,6 +394,13 @@ return fetch("https://api.agw.mihoyo.com/eee-prod-cn/trinity/v1/deploy_workflow/
         description:
           "Deploy group name (used for generating the work order name).",
         required: true,
+      },
+      {
+        name: "review_stream_id",
+        type: "string",
+        description:
+          "Review stream id for prod env deployments. Obtain by calling listAllReviewStreamsMihoyo first and extracting the id from the appropriate review stream.",
+        required: false,
       },
     ],
   },
