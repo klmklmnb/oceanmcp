@@ -151,6 +151,42 @@ return fetch(url.toString(), {
     ],
   },
   {
+    id: "getDeployGroupArchives",
+    name: "Get Deploy Group Archives",
+    description:
+      "Fetch the archive list for a deploy group in the specified env; first fetch the deploy group list, then find the target group, extract its id, and pass it as service_group_id",
+    type: "read",
+    code: `const url = new URL("https://api.agw.mihoyo.com/eee-prod-cn/trinity/v1/application/deploy/archive/search_with_rule");
+url.searchParams.set("env", args.env);
+url.searchParams.set("service_group_id", args.service_group_id);
+url.searchParams.set("app_name", "${APP_NAME}");
+url.searchParams.set("app_group", "${APP_GROUP}");
+url.searchParams.set("dc", "global");
+return fetch(url.toString(), {
+  body: null,
+  method: "GET",
+  mode: "cors",
+  credentials: "include",
+  headers: ${HEADERS},
+}).then(response => response.json());
+`,
+    parameters: [
+      {
+        name: "env",
+        type: "string",
+        description: CLUSTER_ENV_DESC,
+        required: true,
+      },
+      {
+        name: "service_group_id",
+        type: "string",
+        description:
+          "Deploy group id (never prompt the user; always extract the id from the target item in the deploy group list for the same env).",
+        required: true,
+      },
+    ],
+  },
+  {
     id: "createCluster",
     name: "Create Cluster",
     description: "Create a new cluster",
@@ -280,8 +316,8 @@ return fetch("https://api.agw.mihoyo.com/eee-prod-cn/trinity/v1/deploy/group/bul
         name: "bucket_tag",
         type: "string",
         description:
-          'Bucket tag [Optional]: "intranet" or "external_network", defaults to "intranet" if not specified',
-        required: false,
+          'Bucket tag: "intranet" or "external_network", defaults to "intranet" if not specified',
+        required: true,
       },
       {
         name: "cluster_env",
@@ -305,7 +341,7 @@ return fetch("https://api.agw.mihoyo.com/eee-prod-cn/trinity/v1/deploy/group/bul
         name: "group_name",
         type: "string",
         description:
-          "Deploy group name, priority: 1) user specified value, 2) cluster_tag, 3) cluster_env",
+          "Deploy group name. The AI should try: 1) user-specified value, 2) cluster_tag, 3) cluster_env.",
         required: true,
       },
     ],
