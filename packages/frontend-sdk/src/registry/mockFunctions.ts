@@ -98,7 +98,7 @@ return fetch(url.toString(), {
   mode: "cors",
   credentials: "include",
   headers: ${HEADERS},
-}).then(response => response.json()).then(res => res?.data || null);
+}).then(response => response.json()).then(res => res?.data?.groups?.[0] || null);
 `,
     parameters: [
       {
@@ -428,6 +428,95 @@ return fetch("https://api.agw.mihoyo.com/eee-prod-cn/trinity/v1/deploy_workflow/
         description:
           "Review stream id for prod env deployments. Obtain by calling listAllReviewStreamsMihoyo first and extracting the id from the appropriate review stream.",
         required: false,
+      },
+    ],
+  },
+  {
+    id: "updateDynamicRenderHtmlMihoyo",
+    name: "Update Dynamic Render HTML For Mihoyo",
+    description:
+      "Update the dynamic_render_html of a deploy group by replacing version strings in fecdn URLs. First call getDeployGroupDetailMihoyo to get the current frontend_static_group.",
+    type: "write",
+    code: `const frontendStaticGroup = typeof args.current_frontend_static_group === 'string'
+  ? JSON.parse(args.current_frontend_static_group)
+  : args.current_frontend_static_group;
+
+const dynamicRenderHtml = frontendStaticGroup.dynamic_render_html || "";
+
+// Replace version in URLs starting with //fecdn
+const updatedHtml = dynamicRenderHtml.replace(
+  /(\\/\\/fecdn[^"'\\s]*?)\\/(\\d+\\.\\d+\\.\\d+)\\//g,
+  (match, prefix, oldVersion) => prefix + "/" + args.targetVersion + "/"
+);
+
+const updatedFrontendStaticGroup = {
+  ...frontendStaticGroup,
+  dynamic_render_html: updatedHtml,
+};
+
+// Remove fields that should not be submitted
+delete updatedFrontendStaticGroup.cdn_preheat_type;
+delete updatedFrontendStaticGroup.cdn_refresh_type;
+delete updatedFrontendStaticGroup.cloud_vendor;
+delete updatedFrontendStaticGroup.redirection_address;
+delete updatedFrontendStaticGroup.render_config;
+delete updatedFrontendStaticGroup.service_group_id;
+delete updatedFrontendStaticGroup.url;
+
+return fetch("https://api.agw.mihoyo.com/eee-prod-cn/trinity/v1/deploy/group/" + args.group_id, {
+  body: JSON.stringify({
+    app_id: ${MIHOYO_APP_ID},
+    biz_id: ${MIHOYO_BIZ_ID},
+    archive_tag: "",
+    cluster_id: Number(args.cluster_id),
+    description: "",
+    environment: {},
+    frontend_static_group: updatedFrontendStaticGroup,
+    group_chinese_name: "",
+    group_name: args.group_name,
+    group_type: "frontend-static",
+    service_type: "frontend-static",
+    zest_tag: "",
+  }),
+  method: "PUT",
+  mode: "cors",
+  credentials: "include",
+  headers: ${HEADERS},
+}).then(response => response.json());
+`,
+    parameters: [
+      {
+        name: "current_frontend_static_group",
+        type: "string",
+        description:
+          "The frontend_static_group field from getDeployGroupDetailMihoyo response (as JSON string or object).",
+        required: true,
+      },
+      {
+        name: "cluster_id",
+        type: "string",
+        description: CLUSTER_ID_DESC,
+        required: true,
+      },
+      {
+        name: "group_name",
+        type: "string",
+        description: "Deploy group name.",
+        required: true,
+      },
+      {
+        name: "targetVersion",
+        type: "string",
+        description:
+          "The new version to replace existing versions with (e.g., '1.48.0').",
+        required: true,
+      },
+      {
+        name: "group_id",
+        type: "string",
+        description:
+          "Deploy group id (extract from the target item in the deploy group list).",
+        required: true,
       },
     ],
   },
