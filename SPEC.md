@@ -1,18 +1,20 @@
-# Project Spec: HackerAgent Monorepo
+# Project Spec: OceanMCP Monorepo
 
 ## 1. Overview
-HackerAgent is a "Browser-in-the-Loop" DevOps agent designed to be injected into the existing **ItrPlatform** web application. It functions as a bridge, allowing an AI agent to orchestrate tasks using the user's authenticated browser session.
+
+OceanMCP is a "Browser-in-the-Loop" agent designed to be injected into any existing web application. It functions as a bridge, allowing an AI agent to orchestrate tasks using the user's authenticated browser session.
 
 The project is structured as a Monorepo using `pnpm` workspaces.
 
 ## 2. Tech Stack & Repository Structure
 
-* **Monorepo Manager:** `pnpm`
-* **Runtime:** Bun (for server packages), Node.js (for frontend build)
+- **Monorepo Manager:** `pnpm`
+- **Runtime:** Bun (for server packages), Node.js (for frontend build)
 
 ### Directory Structure
+
 ```text
-/HackerAgent
+/OceanMCP
 ├── pnpm-workspace.yaml
 ├── packages/
 │   ├── frontend-sdk/      # Vite + React (Library Mode)
@@ -25,7 +27,9 @@ The project is structured as a Monorepo using `pnpm` workspaces.
 ```
 
 ## 3. Package Specifications
+
 ### 3.1. Package: mcp-server
+
 Role: The central communication hub and MCP Host.
 
 Stack: Bun, ws (WebSocket), zod (Validation).
@@ -53,6 +57,7 @@ PROPOSE_FLOW: Request rendering of a "write" plan.
 CHAT_STREAM: Stream AI text response to UI.
 
 ### 3.2. Package: agent
+
 Role: The Brain.
 
 Stack: LangChain (JS/TS), @langchain/anthropic, zod.
@@ -76,6 +81,7 @@ Input: { intent: string, steps: [{ functionId, arguments, title }] }
 Behavior: Sends PROPOSE_FLOW to mcp-server -> Returns "Plan sent to user".
 
 ### 3.3. Package: frontend-sdk
+
 Role: The UI and Execution Engine.
 
 Stack: Vite (Library Mode), React, TailwindCSS.
@@ -115,6 +121,7 @@ type FunctionDefinition = {
   parameters: { name: string; type: string; required: boolean }[];
 };
 ```
+
 C. The Execution Engine
 Sandboxing: Uses new Function() to execute the code string.
 
@@ -133,7 +140,9 @@ PENDING -> RUNNING -> SUCCESS / FAILED.
 Updates UI status in real-time.
 
 ## 4. Data Models (Shared)
+
 Flow Plan
+
 ```ts
 type FlowPlan = {
   planId: string;
@@ -150,7 +159,9 @@ type FlowNode = {
   result?: any;
 };
 ```
+
 ## 5. Development Workflow
+
 Start Server:
 
 ```bash
@@ -178,7 +189,7 @@ Open existing ItrPlatform (or a test HTML page).
 
 Inject: <script type="module" src="http://localhost:3000/src/main.tsx"></script> (or the built SDK).
 
-The HackerAgent UI appears.
+The OceanMCP UI appears.
 
 ## 6. Implementation Steps for AI
 
