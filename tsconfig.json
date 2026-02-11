@@ -1,9 +1,0 @@
-{
-  "files": [],
-  "references": [
-    { "path": "./packages/shared" },
-    { "path": "./packages/mcp-server" },
-    { "path": "./packages/agent" },
-    { "path": "./packages/frontend-sdk" }
-  ]
-}
