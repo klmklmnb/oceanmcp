@@ -1,4 +1,9 @@
-import type { CodeFunctionDefinition } from "@ocean-mcp/shared";
+import {
+  FUNCTION_TYPE,
+  OPERATION_TYPE,
+  PARAMETER_TYPE,
+  type CodeFunctionDefinition,
+} from "@ocean-mcp/shared";
 
 // Mihoyo constants
 const MIHOYO_BIZ_ID = "73";
@@ -37,8 +42,8 @@ const hoyocloudFunctions: CodeFunctionDefinition[] = [
     name: "List App Clusters For Mihoyo",
     description:
       'Fetch the list of app clusters (in testing env with multiple clusters, infer real env via cluster_tag: empty string means test, "uat" means uat)',
-    type: "code",
-    operationType: "read",
+    type: FUNCTION_TYPE.CODE,
+    operationType: OPERATION_TYPE.READ,
     code: `return fetch("https://api.agw.mihoyo.com/eee-prod-cn/trinity/v1/deploy/list_app_clusters?biz_id=${MIHOYO_BIZ_ID}&app_id=${MIHOYO_APP_ID}", {
       headers: ${HEADERS},
       method: "GET",
@@ -53,8 +58,8 @@ const hoyocloudFunctions: CodeFunctionDefinition[] = [
     name: "Get Deploy Groups For Mihoyo",
     description:
       "Fetch application deploy groups information from a specific cluster",
-    type: "code",
-    operationType: "read",
+    type: FUNCTION_TYPE.CODE,
+    operationType: OPERATION_TYPE.READ,
     code: `const url = new URL("https://api.agw.mihoyo.com/eee-prod-cn/trinity/v1/application/deploy/group");
 url.searchParams.set("app_id", ${MIHOYO_APP_ID});
 url.searchParams.set("biz_id", ${MIHOYO_BIZ_ID});
@@ -73,13 +78,13 @@ return fetch(url.toString(), {
     parameters: [
       {
         name: "env",
-        type: "string",
+        type: PARAMETER_TYPE.STRING,
         description: CLUSTER_ENV_DESC,
         required: true,
       },
       {
         name: "cluster_id",
-        type: "string",
+        type: PARAMETER_TYPE.STRING,
         description: CLUSTER_ID_DESC,
         required: true,
       },
@@ -90,8 +95,8 @@ return fetch(url.toString(), {
     name: "Get Deploy Group Detail For Mihoyo",
     description:
       "Fetch the detail of a specific deploy group by group_id. Use this to get full configuration of a deploy group.",
-    type: "code",
-    operationType: "read",
+    type: FUNCTION_TYPE.CODE,
+    operationType: OPERATION_TYPE.READ,
     code: `const url = new URL("https://api.agw.mihoyo.com/eee-prod-cn/trinity/v1/application/deploy/group");
 url.searchParams.set("group_id", args.group_id);
 url.searchParams.set("app_id", "${MIHOYO_APP_ID}");
@@ -106,7 +111,7 @@ return fetch(url.toString(), {
     parameters: [
       {
         name: "group_id",
-        type: "string",
+        type: PARAMETER_TYPE.STRING,
         description:
           "Deploy group id (extract from the target item in the deploy group list).",
         required: true,
@@ -118,8 +123,8 @@ return fetch(url.toString(), {
     name: "Get Deploy Group Archives For Mihoyo",
     description:
       "Fetch the archive list for a deploy group in the specified env; first fetch the deploy group list, then find the target group, extract its id, and pass it as service_group_id",
-    type: "code",
-    operationType: "read",
+    type: FUNCTION_TYPE.CODE,
+    operationType: OPERATION_TYPE.READ,
     code: `const url = new URL("https://api.agw.mihoyo.com/eee-prod-cn/trinity/v1/application/deploy/archive/search_with_rule");
 url.searchParams.set("env", args.env);
 url.searchParams.set("service_group_id", args.service_group_id);
@@ -137,13 +142,13 @@ return fetch(url.toString(), {
     parameters: [
       {
         name: "env",
-        type: "string",
+        type: PARAMETER_TYPE.STRING,
         description: CLUSTER_ENV_DESC,
         required: true,
       },
       {
         name: "service_group_id",
-        type: "string",
+        type: PARAMETER_TYPE.STRING,
         description:
           "Deploy group id (never prompt the user; always extract the id from the target item in the deploy group list for the same env).",
         required: true,
@@ -155,8 +160,8 @@ return fetch(url.toString(), {
     name: "List All Review Streams For Mihoyo",
     description:
       "Fetch all review streams for the app. MUST be called before creating a deploy work order in prod env to check review requirements.",
-    type: "code",
-    operationType: "read",
+    type: FUNCTION_TYPE.CODE,
+    operationType: OPERATION_TYPE.READ,
     code: `const url = new URL("https://api.agw.mihoyo.com/eee-prod-cn/trinity/v1/custom_review/list_all_review_stream");
 url.searchParams.set("app_id", "${MIHOYO_APP_ID}");
 url.searchParams.set("biz_id", "${MIHOYO_BIZ_ID}");
@@ -174,7 +179,7 @@ return fetch(url.toString(), {
     parameters: [
       {
         name: "env",
-        type: "string",
+        type: PARAMETER_TYPE.STRING,
         description:
           "Environment to query review streams for (typically 'prod' for production deployments).",
         required: true,
@@ -185,8 +190,8 @@ return fetch(url.toString(), {
     id: "createClusterMihoyo",
     name: "Create Cluster For Mihoyo",
     description: "Create a new cluster",
-    type: "code",
-    operationType: "write",
+    type: FUNCTION_TYPE.CODE,
+    operationType: OPERATION_TYPE.WRITE,
     code: `return fetch("https://api.agw.mihoyo.com/eee-prod-cn/trinity/v1/deploy/cluster", {
   body: JSON.stringify({
     app_id: ${MIHOYO_APP_ID},
@@ -216,13 +221,13 @@ return fetch(url.toString(), {
     parameters: [
       {
         name: "env",
-        type: "string",
+        type: PARAMETER_TYPE.STRING,
         description: CLUSTER_ENV_DESC,
         required: true,
       },
       {
         name: "cluster_tag",
-        type: "string",
+        type: PARAMETER_TYPE.STRING,
         description: CLUSTER_TAG_DESC,
         required: false,
       },
@@ -232,8 +237,8 @@ return fetch(url.toString(), {
     id: "createDeployGroupMihoyo",
     name: "Create Deploy Group For Mihoyo",
     description: `Create a deploy group (check the group list first, if a group with the same name exists in the same env, do not call this function)`,
-    type: "code",
-    operationType: "write",
+    type: FUNCTION_TYPE.CODE,
+    operationType: OPERATION_TYPE.WRITE,
     code: `const publicPath = args.public_path;
 if (!publicPath || !publicPath.startsWith("/")) {
   throw new Error("public_path must start with '/'");
@@ -318,46 +323,46 @@ return fetch("https://api.agw.mihoyo.com/eee-prod-cn/trinity/v1/deploy/group/bul
     parameters: [
       {
         name: "domain",
-        type: "string",
+        type: PARAMETER_TYPE.STRING,
         description:
           "Domain for frontend static group, should be specified by the user",
         required: true,
       },
       {
         name: "public_path",
-        type: "string",
+        type: PARAMETER_TYPE.STRING,
         description:
           "Public path starting with '/', should be specified by the user",
         required: true,
       },
       {
         name: "bucket_tag",
-        type: "string",
+        type: PARAMETER_TYPE.STRING,
         description:
           'Bucket tag: "intranet" or "external_network", defaults to "intranet" if not specified',
         required: true,
       },
       {
         name: "cluster_env",
-        type: "string",
+        type: PARAMETER_TYPE.STRING,
         description: CLUSTER_ENV_DESC,
         required: true,
       },
       {
         name: "cluster_id",
-        type: "string",
+        type: PARAMETER_TYPE.STRING,
         description: CLUSTER_ID_DESC,
         required: true,
       },
       {
         name: "cluster_tag",
-        type: "string",
+        type: PARAMETER_TYPE.STRING,
         description: CLUSTER_TAG_DESC,
         required: false,
       },
       {
         name: "group_name",
-        type: "string",
+        type: PARAMETER_TYPE.STRING,
         description:
           "Deploy group name. The AI should try: 1) user-specified value, 2) cluster_tag, 3) cluster_env.",
         required: true,
@@ -369,8 +374,8 @@ return fetch("https://api.agw.mihoyo.com/eee-prod-cn/trinity/v1/deploy/group/bul
     name: "Create Deploy Work Order For Mihoyo",
     description:
       "Create a new deploy work order to deploy an archive to a specific deploy group; first fetch the deploy group list to get group_id, then fetch the archive list to get archive_id. For prod env, MUST call listAllReviewStreamsMihoyo first to get review_stream_id before creating the work order.",
-    type: "code",
-    operationType: "write",
+    type: FUNCTION_TYPE.CODE,
+    operationType: OPERATION_TYPE.WRITE,
     code: `const name = "【" + args.env + "】【${MIHOYO_APP_NAME}】" + args.deploy_group_name;
 const reason = "申请发布【" + args.env + "】";
 
@@ -402,40 +407,40 @@ return fetch("https://api.agw.mihoyo.com/eee-prod-cn/trinity/v1/deploy_workflow/
     parameters: [
       {
         name: "env",
-        type: "string",
+        type: PARAMETER_TYPE.STRING,
         description: CLUSTER_ENV_DESC,
         required: true,
       },
       {
         name: "cluster_id",
-        type: "string",
+        type: PARAMETER_TYPE.STRING,
         description: CLUSTER_ID_DESC,
         required: true,
       },
       {
         name: "group_id",
-        type: "string",
+        type: PARAMETER_TYPE.STRING,
         description:
           "Deploy group id (extract from the target item in the deploy group list for the same env).",
         required: true,
       },
       {
         name: "archive_id",
-        type: "string",
+        type: PARAMETER_TYPE.STRING,
         description:
           "Archive id (the id field from the archive list item to deploy).",
         required: true,
       },
       {
         name: "deploy_group_name",
-        type: "string",
+        type: PARAMETER_TYPE.STRING,
         description:
           "Deploy group name (used for generating the work order name).",
         required: true,
       },
       {
         name: "review_stream_id",
-        type: "string",
+        type: PARAMETER_TYPE.STRING,
         description:
           "Review stream id for prod env deployments. Obtain by calling listAllReviewStreamsMihoyo first and extracting the id from the appropriate review stream.",
         required: false,
@@ -447,8 +452,8 @@ return fetch("https://api.agw.mihoyo.com/eee-prod-cn/trinity/v1/deploy_workflow/
     name: "Update Dynamic Render HTML For Mihoyo",
     description:
       "Update the dynamic_render_html of a deploy group by replacing version strings in fecdn URLs. First call getDeployGroupDetailMihoyo to get the current frontend_static_group.",
-    type: "code",
-    operationType: "write",
+    type: FUNCTION_TYPE.CODE,
+    operationType: OPERATION_TYPE.WRITE,
     code: `const frontendStaticGroup = typeof args.current_frontend_static_group === 'string'
   ? JSON.parse(args.current_frontend_static_group)
   : args.current_frontend_static_group;
@@ -499,33 +504,33 @@ return fetch("https://api.agw.mihoyo.com/eee-prod-cn/trinity/v1/deploy/group/" +
     parameters: [
       {
         name: "current_frontend_static_group",
-        type: "string",
+        type: PARAMETER_TYPE.STRING,
         description:
           "The frontend_static_group field from getDeployGroupDetailMihoyo response (as JSON string or object).",
         required: true,
       },
       {
         name: "cluster_id",
-        type: "string",
+        type: PARAMETER_TYPE.STRING,
         description: CLUSTER_ID_DESC,
         required: true,
       },
       {
         name: "group_name",
-        type: "string",
+        type: PARAMETER_TYPE.STRING,
         description: "Deploy group name.",
         required: true,
       },
       {
         name: "targetVersion",
-        type: "string",
+        type: PARAMETER_TYPE.STRING,
         description:
           "The new version to replace existing versions with (e.g., '1.48.0').",
         required: true,
       },
       {
         name: "group_id",
-        type: "string",
+        type: PARAMETER_TYPE.STRING,
         description:
           "Deploy group id (extract from the target item in the deploy group list).",
         required: true,
@@ -541,8 +546,8 @@ return fetch("https://api.agw.mihoyo.com/eee-prod-cn/trinity/v1/deploy/group/" +
     name: "List App Clusters For LML",
     description:
       'Fetch the list of app clusters (in testing env with multiple clusters, infer real env via cluster_tag: empty string means test, "uat" means uat)',
-    type: "code",
-    operationType: "read",
+    type: FUNCTION_TYPE.CODE,
+    operationType: OPERATION_TYPE.READ,
     code: `return fetch("https://api.agw.mihoyo.com/lml-prod-cn/trinity/v1/deploy/list_app_clusters?biz_id=${LML_BIZ_ID}&app_id=${LML_APP_ID}", {
       headers: ${HEADERS},
       method: "GET",
@@ -557,8 +562,8 @@ return fetch("https://api.agw.mihoyo.com/eee-prod-cn/trinity/v1/deploy/group/" +
     name: "Get Deploy Groups For LML",
     description:
       "Fetch application deploy groups information from a specific cluster",
-    type: "code",
-    operationType: "read",
+    type: FUNCTION_TYPE.CODE,
+    operationType: OPERATION_TYPE.READ,
     code: `const url = new URL("https://api.agw.mihoyo.com/lml-prod-cn/trinity/v1/application/deploy/group");
 url.searchParams.set("app_id", ${LML_APP_ID});
 url.searchParams.set("biz_id", ${LML_BIZ_ID});
@@ -577,13 +582,13 @@ return fetch(url.toString(), {
     parameters: [
       {
         name: "env",
-        type: "string",
+        type: PARAMETER_TYPE.STRING,
         description: CLUSTER_ENV_DESC,
         required: true,
       },
       {
         name: "cluster_id",
-        type: "string",
+        type: PARAMETER_TYPE.STRING,
         description: CLUSTER_ID_DESC,
         required: true,
       },
@@ -594,8 +599,8 @@ return fetch(url.toString(), {
     name: "Get Deploy Group Archives For LML",
     description:
       "Fetch the archive list for a deploy group in the specified env; first fetch the deploy group list, then find the target group, extract its id, and pass it as service_group_id",
-    type: "code",
-    operationType: "read",
+    type: FUNCTION_TYPE.CODE,
+    operationType: OPERATION_TYPE.READ,
     code: `const url = new URL("https://api.agw.mihoyo.com/lml-prod-cn/trinity/v1/application/deploy/archive/search_with_rule");
 url.searchParams.set("env", args.env);
 url.searchParams.set("service_group_id", args.service_group_id);
@@ -613,13 +618,13 @@ return fetch(url.toString(), {
     parameters: [
       {
         name: "env",
-        type: "string",
+        type: PARAMETER_TYPE.STRING,
         description: CLUSTER_ENV_DESC,
         required: true,
       },
       {
         name: "service_group_id",
-        type: "string",
+        type: PARAMETER_TYPE.STRING,
         description:
           "Deploy group id (never prompt the user; always extract the id from the target item in the deploy group list for the same env).",
         required: true,
@@ -630,8 +635,8 @@ return fetch(url.toString(), {
     id: "createClusterLML",
     name: "Create Cluster For LML",
     description: "Create a new cluster",
-    type: "code",
-    operationType: "write",
+    type: FUNCTION_TYPE.CODE,
+    operationType: OPERATION_TYPE.WRITE,
     code: `return fetch("https://api.agw.mihoyo.com/lml-prod-cn/trinity/v1/deploy/cluster", {
   body: JSON.stringify({
     app_id: ${LML_APP_ID},
@@ -658,13 +663,13 @@ return fetch(url.toString(), {
     parameters: [
       {
         name: "env",
-        type: "string",
+        type: PARAMETER_TYPE.STRING,
         description: CLUSTER_ENV_DESC,
         required: true,
       },
       {
         name: "cluster_tag",
-        type: "string",
+        type: PARAMETER_TYPE.STRING,
         description: CLUSTER_TAG_DESC,
         required: false,
       },
@@ -674,8 +679,8 @@ return fetch(url.toString(), {
     id: "createDeployGroupLML",
     name: "Create Deploy Group For LML",
     description: `Create a deploy group (check the group list first, if a group with the same name exists in the same env, do not call this function)`,
-    type: "code",
-    operationType: "write",
+    type: FUNCTION_TYPE.CODE,
+    operationType: OPERATION_TYPE.WRITE,
     code: `const publicPath = args.public_path;
 if (!publicPath || !publicPath.startsWith("/")) {
   throw new Error("public_path must start with '/'");
@@ -748,46 +753,46 @@ return fetch("https://api.agw.mihoyo.com/lml-prod-cn/trinity/v1/deploy/group/bul
     parameters: [
       {
         name: "domain",
-        type: "string",
+        type: PARAMETER_TYPE.STRING,
         description:
           "Domain for frontend static group, should be specified by the user",
         required: true,
       },
       {
         name: "public_path",
-        type: "string",
+        type: PARAMETER_TYPE.STRING,
         description:
           "Public path starting with '/', should be specified by the user",
         required: true,
       },
       {
         name: "bucket_tag",
-        type: "string",
+        type: PARAMETER_TYPE.STRING,
         description:
           'Bucket tag: "intranet" or "external_network", defaults to "intranet" if not specified',
         required: true,
       },
       {
         name: "cluster_env",
-        type: "string",
+        type: PARAMETER_TYPE.STRING,
         description: CLUSTER_ENV_DESC,
         required: true,
       },
       {
         name: "cluster_id",
-        type: "string",
+        type: PARAMETER_TYPE.STRING,
         description: CLUSTER_ID_DESC,
         required: true,
       },
       {
         name: "cluster_tag",
-        type: "string",
+        type: PARAMETER_TYPE.STRING,
         description: CLUSTER_TAG_DESC,
         required: false,
       },
       {
         name: "group_name",
-        type: "string",
+        type: PARAMETER_TYPE.STRING,
         description:
           "Deploy group name. The AI should try: 1) user-specified value, 2) cluster_tag, 3) cluster_env.",
         required: true,
@@ -799,8 +804,8 @@ return fetch("https://api.agw.mihoyo.com/lml-prod-cn/trinity/v1/deploy/group/bul
     name: "Create Deploy Work Order For LML",
     description:
       "Create a new deploy work order to deploy an archive to a specific deploy group; first fetch the deploy group list to get group_id, then fetch the archive list to get archive_id",
-    type: "code",
-    operationType: "write",
+    type: FUNCTION_TYPE.CODE,
+    operationType: OPERATION_TYPE.WRITE,
     code: `const name = "【" + args.env + "】【${LML_APP_NAME}】" + args.deploy_group_name;
 const reason = "申请发布【" + args.env + "】";
 
@@ -831,33 +836,33 @@ return fetch("https://api.agw.mihoyo.com/lml-prod-cn/trinity/v1/deploy_workflow/
     parameters: [
       {
         name: "env",
-        type: "string",
+        type: PARAMETER_TYPE.STRING,
         description: CLUSTER_ENV_DESC,
         required: true,
       },
       {
         name: "cluster_id",
-        type: "string",
+        type: PARAMETER_TYPE.STRING,
         description: CLUSTER_ID_DESC,
         required: true,
       },
       {
         name: "group_id",
-        type: "string",
+        type: PARAMETER_TYPE.STRING,
         description:
           "Deploy group id (extract from the target item in the deploy group list for the same env).",
         required: true,
       },
       {
         name: "archive_id",
-        type: "string",
+        type: PARAMETER_TYPE.STRING,
         description:
           "Archive id (the id field from the archive list item to deploy).",
         required: true,
       },
       {
         name: "deploy_group_name",
-        type: "string",
+        type: PARAMETER_TYPE.STRING,
         description:
           "Deploy group name (used for generating the work order name).",
         required: true,
@@ -877,8 +882,8 @@ export const mockFunctions: CodeFunctionDefinition[] = [
     name: "Get Current Page Info",
     description:
       "Returns information about the current page (URL, title, meta)",
-    type: "code",
-    operationType: "read",
+    type: FUNCTION_TYPE.CODE,
+    operationType: OPERATION_TYPE.READ,
     code: `return {
       url: window.location.href,
       title: document.title,
@@ -894,8 +899,8 @@ export const mockFunctions: CodeFunctionDefinition[] = [
     name: "Get Page Content",
     description:
       "Returns the text content of the page or a specific CSS selector",
-    type: "code",
-    operationType: "read",
+    type: FUNCTION_TYPE.CODE,
+    operationType: OPERATION_TYPE.READ,
     code: `const selector = args.selector || 'body';
     const el = document.querySelector(selector);
     if (!el) return { error: 'Element not found: ' + selector };
@@ -907,7 +912,7 @@ export const mockFunctions: CodeFunctionDefinition[] = [
     parameters: [
       {
         name: "selector",
-        type: "string",
+        type: PARAMETER_TYPE.STRING,
         description: "CSS selector to query (defaults to 'body')",
         required: false,
       },
@@ -917,8 +922,8 @@ export const mockFunctions: CodeFunctionDefinition[] = [
     id: "clickElement",
     name: "Click Element",
     description: "Clicks an element matching the given CSS selector",
-    type: "code",
-    operationType: "write",
+    type: FUNCTION_TYPE.CODE,
+    operationType: OPERATION_TYPE.WRITE,
     code: `const el = document.querySelector(args.selector);
     if (!el) return { error: 'Element not found: ' + args.selector };
     el.click();
@@ -926,7 +931,7 @@ export const mockFunctions: CodeFunctionDefinition[] = [
     parameters: [
       {
         name: "selector",
-        type: "string",
+        type: PARAMETER_TYPE.STRING,
         description: "CSS selector of the element to click",
         required: true,
       },
@@ -936,8 +941,8 @@ export const mockFunctions: CodeFunctionDefinition[] = [
     id: "fillInput",
     name: "Fill Input",
     description: "Sets the value of an input element",
-    type: "code",
-    operationType: "write",
+    type: FUNCTION_TYPE.CODE,
+    operationType: OPERATION_TYPE.WRITE,
     code: `const el = document.querySelector(args.selector);
     if (!el) return { error: 'Element not found: ' + args.selector };
     const nativeInputValueSetter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')?.set;
@@ -952,13 +957,13 @@ export const mockFunctions: CodeFunctionDefinition[] = [
     parameters: [
       {
         name: "selector",
-        type: "string",
+        type: PARAMETER_TYPE.STRING,
         description: "CSS selector of the input",
         required: true,
       },
       {
         name: "value",
-        type: "string",
+        type: PARAMETER_TYPE.STRING,
         description: "Value to set",
         required: true,
       },

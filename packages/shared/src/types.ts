@@ -1,8 +1,16 @@
+import { FUNCTION_TYPE } from "./constants";
+import type {
+  FlowStepStatus,
+  FunctionType,
+  OperationType,
+  ParameterType,
+} from "./constants";
+
 // ─── Parameter Definition ────────────────────────────────────────────────────
 
 export type ParameterDefinition = {
   name: string;
-  type: string;
+  type: ParameterType;
   description?: string;
   required: boolean;
 };
@@ -14,8 +22,8 @@ export type CodeFunctionDefinition = {
   id: string;
   name: string;
   description: string;
-  type: "code";
-  operationType: "read" | "write";
+  type: typeof FUNCTION_TYPE.CODE;
+  operationType: OperationType;
   code: string;
   parameters: ParameterDefinition[];
 };
@@ -25,8 +33,8 @@ export type ExecutorFunctionDefinition = {
   id: string;
   name: string;
   description: string;
-  type: "executor";
-  operationType: "read" | "write";
+  type: typeof FUNCTION_TYPE.EXECUTOR;
+  operationType: OperationType;
   executor: (args: Record<string, any>) => Promise<any>;
   parameters: ParameterDefinition[];
 };
@@ -40,8 +48,8 @@ export type FunctionSchema = {
   id: string;
   name: string;
   description: string;
-  type: "code" | "executor";
-  operationType: "read" | "write";
+  type: FunctionType;
+  operationType: OperationType;
   parameters: ParameterDefinition[];
 };
 
@@ -75,6 +83,6 @@ export type FlowStep = {
   functionId: string;
   title: string;
   arguments: Record<string, any>;
-  status: "pending" | "running" | "success" | "failed";
+  status: FlowStepStatus;
   result?: any;
 };

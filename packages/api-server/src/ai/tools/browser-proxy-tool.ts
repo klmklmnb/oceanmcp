@@ -1,5 +1,6 @@
 import { tool } from "ai";
 import { z } from "zod";
+import { OPERATION_TYPE } from "@ocean-mcp/shared";
 import { connectionManager } from "../../ws/connection-manager";
 
 /**
@@ -34,7 +35,7 @@ export function createBrowserExecuteTool(connectionId?: string) {
       // Check operationType — block write functions
       const toolSchemas = connectionManager.getToolSchemas(connectionId);
       const schema = toolSchemas.find((s) => s.id === functionId);
-      if (schema && schema.operationType === "write") {
+      if (schema && schema.operationType === OPERATION_TYPE.WRITE) {
         return {
           error: `Function "${functionId}" is a write/mutation operation and cannot be executed directly via browserExecute. You MUST use the executePlan tool to propose a plan for write operations, which requires user approval before execution.`,
           functionId,

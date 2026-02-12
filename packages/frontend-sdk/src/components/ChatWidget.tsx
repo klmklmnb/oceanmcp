@@ -1,8 +1,15 @@
 import React, { useRef, useEffect, useState } from "react";
 import { useChat } from "@ai-sdk/react";
 import { DefaultChatTransport } from "ai";
+import {
+  MESSAGE_PART_TYPE,
+  MESSAGE_ROLE,
+  TOOL_PART_STATE,
+  TOOL_PART_TYPE_PREFIX,
+} from "@ocean-mcp/shared";
 import { MessageRenderer } from "./MessageRenderer";
 import { wsClient } from "../runtime/ws-client";
+import { CHAT_STATUS } from "../constants/chat";
 
 const API_URL =
   (typeof window !== "undefined" && (window as any).__OCEAN_MCP_SERVER_URL__) ||
@@ -12,14 +19,18 @@ const AUTO_DENY_REASON =
   "User sent a new message instead of responding to approval";
 
 function isToolPart(part: any): boolean {
-  return typeof part?.type === "string" && part.type.startsWith("tool-");
+  return (
+    typeof part?.type === "string" &&
+    part.type.startsWith(TOOL_PART_TYPE_PREFIX)
+  );
 }
 
 function shouldAutoDeny(part: any): boolean {
   return (
     isToolPart(part) &&
-    (part.state === "approval-requested" ||
-      (part.state === "approval-responded" && part.approval?.approved === false))
+    (part.state === TOOL_PART_STATE.APPROVAL_REQUESTED ||
+      (part.state === TOOL_PART_STATE.APPROVAL_RESPONDED &&
+        part.approval?.approved === false))
   );
 }
 
@@ -30,7 +41,10 @@ function denyPendingApprovalParts(messages: any[]): {
   let changed = false;
 
   const nextMessages = messages.map((message, index) => {
-    if (message.role !== "assistant" || !Array.isArray(message.parts)) {
+    if (
+      message.role !== MESSAGE_ROLE.ASSISTANT ||
+      !Array.isArray(message.parts)
+    ) {
       return message;
     }
 
@@ -43,7 +57,7 @@ function denyPendingApprovalParts(messages: any[]): {
 
       return {
         ...part,
-        state: "output-denied",
+        state: TOOL_PART_STATE.OUTPUT_DENIED,
         approval: {
           id: part.approval?.id ?? `auto-deny-${part.toolCallId ?? index}`,
           approved: false,
@@ -115,15 +129,17 @@ export function ChatWidget() {
      */
     sendAutomaticallyWhen: ({ messages: msgs }) => {
       const lastMsg = msgs[msgs.length - 1];
-      if (!lastMsg || lastMsg.role !== "assistant") return false;
+      if (!lastMsg || lastMsg.role !== MESSAGE_ROLE.ASSISTANT) return false;
 
       const hasApprovalResponse = lastMsg.parts?.some((part: any) => {
         const isToolPart =
-          typeof part.type === "string" && part.type.startsWith("tool-");
+          typeof part.type === "string" &&
+          part.type.startsWith(TOOL_PART_TYPE_PREFIX);
         if (!isToolPart) return false;
         // Only trigger when a tool has been explicitly approved/denied by the user
         return (
-          part.state === "approval-responded" && part.approval?.approved != null
+          part.state === TOOL_PART_STATE.APPROVAL_RESPONDED &&
+          part.approval?.approved != null
         );
       });
 
@@ -144,8 +160,8 @@ export function ChatWidget() {
     }
 
     await sendMessage({
-      role: "user",
-      parts: [{ type: "text", text }],
+      role: MESSAGE_ROLE.USER,
+      parts: [{ type: MESSAGE_PART_TYPE.TEXT, text }],
     });
   };
 
@@ -228,8 +244,8 @@ export function ChatWidget() {
     }
   };
 
-  const isStreaming = status === "streaming";
-  const isLoading = status === "submitted";
+  const isStreaming = status === CHAT_STATUS.STREAMING;
+  const isLoading = status === CHAT_STATUS.SUBMITTED;
 
   return (
     <div className="flex flex-col h-full bg-surface-secondary">

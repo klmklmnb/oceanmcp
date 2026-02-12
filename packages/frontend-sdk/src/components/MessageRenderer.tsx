@@ -1,5 +1,12 @@
 import React from "react";
 import type { UIMessage } from "ai";
+import {
+  MESSAGE_PART_STATE,
+  MESSAGE_PART_TYPE,
+  MESSAGE_ROLE,
+  TOOL_PART_STATE,
+  TOOL_PART_TYPE_PREFIX,
+} from "@ocean-mcp/shared";
 import { FlowNodeCard } from "./FlowNodeCard";
 import { ApprovalButtons } from "./ApprovalButtons";
 
@@ -92,15 +99,21 @@ import { MessageReasoning } from "./MessageReasoning";
  * Helper: Check if a part is a tool part (AI SDK v6 uses `tool-${toolName}` pattern)
  */
 function isToolPart(part: any): boolean {
-  return typeof part.type === "string" && part.type.startsWith("tool-");
+  return (
+    typeof part.type === "string" &&
+    part.type.startsWith(TOOL_PART_TYPE_PREFIX)
+  );
 }
 
 /**
  * Helper: Extract tool name from part type (e.g. "tool-executePlan" → "executePlan")
  */
 function getToolName(part: any): string {
-  if (typeof part.type === "string" && part.type.startsWith("tool-")) {
-    return part.type.slice(5); // Remove "tool-" prefix
+  if (
+    typeof part.type === "string" &&
+    part.type.startsWith(TOOL_PART_TYPE_PREFIX)
+  ) {
+    return part.type.slice(TOOL_PART_TYPE_PREFIX.length);
   }
   return part.toolName || "unknown";
 }
@@ -126,7 +139,7 @@ export function MessageRenderer({
   onApprove,
   onDeny,
 }: MessageRendererProps) {
-  const isUser = message.role === "user";
+  const isUser = message.role === MESSAGE_ROLE.USER;
 
   const renderPart = (part: any, index: number) => {
     // 1. Tool Parts (AI SDK v6: type is "tool-${toolName}")
@@ -144,7 +157,7 @@ export function MessageRenderer({
 
         return (
           <div key={toolCallId || index}>
-            {state === "input-streaming" ? (
+            {state === TOOL_PART_STATE.INPUT_STREAMING ? (
               <TypingIndicator />
             ) : (
               <>
@@ -158,7 +171,7 @@ export function MessageRenderer({
                   onApprove={onApprove}
                   onDeny={onDeny}
                 />
-                {state === "output-error" && errorText && (
+                {state === TOOL_PART_STATE.OUTPUT_ERROR && errorText && (
                   <div className="my-2 px-4 py-2 bg-red-50 border border-red-200 rounded-xl text-sm text-red-600">
                     <strong>Error:</strong> {errorText}
                   </div>
@@ -172,9 +185,9 @@ export function MessageRenderer({
       // Other tools — render as generic tool card
       return (
         <div key={toolCallId || index}>
-          {state === "input-streaming" ? (
+          {state === TOOL_PART_STATE.INPUT_STREAMING ? (
             <TypingIndicator />
-          ) : state === "approval-requested" ? (
+          ) : state === TOOL_PART_STATE.APPROVAL_REQUESTED ? (
             <ApprovalButtons
               toolCallId={toolCallId}
               toolName={toolName}
@@ -190,20 +203,20 @@ export function MessageRenderer({
                 <span className="text-sm font-semibold text-text-primary">
                   {toolName}
                 </span>
-                {state === "output-available" && (
+                {state === TOOL_PART_STATE.OUTPUT_AVAILABLE && (
                   <span className="ml-auto flex items-center gap-1.5 text-xs text-emerald-600">
                     <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
                     Complete
                   </span>
                 )}
-                {state === "output-error" && (
+                {state === TOOL_PART_STATE.OUTPUT_ERROR && (
                   <span className="ml-auto flex items-center gap-1.5 text-xs text-red-500">
                     <span className="w-1.5 h-1.5 rounded-full bg-red-400" />
                     Error
                   </span>
                 )}
-                {(state === "input-available" ||
-                  state === "approval-responded") && (
+                {(state === TOOL_PART_STATE.INPUT_AVAILABLE ||
+                  state === TOOL_PART_STATE.APPROVAL_RESPONDED) && (
                   <span className="ml-auto flex items-center gap-1.5 text-xs text-ocean-500">
                     <span
                       className="inline-block w-3 h-3 border-2 border-ocean-500 border-t-transparent rounded-full"
@@ -213,7 +226,8 @@ export function MessageRenderer({
                   </span>
                 )}
               </div>
-              {state === "output-available" && output !== undefined && (
+              {state === TOOL_PART_STATE.OUTPUT_AVAILABLE &&
+                output !== undefined && (
                 <div className="p-4">
                   <pre className="text-xs bg-surface-tertiary rounded-lg p-3 overflow-x-auto text-text-secondary font-mono max-h-32 overflow-y-auto">
                     {typeof output === "string"
@@ -221,8 +235,8 @@ export function MessageRenderer({
                       : JSON.stringify(output, null, 2)}
                   </pre>
                 </div>
-              )}
-              {state === "output-error" && errorText && (
+                )}
+              {state === TOOL_PART_STATE.OUTPUT_ERROR && errorText && (
                 <div className="p-4">
                   <p className="text-xs text-red-500">{errorText}</p>
                 </div>
@@ -234,23 +248,23 @@ export function MessageRenderer({
     }
 
     // 2. Step-start boundary — skip (visual separator not needed)
-    if (part.type === "step-start") {
+    if (part.type === MESSAGE_PART_TYPE.STEP_START) {
       return null;
     }
 
     // 3. Reasoning Parts (Native AI SDK)
-    if (part.type === "reasoning") {
+    if (part.type === MESSAGE_PART_TYPE.REASONING) {
       return (
         <MessageReasoning
           key={`reasoning-${index}`}
           reasoning={part.details?.text || part.text || ""}
-          isLoading={part.state === "streaming"}
+          isLoading={part.state === MESSAGE_PART_STATE.STREAMING}
         />
       );
     }
 
     // 4. Text Parts (with potential <think> tags)
-    if (part.type === "text") {
+    if (part.type === MESSAGE_PART_TYPE.TEXT) {
       const text = part.text || "";
 
       // Regex to process <think> tags
@@ -321,7 +335,7 @@ export function MessageRenderer({
   };
 
   const hasTextContent = message.parts?.some(
-    (p) => p.type === "text" && (p as any).text,
+    (p) => p.type === MESSAGE_PART_TYPE.TEXT && (p as any).text,
   );
 
   return (
@@ -341,7 +355,7 @@ export function MessageRenderer({
             <CopyButton
               text={
                 message.parts
-                  ?.filter((p) => p.type === "text")
+                  ?.filter((p) => p.type === MESSAGE_PART_TYPE.TEXT)
                   .map((p) => (p as any).text)
                   .join("") || ""
               }

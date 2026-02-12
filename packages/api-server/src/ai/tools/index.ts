@@ -1,7 +1,11 @@
 import { getServerStatus, echo } from "./server-tools";
 import { createBrowserExecuteTool } from "./browser-proxy-tool";
 import { createExecutePlanTool } from "./execute-plan-tool";
-import type { FunctionSchema, ParameterDefinition } from "@ocean-mcp/shared";
+import {
+  PARAMETER_TYPE,
+  type FunctionSchema,
+  type ParameterDefinition,
+} from "@ocean-mcp/shared";
 import { tool, type Tool } from "ai";
 import { z } from "zod";
 import { connectionManager } from "../../ws/connection-manager";
@@ -29,19 +33,19 @@ export function createZodSchema(parameters: ParameterDefinition[]) {
     let schema: z.ZodTypeAny;
 
     switch (param.type) {
-      case "string":
+      case PARAMETER_TYPE.STRING:
         schema = z.string();
         break;
-      case "number":
+      case PARAMETER_TYPE.NUMBER:
         schema = z.number();
         break;
-      case "boolean":
+      case PARAMETER_TYPE.BOOLEAN:
         schema = z.boolean();
         break;
-      case "object":
+      case PARAMETER_TYPE.OBJECT:
         schema = z.any();
         break;
-      case "array":
+      case PARAMETER_TYPE.ARRAY:
         schema = z.array(z.any());
         break;
       default:

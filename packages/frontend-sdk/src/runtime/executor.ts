@@ -1,4 +1,4 @@
-import type { FunctionDefinition } from "@ocean-mcp/shared";
+import { FUNCTION_TYPE, type FunctionDefinition } from "@ocean-mcp/shared";
 import { registry } from "../registry";
 
 /**
@@ -15,9 +15,9 @@ export async function executeFunction(
     throw new Error(`Function not found: ${functionId}`);
   }
 
-  if (fn.type === "code") {
+  if (fn.type === FUNCTION_TYPE.CODE) {
     return executeCodeFunction(fn.code, args);
-  } else if (fn.type === "executor") {
+  } else if (fn.type === FUNCTION_TYPE.EXECUTOR) {
     return fn.executor(args);
   }
 

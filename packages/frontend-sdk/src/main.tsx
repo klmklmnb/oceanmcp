@@ -4,7 +4,11 @@ import { ChatWidget } from "./components/ChatWidget";
 import { registry } from "./registry";
 import { mockFunctions } from "./registry/mockFunctions";
 import { wsClient } from "./runtime/ws-client";
-import type { FunctionDefinition } from "@ocean-mcp/shared";
+import {
+  FUNCTION_TYPE,
+  OPERATION_TYPE,
+  type FunctionDefinition,
+} from "@ocean-mcp/shared";
 import "./styles/index.css";
 
 // ─── Register pre-bundled mock functions ─────────────────────────────────────
@@ -55,8 +59,8 @@ const OceanMCPSDK = {
    */
   registerTool(definition: Partial<FunctionDefinition> & { id: string }) {
     const fn: FunctionDefinition = {
-      type: "executor",
-      operationType: "read",
+      type: FUNCTION_TYPE.EXECUTOR,
+      operationType: OPERATION_TYPE.READ,
       parameters: [],
       name: definition.id,
       description: "",

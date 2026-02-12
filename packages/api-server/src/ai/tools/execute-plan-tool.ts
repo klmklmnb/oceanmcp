@@ -1,5 +1,6 @@
 import { tool } from "ai";
 import { z } from "zod";
+import { FLOW_STEP_STATUS } from "@ocean-mcp/shared";
 import { connectionManager } from "../../ws/connection-manager";
 import { createZodSchema } from "./index";
 
@@ -94,7 +95,9 @@ export function createExecutePlanTool(connectionId?: string) {
         stepIndex: number;
         title: string;
         functionId: string;
-        status: "success" | "failed";
+        status:
+          | typeof FLOW_STEP_STATUS.SUCCESS
+          | typeof FLOW_STEP_STATUS.FAILED;
         result?: any;
         error?: string;
       }> = [];
@@ -112,7 +115,7 @@ export function createExecutePlanTool(connectionId?: string) {
             stepIndex: i,
             title: step.title,
             functionId: step.functionId,
-            status: "success",
+            status: FLOW_STEP_STATUS.SUCCESS,
             result,
           });
         } catch (error) {
@@ -120,7 +123,7 @@ export function createExecutePlanTool(connectionId?: string) {
             stepIndex: i,
             title: step.title,
             functionId: step.functionId,
-            status: "failed",
+            status: FLOW_STEP_STATUS.FAILED,
             error: error instanceof Error ? error.message : String(error),
           });
           // Stop on first failure

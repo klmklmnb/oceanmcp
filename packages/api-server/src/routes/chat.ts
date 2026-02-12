@@ -3,6 +3,11 @@ import {
   convertToModelMessages,
   stepCountIs,
 } from "ai";
+import {
+  MESSAGE_ROLE,
+  TOOL_PART_STATE,
+  TOOL_PART_TYPE_PREFIX,
+} from "@ocean-mcp/shared";
 import { getLanguageModel } from "../ai/providers";
 import { systemPrompt } from "../ai/prompts";
 import { getMergedTools } from "../ai/tools";
@@ -12,13 +17,16 @@ const AUTO_DENY_REASON =
   "User sent a new message instead of responding to approval.";
 
 function isToolPart(part: any): boolean {
-  return typeof part?.type === "string" && part.type.startsWith("tool-");
+  return (
+    typeof part?.type === "string" &&
+    part.type.startsWith(TOOL_PART_TYPE_PREFIX)
+  );
 }
 
 function shouldAutoDeny(part: any): boolean {
   return (
     isToolPart(part) &&
-    part.state === "approval-responded" &&
+    part.state === TOOL_PART_STATE.APPROVAL_RESPONDED &&
     part.approval?.approved === false
   );
 }
@@ -32,19 +40,22 @@ function shouldAutoDeny(part: any): boolean {
  */
 function normalizeStaleApprovals(messages: any[]): any[] {
   return messages.map((message, index) => {
-    if (message.role !== "assistant" || !Array.isArray(message.parts)) {
+    if (
+      message.role !== MESSAGE_ROLE.ASSISTANT ||
+      !Array.isArray(message.parts)
+    ) {
       return message;
     }
 
     const hasLaterUserMessage = messages
       .slice(index + 1)
-      .some((m) => m?.role === "user");
+      .some((m) => m?.role === MESSAGE_ROLE.USER);
 
     let changed = false;
     const parts = message.parts.map((part: any) => {
       const denyBecauseMovedOn =
         isToolPart(part) &&
-        part.state === "approval-requested" &&
+        part.state === TOOL_PART_STATE.APPROVAL_REQUESTED &&
         hasLaterUserMessage;
 
       if (!denyBecauseMovedOn && !shouldAutoDeny(part)) return part;
@@ -52,7 +63,7 @@ function normalizeStaleApprovals(messages: any[]): any[] {
 
       return {
         ...part,
-        state: "output-denied",
+        state: TOOL_PART_STATE.OUTPUT_DENIED,
         approval: {
           id: part.approval?.id ?? `auto-deny-${part.toolCallId ?? index}`,
           approved: false,

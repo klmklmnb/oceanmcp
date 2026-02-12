@@ -1,13 +1,17 @@
 import { tool } from "ai";
 import { z } from "zod";
 
+const SERVER_STATUS = {
+  HEALTHY: "healthy",
+} as const;
+
 /** Example server-side tool — retrieves server status information */
 export const getServerStatus = tool({
   description: "Get the current server status and health information",
   inputSchema: z.object({}),
   execute: async () => {
     return {
-      status: "healthy",
+      status: SERVER_STATUS.HEALTHY,
       uptime: process.uptime(),
       timestamp: new Date().toISOString(),
       connections: 0, // Will be updated by the connection manager
