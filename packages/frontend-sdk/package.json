@@ -1,0 +1,27 @@
+{
+  "name": "@ocean-mcp/frontend-sdk",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite --port 3000",
+    "build": "vite build",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@ai-sdk/react": "3.0.39",
+    "@ocean-mcp/shared": "workspace:*",
+    "ai": "6.0.37",
+    "react": "19.0.1",
+    "react-dom": "19.0.1"
+  },
+  "devDependencies": {
+    "@tailwindcss/vite": "^4.0.0",
+    "@types/react": "^19.0.0",
+    "@types/react-dom": "^19.0.0",
+    "@vitejs/plugin-react": "^4.3.0",
+    "tailwindcss": "^4.1.13",
+    "typescript": "^5.6.3",
+    "vite": "^6.1.0"
+  }
+}
