@@ -327,6 +327,7 @@ return fetch("https://api.agw.mihoyo.com/eee-prod-cn/trinity/v1/deploy/group/bul
         description:
           "Domain for frontend static group, should be specified by the user",
         required: true,
+        showName: "域名",
       },
       {
         name: "public_path",
@@ -334,6 +335,7 @@ return fetch("https://api.agw.mihoyo.com/eee-prod-cn/trinity/v1/deploy/group/bul
         description:
           "Public path starting with '/', should be specified by the user",
         required: true,
+        showName: "一级路径",
       },
       {
         name: "bucket_tag",
@@ -341,18 +343,21 @@ return fetch("https://api.agw.mihoyo.com/eee-prod-cn/trinity/v1/deploy/group/bul
         description:
           'Bucket tag: "intranet" or "external_network", defaults to "intranet" if not specified',
         required: true,
+        showName: "桶",
       },
       {
         name: "cluster_env",
         type: PARAMETER_TYPE.STRING,
         description: CLUSTER_ENV_DESC,
         required: true,
+        showName: "环境",
       },
       {
         name: "cluster_id",
         type: PARAMETER_TYPE.STRING,
         description: CLUSTER_ID_DESC,
         required: true,
+        showName: "集群ID",
       },
       {
         name: "cluster_tag",
@@ -366,6 +371,7 @@ return fetch("https://api.agw.mihoyo.com/eee-prod-cn/trinity/v1/deploy/group/bul
         description:
           "Deploy group name. The AI should try: 1) user-specified value, 2) cluster_tag, 3) cluster_env.",
         required: true,
+        showName: "分组名称",
       },
     ],
   },

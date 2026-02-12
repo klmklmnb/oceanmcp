@@ -1,5 +1,6 @@
 import React from "react";
 import { FLOW_STEP_STATUS, TOOL_PART_STATE } from "@ocean-mcp/shared";
+import { registry } from "../registry";
 
 type FlowNodeCardProps = {
   steps: Array<{
@@ -13,9 +14,7 @@ type FlowNodeCardProps = {
     results?: Array<{
       stepIndex: number;
       title: string;
-      status:
-        | typeof FLOW_STEP_STATUS.SUCCESS
-        | typeof FLOW_STEP_STATUS.FAILED;
+      status: typeof FLOW_STEP_STATUS.SUCCESS | typeof FLOW_STEP_STATUS.FAILED;
       result?: any;
       error?: string;
     }>;
@@ -144,45 +143,70 @@ export function FlowNodeCard({
                   <p className="text-sm font-medium text-text-primary">
                     {step.title}
                   </p>
-                  <div className="text-xs text-text-tertiary mt-0.5 font-mono">
-                    <span>{step.functionId}(</span>
-                    {Object.entries(step.arguments || {}).length > 0 && (
-                      <div className="pl-4">
-                        {Object.entries(step.arguments || {}).map(
-                          ([key, value], idx, arr) => (
-                            <div key={key}>
-                              <span className="text-ocean-600">{key}</span>
-                              <span className="text-text-quaternary">
-                                {" = "}
-                              </span>
-                              <span className="text-text-secondary">
-                                {typeof value === "string"
-                                  ? `"${value}"`
-                                  : JSON.stringify(value)}
-                              </span>
-                              {idx < arr.length - 1 && ","}
-                            </div>
-                          ),
+                  {(() => {
+                    const fnDef = registry.get(step.functionId);
+                    if (fnDef?.showRender) {
+                      return fnDef.showRender({
+                        id: step.functionId,
+                        functionId: step.functionId,
+                        title: step.title,
+                        arguments: step.arguments || {},
+                        status: status as any,
+                      });
+                    }
+
+                    // Build a map of param name → showName for display override
+                    const showNameMap = new Map<string, string>();
+                    if (fnDef?.parameters) {
+                      for (const p of fnDef.parameters) {
+                        if (p.showName) showNameMap.set(p.name, p.showName);
+                      }
+                    }
+
+                    return (
+                      <div className="text-xs text-text-tertiary mt-0.5 font-mono">
+                        <span>{step.functionId}(</span>
+                        {Object.entries(step.arguments || {}).length > 0 && (
+                          <div className="pl-4">
+                            {Object.entries(step.arguments || {}).map(
+                              ([key, value], idx, arr) => (
+                                <div key={key}>
+                                  <span className="text-ocean-600">
+                                    {showNameMap.get(key) ?? key}
+                                  </span>
+                                  <span className="text-text-quaternary">
+                                    {" = "}
+                                  </span>
+                                  <span className="text-text-secondary">
+                                    {typeof value === "string"
+                                      ? `"${value}"`
+                                      : JSON.stringify(value)}
+                                  </span>
+                                  {idx < arr.length - 1 && ","}
+                                </div>
+                              ),
+                            )}
+                          </div>
                         )}
+                        <span>)</span>
                       </div>
-                    )}
-                    <span>)</span>
-                  </div>
+                    );
+                  })()}
 
                   {/* Result */}
                   {stepResult?.status === FLOW_STEP_STATUS.SUCCESS &&
                     stepResult.result && (
-                    <pre className="mt-2 text-xs bg-surface-tertiary rounded-lg p-2 overflow-x-auto text-text-secondary max-h-24 overflow-y-auto">
-                      {typeof stepResult.result === "string"
-                        ? stepResult.result
-                        : JSON.stringify(stepResult.result, null, 2)}
-                    </pre>
+                      <pre className="mt-2 text-xs bg-surface-tertiary rounded-lg p-2 overflow-x-auto text-text-secondary max-h-24 overflow-y-auto">
+                        {typeof stepResult.result === "string"
+                          ? stepResult.result
+                          : JSON.stringify(stepResult.result, null, 2)}
+                      </pre>
                     )}
                   {stepResult?.status === FLOW_STEP_STATUS.FAILED &&
                     stepResult.error && (
-                    <p className="mt-1 text-xs text-red-500">
-                      {stepResult.error}
-                    </p>
+                      <p className="mt-1 text-xs text-red-500">
+                        {stepResult.error}
+                      </p>
                     )}
                 </div>
               </div>
