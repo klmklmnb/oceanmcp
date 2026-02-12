@@ -343,7 +343,11 @@ return fetch("https://api.agw.mihoyo.com/eee-prod-cn/trinity/v1/deploy/group/bul
         description:
           'Bucket tag: "intranet" or "external_network", defaults to "intranet" if not specified',
         required: true,
-        showName: "桶",
+        showName: "网络环境",
+        enumMap: {
+          intranet: "🏠 内网",
+          external_network: "🌐 外网",
+        },
       },
       {
         name: "cluster_env",
@@ -777,6 +781,11 @@ return fetch("https://api.agw.mihoyo.com/lml-prod-cn/trinity/v1/deploy/group/bul
         description:
           'Bucket tag: "intranet" or "external_network", defaults to "intranet" if not specified',
         required: true,
+        showName: "桶",
+        enumMap: {
+          intranet: "🏠 内网",
+          external_network: "🌐 外网",
+        },
       },
       {
         name: "cluster_env",

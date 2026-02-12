@@ -155,13 +155,25 @@ export function FlowNodeCard({
                       });
                     }
 
-                    // Build a map of param name → showName for display override
+                    // Build maps from param definitions for display overrides
                     const showNameMap = new Map<string, string>();
+                    const enumMaps = new Map<string, Record<string, any>>();
                     if (fnDef?.parameters) {
                       for (const p of fnDef.parameters) {
                         if (p.showName) showNameMap.set(p.name, p.showName);
+                        if (p.enumMap) enumMaps.set(p.name, p.enumMap);
                       }
                     }
+
+                    const renderValue = (key: string, value: any) => {
+                      const em = enumMaps.get(key);
+                      if (em && typeof value === "string" && value in em) {
+                        return em[value];
+                      }
+                      return typeof value === "string"
+                        ? `"${value}"`
+                        : JSON.stringify(value);
+                    };
 
                     return (
                       <div className="text-xs text-text-tertiary mt-0.5 font-mono">
@@ -178,9 +190,7 @@ export function FlowNodeCard({
                                     {" = "}
                                   </span>
                                   <span className="text-text-secondary">
-                                    {typeof value === "string"
-                                      ? `"${value}"`
-                                      : JSON.stringify(value)}
+                                    {renderValue(key, value)}
                                   </span>
                                   {idx < arr.length - 1 && ","}
                                 </div>

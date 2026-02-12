@@ -15,6 +15,8 @@ export interface ParameterDefinition {
   required: boolean;
   /** Display name override shown in the FlowNodeCard UI */
   showName?: string;
+  /** Maps raw param values to custom render nodes; overrides the default value display in FlowNodeCard */
+  enumMap?: Record<string, any>;
 }
 
 // ─── Function Definitions ────────────────────────────────────────────────────
