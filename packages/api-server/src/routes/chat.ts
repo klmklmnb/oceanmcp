@@ -38,35 +38,18 @@ export async function handleChatRequest(req: Request): Promise<Response> {
     const dynamicSchemas = connectionManager.getAllToolSchemas();
     const mergedTools = getMergedTools(dynamicSchemas);
 
-    const stream = createUIMessageStream({
-      execute: async ({ writer: dataStream }) => {
-        const result = streamText({
-          model: getLanguageModel(modelId),
-          system: systemPrompt,
-          messages: await convertToModelMessages(messages),
-          tools: mergedTools,
-          stopWhen: stepCountIs(10),
-          onError: (error) => {
-            console.error("[Chat] streamText error:", error);
-          },
-        });
-
-        dataStream.merge(result.toUIMessageStream());
-      },
+    const result = streamText({
+      model: getLanguageModel(modelId),
+      system: systemPrompt,
+      messages: await convertToModelMessages(messages),
+      tools: mergedTools,
+      stopWhen: stepCountIs(10),
       onError: (error) => {
-        console.error("[Chat] Stream error:", error);
-        return error instanceof Error ? error.message : "Unknown error";
+        console.error("[Chat] streamText error:", error);
       },
     });
 
-    return createUIMessageStreamResponse({
-      stream,
-      headers: {
-        "Access-Control-Allow-Origin": "*",
-        "Access-Control-Allow-Methods": "POST, OPTIONS",
-        "Access-Control-Allow-Headers": "Content-Type",
-      },
-    });
+    return result.toUIMessageStreamResponse({ sendReasoning: true });
   } catch (error) {
     console.error("[Chat] Request error:", error);
     return new Response(

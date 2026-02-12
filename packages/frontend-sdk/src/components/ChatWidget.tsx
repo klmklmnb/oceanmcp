@@ -216,7 +216,7 @@ export function ChatWidget() {
             />
             <div className="absolute bottom-2 left-2 right-2 flex items-center justify-between px-2">
               <div className="flex items-center gap-2 text-text-tertiary">
-                <span className="text-xs flex items-center gap-1">
+                {/* <span className="text-xs flex items-center gap-1">
                   <svg
                     width="12"
                     height="12"
@@ -228,7 +228,7 @@ export function ChatWidget() {
                     <path d="M12 2L14.09 8.26L20 9.27L15.5 13.14L16.82 19.02L12 16.09L7.18 19.02L8.5 13.14L4 9.27L9.91 8.26L12 2Z" />
                   </svg>
                   OceanMCP
-                </span>
+                </span> */}
               </div>
               <button
                 type="submit"

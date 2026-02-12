@@ -35,7 +35,9 @@ const server = Bun.serve<{ connectionId: string }>({
 
     // ── Chat API ────────────────────────────────────────────────────────
     if (url.pathname === "/api/chat" && req.method === "POST") {
-      return handleChatRequest(req);
+      const response = await handleChatRequest(req);
+      response.headers.set("Access-Control-Allow-Origin", "*");
+      return response;
     }
 
     // ── WebSocket upgrade ───────────────────────────────────────────────
