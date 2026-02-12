@@ -1,10 +1,8 @@
 {
   "name": "ocean-mcp",
   "private": true,
-  "workspaces": ["packages/*"],
-  "scripts": {
-    "dev:server": "bun --filter api-server run dev",
-    "dev:sdk": "bun --filter frontend-sdk run dev",
-    "build": "bun --filter shared run build && bun --filter api-server run build && bun --filter frontend-sdk run build"
-  }
+  "workspaces": [
+    "packages/*"
+  ],
+  "scripts": {}
 }
