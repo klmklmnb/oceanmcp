@@ -12,7 +12,9 @@ export const serverTools = {
   echo,
 };
 
-function getBrowserTools(connectionId?: string): Record<string, Tool<any, any>> {
+function getBrowserTools(
+  connectionId?: string,
+): Record<string, Tool<any, any>> {
   return {
     browserExecute: createBrowserExecuteTool(connectionId),
     executePlan: createExecutePlanTool(connectionId),
@@ -20,7 +22,7 @@ function getBrowserTools(connectionId?: string): Record<string, Tool<any, any>> 
 }
 
 // Helper to convert parameter definitions to Zod schema
-function createZodSchema(parameters: ParameterDefinition[]) {
+export function createZodSchema(parameters: ParameterDefinition[]) {
   const shape: Record<string, z.ZodTypeAny> = {};
 
   for (const param of parameters) {
@@ -69,7 +71,7 @@ export function getMergedTools(
   connectionId?: string,
 ): Record<string, Tool<any, any>> {
   const tools: Record<string, Tool<any, any>> = {
-    ...serverTools,
+    // ...serverTools,
     ...getBrowserTools(connectionId),
   };
 

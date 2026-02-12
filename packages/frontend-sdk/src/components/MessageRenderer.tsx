@@ -5,7 +5,11 @@ import { ApprovalButtons } from "./ApprovalButtons";
 
 type MessageRendererProps = {
   message: UIMessage;
-  onApprove: (toolCallId: string, toolName: string, approvalId?: string) => void;
+  onApprove: (
+    toolCallId: string,
+    toolName: string,
+    approvalId?: string,
+  ) => void;
   onDeny: (toolCallId: string, toolName: string, approvalId?: string) => void;
 };
 
@@ -133,6 +137,11 @@ export function MessageRenderer({
 
       // executePlan tool — render as flow node card
       if (toolName === "executePlan") {
+        // Skip silently-retried validation failures — user should never see these
+        if (output?._silentRetry) {
+          return null;
+        }
+
         return (
           <div key={toolCallId || index}>
             {state === "input-streaming" ? (
@@ -197,7 +206,8 @@ export function MessageRenderer({
                     Error
                   </span>
                 )}
-                {(state === "input-available" || state === "approval-responded") && (
+                {(state === "input-available" ||
+                  state === "approval-responded") && (
                   <span className="ml-auto flex items-center gap-1.5 text-xs text-ocean-500">
                     <span
                       className="inline-block w-3 h-3 border-2 border-ocean-500 border-t-transparent rounded-full"
