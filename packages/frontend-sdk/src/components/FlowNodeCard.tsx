@@ -18,15 +18,35 @@ type FlowNodeCardProps = {
     }>;
   };
   state: string;
+  /** Approval props — only needed when state === "approval-requested" */
+  toolCallId?: string;
+  toolName?: string;
+  approvalId?: string;
+  onApprove?: (
+    toolCallId: string,
+    toolName: string,
+    approvalId?: string,
+  ) => void;
+  onDeny?: (toolCallId: string, toolName: string, approvalId?: string) => void;
 };
 
 /** Inline flow node card — renders multi-step plan execution with status indicators */
-export function FlowNodeCard({ steps, result, state }: FlowNodeCardProps) {
+export function FlowNodeCard({
+  steps,
+  result,
+  state,
+  toolCallId,
+  toolName,
+  approvalId,
+  onApprove,
+  onDeny,
+}: FlowNodeCardProps) {
   const getStepStatus = (index: number) => {
     if (!result?.results) {
       // AI SDK v6 states: "approval-requested", "input-available", "output-available", etc.
       if (state === "approval-requested" || state === "call") return "pending";
-      if (state === "approval-responded" || state === "input-available") return "running";
+      if (state === "approval-responded" || state === "input-available")
+        return "running";
       return "pending";
     }
     const stepResult = result.results.find((r) => r.stepIndex === index);
@@ -94,10 +114,30 @@ export function FlowNodeCard({ steps, result, state }: FlowNodeCardProps) {
                   <p className="text-sm font-medium text-text-primary">
                     {step.title}
                   </p>
-                  <p className="text-xs text-text-tertiary mt-0.5 font-mono">
-                    {step.functionId}(
-                    {Object.keys(step.arguments || {}).join(", ")})
-                  </p>
+                  <div className="text-xs text-text-tertiary mt-0.5 font-mono">
+                    <span>{step.functionId}(</span>
+                    {Object.entries(step.arguments || {}).length > 0 && (
+                      <div className="pl-4">
+                        {Object.entries(step.arguments || {}).map(
+                          ([key, value], idx, arr) => (
+                            <div key={key}>
+                              <span className="text-ocean-600">{key}</span>
+                              <span className="text-text-quaternary">
+                                {" = "}
+                              </span>
+                              <span className="text-text-secondary">
+                                {typeof value === "string"
+                                  ? `"${value}"`
+                                  : JSON.stringify(value)}
+                              </span>
+                              {idx < arr.length - 1 && ","}
+                            </div>
+                          ),
+                        )}
+                      </div>
+                    )}
+                    <span>)</span>
+                  </div>
 
                   {/* Result */}
                   {stepResult?.status === "success" && stepResult.result && (
@@ -118,6 +158,28 @@ export function FlowNodeCard({ steps, result, state }: FlowNodeCardProps) {
           );
         })}
       </div>
+
+      {/* Approval buttons — rendered inside the card */}
+      {state === "approval-requested" &&
+        toolCallId &&
+        toolName &&
+        onApprove &&
+        onDeny && (
+          <div className="px-4 py-3 border-t border-border flex justify-end gap-2">
+            <button
+              onClick={() => onDeny(toolCallId, toolName, approvalId)}
+              className="px-4 py-2 text-sm font-medium text-text-secondary hover:text-text-primary hover:bg-surface-tertiary rounded-lg transition-colors cursor-pointer"
+            >
+              Deny
+            </button>
+            <button
+              onClick={() => onApprove(toolCallId, toolName, approvalId)}
+              className="px-4 py-2 text-sm font-medium text-white bg-ocean-600 hover:bg-ocean-700 rounded-lg transition-colors shadow-sm cursor-pointer"
+            >
+              Allow
+            </button>
+          </div>
+        )}
     </div>
   );
 }

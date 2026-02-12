@@ -152,17 +152,12 @@ export function MessageRenderer({
                   steps={input?.steps || []}
                   result={output}
                   state={state}
+                  toolCallId={toolCallId}
+                  toolName={toolName}
+                  approvalId={approvalId}
+                  onApprove={onApprove}
+                  onDeny={onDeny}
                 />
-                {state === "approval-requested" && (
-                  <ApprovalButtons
-                    toolCallId={toolCallId}
-                    toolName={toolName}
-                    args={input || {}}
-                    approvalId={approvalId}
-                    onApprove={onApprove}
-                    onDeny={onDeny}
-                  />
-                )}
                 {state === "output-error" && errorText && (
                   <div className="my-2 px-4 py-2 bg-red-50 border border-red-200 rounded-xl text-sm text-red-600">
                     <strong>Error:</strong> {errorText}
