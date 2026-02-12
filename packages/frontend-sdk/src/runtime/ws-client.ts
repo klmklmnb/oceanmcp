@@ -26,7 +26,12 @@ class WSClient {
   }
 
   connect(): void {
-    if (this.ws?.readyState === WebSocket.OPEN) return;
+    if (
+      this.ws?.readyState === WebSocket.OPEN ||
+      this.ws?.readyState === WebSocket.CONNECTING
+    ) {
+      return;
+    }
 
     try {
       const wsUrl = this.serverUrl.replace(/^http/, "ws") + "/connect";
@@ -47,10 +52,6 @@ class WSClient {
           switch (msg.type) {
             case WSMessageType.TOOLS_REGISTERED:
               this.connectionId = msg.payload.connectionId;
-              console.log(
-                "[OceanMCP] Registered with server, connectionId:",
-                this.connectionId,
-              );
               break;
 
             case WSMessageType.EXECUTE_TOOL:
@@ -58,11 +59,7 @@ class WSClient {
               break;
 
             case WSMessageType.PONG:
-              // Keep-alive acknowledged
               break;
-
-            default:
-              console.warn("[OceanMCP] Unknown message type:", msg);
           }
         } catch (err) {
           console.error("[OceanMCP] Failed to handle message:", err);
@@ -71,6 +68,8 @@ class WSClient {
 
       this.ws.onclose = () => {
         console.log("[OceanMCP] WebSocket disconnected, will reconnect...");
+        this.ws = null;
+        this.connectionId = null;
         this.stopPing();
         this.scheduleReconnect();
       };
@@ -90,6 +89,7 @@ class WSClient {
       this.reconnectTimer = null;
     }
     this.stopPing();
+    this.connectionId = null;
     if (this.ws) {
       this.ws.onclose = null; // Prevent reconnect
       this.ws.close();
@@ -111,7 +111,6 @@ class WSClient {
         },
       }),
     );
-    console.log("[OceanMCP] Registered", schemas.length, "tools with server");
   }
 
   private async handleExecuteTool(request: ExecuteToolRequest): Promise<void> {
@@ -174,9 +173,26 @@ class WSClient {
   get isConnected(): boolean {
     return this.ws?.readyState === WebSocket.OPEN;
   }
+
+  get currentConnectionId(): string | null {
+    return this.connectionId;
+  }
 }
 
-export const wsClient = new WSClient(
+const serverUrl =
   (typeof window !== "undefined" && (window as any).__OCEAN_MCP_SERVER_URL__) ||
-    "http://localhost:4000",
-);
+  "http://localhost:4000";
+
+const WS_CLIENT_GLOBAL_KEY = "__OCEAN_MCP_WS_CLIENT__";
+
+type OceanWindow = Window &
+  typeof globalThis & {
+    [WS_CLIENT_GLOBAL_KEY]?: WSClient;
+  };
+
+const globalScope =
+  (typeof window !== "undefined" ? (window as OceanWindow) : (globalThis as any));
+
+export const wsClient: WSClient =
+  globalScope[WS_CLIENT_GLOBAL_KEY] ??
+  (globalScope[WS_CLIENT_GLOBAL_KEY] = new WSClient(serverUrl));

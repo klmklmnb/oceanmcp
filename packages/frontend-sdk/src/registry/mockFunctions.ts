@@ -203,6 +203,9 @@ return fetch(url.toString(), {
   credentials: "include",
   headers: ${HEADERS},
 }).then(response => response.json()).then(res => {
+  if (res.retcode !== 0) {
+    throw new Error(res.message);
+  }
   const r = res?.data || { id: '' };
   if (r.cluster_id) {
     r.id = r.cluster_id;

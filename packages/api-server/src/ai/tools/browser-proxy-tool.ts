@@ -20,25 +20,28 @@ const browserExecuteParameters = z.object({
  * Browser proxy tool — executes a registered function on the browser side
  * via WebSocket. The function runs in the user's authenticated browser session.
  */
-export const browserExecute = tool({
-  description:
-    "Execute a registered function on the browser side. This runs in the user's authenticated browser session and can access the host web application's APIs, DOM, and state.",
-  inputSchema: browserExecuteParameters,
-  execute: async ({
-    functionId,
-    arguments: args,
-  }: z.infer<typeof browserExecuteParameters>) => {
-    try {
-      const result = await connectionManager.executeBrowserTool(
-        functionId,
-        args,
-      );
-      return result;
-    } catch (error) {
-      return {
-        error: error instanceof Error ? error.message : String(error),
-        functionId,
-      };
-    }
-  },
-});
+export function createBrowserExecuteTool(connectionId?: string) {
+  return tool({
+    description:
+      "Execute a registered function on the browser side. This runs in the user's authenticated browser session and can access the host web application's APIs, DOM, and state.",
+    inputSchema: browserExecuteParameters,
+    execute: async ({
+      functionId,
+      arguments: args,
+    }: z.infer<typeof browserExecuteParameters>) => {
+      try {
+        return await connectionManager.executeBrowserTool(
+          functionId,
+          args,
+          30_000,
+          connectionId,
+        );
+      } catch (error) {
+        return {
+          error: error instanceof Error ? error.message : String(error),
+          functionId,
+        };
+      }
+    },
+  });
+}

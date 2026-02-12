@@ -22,9 +22,11 @@ export async function handleChatRequest(req: Request): Promise<Response> {
     const {
       messages,
       modelId,
+      connectionId,
     }: {
       messages: any[]; // Vercel AI SDK UI messages
       modelId?: string;
+      connectionId?: string;
     } = body;
 
     if (!messages || !Array.isArray(messages)) {
@@ -34,24 +36,41 @@ export async function handleChatRequest(req: Request): Promise<Response> {
       );
     }
 
-    // Get dynamic tool schemas registered by browser clients
-    const dynamicSchemas = connectionManager.getAllToolSchemas();
-    const mergedTools = getMergedTools(dynamicSchemas);
+    if (!connectionId && connectionManager.getConnectionCount() > 1) {
+      return new Response(
+        JSON.stringify({
+          error:
+            "Missing browser connection ID for a multi-client session. Please retry after WebSocket registration completes.",
+        }),
+        { status: 409, headers: { "Content-Type": "application/json" } },
+      );
+    }
+
+    if (connectionId && !connectionManager.hasConnection(connectionId)) {
+      return new Response(
+        JSON.stringify({
+          error: `Browser connection not found: ${connectionId}`,
+        }),
+        { status: 409, headers: { "Content-Type": "application/json" } },
+      );
+    }
+
+    // Scope tools to the requesting browser connection when available.
+    const dynamicSchemas = connectionManager.getToolSchemas(connectionId);
+    const mergedTools = getMergedTools(dynamicSchemas, connectionId);
+
+    const modelMessages = await convertToModelMessages(messages);
 
     const result = streamText({
       model: getLanguageModel(modelId),
       system: systemPrompt,
-      messages: await convertToModelMessages(messages),
+      messages: modelMessages,
       tools: mergedTools,
       stopWhen: stepCountIs(10),
-      onError: (error) => {
-        console.error("[Chat] streamText error:", error);
-      },
     });
 
     return result.toUIMessageStreamResponse({ sendReasoning: true });
   } catch (error) {
-    console.error("[Chat] Request error:", error);
     return new Response(
       JSON.stringify({
         error: error instanceof Error ? error.message : "Internal server error",

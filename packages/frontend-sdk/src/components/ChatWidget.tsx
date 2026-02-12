@@ -2,6 +2,7 @@ import React, { useRef, useEffect, useState } from "react";
 import { useChat } from "@ai-sdk/react";
 import { DefaultChatTransport } from "ai";
 import { MessageRenderer } from "./MessageRenderer";
+import { wsClient } from "../runtime/ws-client";
 
 const API_URL =
   (typeof window !== "undefined" && (window as any).__OCEAN_MCP_SERVER_URL__) ||
@@ -36,10 +37,45 @@ export function ChatWidget() {
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const [input, setInput] = useState("");
 
-  const { messages, status, error, addToolResult, sendMessage } = useChat({
+  const {
+    messages,
+    status,
+    error,
+    addToolResult,
+    addToolApprovalResponse,
+    sendMessage,
+  } = useChat({
     transport: new DefaultChatTransport({
       api: `${API_URL}/api/chat`,
+      body: () => ({
+        connectionId: wsClient.currentConnectionId ?? undefined,
+      }),
     }),
+    /**
+     * AI SDK v6: After `addToolApprovalResponse` or `addToolOutput` updates
+     * the message state, this callback determines whether to automatically
+     * re-send to the server.
+     *
+     * IMPORTANT: Only trigger on "approval-responded" (user just clicked
+     * Allow/Deny on a needsApproval tool). Do NOT trigger on "output-available"
+     * because regular auto-executing tools also reach that state after the
+     * server returns their result — re-sending would cause errors since the
+     * LLM provider expects tool responses for any pending tool calls.
+     */
+    sendAutomaticallyWhen: ({ messages: msgs }) => {
+      const lastMsg = msgs[msgs.length - 1];
+      if (!lastMsg || lastMsg.role !== "assistant") return false;
+
+      const hasApprovalResponse = lastMsg.parts?.some((part: any) => {
+        const isToolPart =
+          typeof part.type === "string" && part.type.startsWith("tool-");
+        if (!isToolPart) return false;
+        // Only trigger when a tool has been explicitly approved/denied by the user
+        return part.state === "approval-responded" && part.approval?.approved != null;
+      });
+
+      return hasApprovalResponse ?? false;
+    },
   });
 
   const handleInputChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
@@ -76,20 +112,47 @@ export function ChatWidget() {
     inputRef.current?.focus();
   }, []);
 
-  const handleApprove = (toolCallId: string, toolName: string) => {
-    addToolResult({
-      toolCallId,
-      tool: toolName,
-      output: "User approved the action",
-    });
+  /**
+   * AI SDK v6 approval flow:
+   * - For tools with `needsApproval: true`, use `addToolApprovalResponse`
+   *   with the approval `id` from the tool part's `approval` object.
+   * - For client-side tools needing output, use `addToolResult` / `addToolOutput`.
+   *
+   * The `approvalId` is passed from the ApprovalButtons component (extracted
+   * from `part.approval.id` in the MessageRenderer).
+   */
+  const handleApprove = (toolCallId: string, toolName: string, approvalId?: string) => {
+    if (approvalId) {
+      // AI SDK v6: use addToolApprovalResponse for needsApproval tools
+      addToolApprovalResponse({
+        id: approvalId,
+        approved: true,
+      });
+    } else {
+      // Fallback for tools without approval flow
+      addToolResult({
+        toolCallId,
+        tool: toolName,
+        output: "User approved the action",
+      });
+    }
   };
 
-  const handleDeny = (toolCallId: string, toolName: string) => {
-    addToolResult({
-      toolCallId,
-      tool: toolName,
-      output: "User denied the action",
-    });
+  const handleDeny = (toolCallId: string, toolName: string, approvalId?: string) => {
+    if (approvalId) {
+      // AI SDK v6: use addToolApprovalResponse for needsApproval tools
+      addToolApprovalResponse({
+        id: approvalId,
+        approved: false,
+        reason: "User denied the action",
+      });
+    } else {
+      addToolResult({
+        toolCallId,
+        tool: toolName,
+        output: "User denied the action",
+      });
+    }
   };
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
@@ -159,12 +222,12 @@ export function ChatWidget() {
           )}
 
           {messages.map((message) => (
-            <MessageRenderer
-              key={message.id}
-              message={message}
-              onApprove={handleApprove}
-              onDeny={handleDeny}
-            />
+              <MessageRenderer
+                key={message.id}
+                message={message}
+                onApprove={handleApprove}
+                onDeny={handleDeny}
+              />
           ))}
 
           {/* Loading indicator */}

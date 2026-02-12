@@ -24,12 +24,14 @@ type FlowNodeCardProps = {
 export function FlowNodeCard({ steps, result, state }: FlowNodeCardProps) {
   const getStepStatus = (index: number) => {
     if (!result?.results) {
-      if (state === "call") return "pending";
+      // AI SDK v6 states: "approval-requested", "input-available", "output-available", etc.
+      if (state === "approval-requested" || state === "call") return "pending";
+      if (state === "approval-responded" || state === "input-available") return "running";
       return "pending";
     }
     const stepResult = result.results.find((r) => r.stepIndex === index);
     if (!stepResult) {
-      if (state === "result") return "pending";
+      if (state === "output-available" || state === "result") return "pending";
       return "running";
     }
     return stepResult.status;

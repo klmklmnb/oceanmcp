@@ -5,8 +5,8 @@ import { ApprovalButtons } from "./ApprovalButtons";
 
 type MessageRendererProps = {
   message: UIMessage;
-  onApprove: (toolCallId: string, toolName: string) => void;
-  onDeny: (toolCallId: string, toolName: string) => void;
+  onApprove: (toolCallId: string, toolName: string, approvalId?: string) => void;
+  onDeny: (toolCallId: string, toolName: string, approvalId?: string) => void;
 };
 
 /** Sparkle icon for AI messages */
@@ -82,17 +82,40 @@ function CopyButton({ text }: { text: string }) {
   );
 }
 
-/**
- * Message renderer — renders a single message with inline tool-call parts.
- * Follows the ai-chatbot demo pattern: user messages as blue pills,
- * AI messages left-aligned with sparkle icon.
- */
 import { MessageReasoning } from "./MessageReasoning";
 
 /**
+ * Helper: Check if a part is a tool part (AI SDK v6 uses `tool-${toolName}` pattern)
+ */
+function isToolPart(part: any): boolean {
+  return typeof part.type === "string" && part.type.startsWith("tool-");
+}
+
+/**
+ * Helper: Extract tool name from part type (e.g. "tool-executePlan" → "executePlan")
+ */
+function getToolName(part: any): string {
+  if (typeof part.type === "string" && part.type.startsWith("tool-")) {
+    return part.type.slice(5); // Remove "tool-" prefix
+  }
+  return part.toolName || "unknown";
+}
+
+/**
  * Message renderer — renders a single message with inline tool-call parts.
- * Follows the ai-chatbot demo pattern: user messages as blue pills,
- * AI messages left-aligned with sparkle icon.
+ *
+ * AI SDK v6 part types:
+ * - "text" — text content
+ * - "reasoning" — model reasoning/thinking
+ * - "tool-${toolName}" — tool invocation (e.g. "tool-executePlan")
+ * - "step-start" — step boundary marker
+ *
+ * AI SDK v6 tool part fields (directly on part, NOT nested):
+ * - part.toolCallId — unique call ID
+ * - part.input — tool arguments (was "args" in v4/v5)
+ * - part.output — tool result (was "result" in v4/v5)
+ * - part.state — lifecycle: "input-streaming" | "input-available" | "approval-requested" | "approval-responded" | "output-available" | "output-error"
+ * - part.errorText — error message (when state === "output-error")
  */
 export function MessageRenderer({
   message,
@@ -102,34 +125,39 @@ export function MessageRenderer({
   const isUser = message.role === "user";
 
   const renderPart = (part: any, index: number) => {
-    // 1. Tool Invocations
-    if (part.type === "tool-invocation") {
-      const toolInvocation = part.toolInvocation;
-      if (!toolInvocation) return null;
-
-      const { toolCallId, toolName, args, state, result } = toolInvocation;
+    // 1. Tool Parts (AI SDK v6: type is "tool-${toolName}")
+    if (isToolPart(part)) {
+      const toolName = getToolName(part);
+      const { toolCallId, input, output, state, errorText, approval } = part;
+      const approvalId = approval?.id;
 
       // executePlan tool — render as flow node card
       if (toolName === "executePlan") {
         return (
           <div key={toolCallId || index}>
-            {state === "partial-call" ? (
+            {state === "input-streaming" ? (
               <TypingIndicator />
             ) : (
               <>
                 <FlowNodeCard
-                  steps={args?.steps || []}
-                  result={result}
+                  steps={input?.steps || []}
+                  result={output}
                   state={state}
                 />
-                {state === "call" && (
+                {state === "approval-requested" && (
                   <ApprovalButtons
                     toolCallId={toolCallId}
                     toolName={toolName}
-                    args={args}
+                    args={input || {}}
+                    approvalId={approvalId}
                     onApprove={onApprove}
                     onDeny={onDeny}
                   />
+                )}
+                {state === "output-error" && errorText && (
+                  <div className="my-2 px-4 py-2 bg-red-50 border border-red-200 rounded-xl text-sm text-red-600">
+                    <strong>Error:</strong> {errorText}
+                  </div>
                 )}
               </>
             )}
@@ -140,13 +168,13 @@ export function MessageRenderer({
       // Other tools — render as generic tool card
       return (
         <div key={toolCallId || index}>
-          {state === "partial-call" ? (
+          {state === "input-streaming" ? (
             <TypingIndicator />
-          ) : state === "call" ? (
+          ) : state === "approval-requested" ? (
             <ApprovalButtons
               toolCallId={toolCallId}
               toolName={toolName}
-              args={args || {}}
+              args={input || {}}
               onApprove={onApprove}
               onDeny={onDeny}
             />
@@ -155,20 +183,42 @@ export function MessageRenderer({
               <div className="px-4 py-3 border-b border-border bg-surface-secondary flex items-center gap-2">
                 <span className="text-sm">🔧</span>
                 <span className="text-sm font-semibold text-text-primary">
-                  tool-{toolName}
+                  {toolName}
                 </span>
-                <span className="ml-auto flex items-center gap-1.5 text-xs text-emerald-600">
-                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
-                  Complete
-                </span>
+                {state === "output-available" && (
+                  <span className="ml-auto flex items-center gap-1.5 text-xs text-emerald-600">
+                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
+                    Complete
+                  </span>
+                )}
+                {state === "output-error" && (
+                  <span className="ml-auto flex items-center gap-1.5 text-xs text-red-500">
+                    <span className="w-1.5 h-1.5 rounded-full bg-red-400" />
+                    Error
+                  </span>
+                )}
+                {(state === "input-available" || state === "approval-responded") && (
+                  <span className="ml-auto flex items-center gap-1.5 text-xs text-ocean-500">
+                    <span
+                      className="inline-block w-3 h-3 border-2 border-ocean-500 border-t-transparent rounded-full"
+                      style={{ animation: "ocean-spin 0.8s linear infinite" }}
+                    />
+                    Running
+                  </span>
+                )}
               </div>
-              {result !== undefined && (
+              {state === "output-available" && output !== undefined && (
                 <div className="p-4">
                   <pre className="text-xs bg-surface-tertiary rounded-lg p-3 overflow-x-auto text-text-secondary font-mono max-h-32 overflow-y-auto">
-                    {typeof result === "string"
-                      ? result
-                      : JSON.stringify(result, null, 2)}
+                    {typeof output === "string"
+                      ? output
+                      : JSON.stringify(output, null, 2)}
                   </pre>
+                </div>
+              )}
+              {state === "output-error" && errorText && (
+                <div className="p-4">
+                  <p className="text-xs text-red-500">{errorText}</p>
                 </div>
               )}
             </div>
@@ -177,7 +227,12 @@ export function MessageRenderer({
       );
     }
 
-    // 2. Reasoning Parts (Native AI SDK)
+    // 2. Step-start boundary — skip (visual separator not needed)
+    if (part.type === "step-start") {
+      return null;
+    }
+
+    // 3. Reasoning Parts (Native AI SDK)
     if (part.type === "reasoning") {
       return (
         <MessageReasoning
@@ -188,13 +243,11 @@ export function MessageRenderer({
       );
     }
 
-    // 3. Text Parts (with potential <think> tags)
+    // 4. Text Parts (with potential <think> tags)
     if (part.type === "text") {
       const text = part.text || "";
 
       // Regex to process <think> tags
-      // Captures: 1. pre-think text, 2. think content, 3. post-think text (which might be processed in next iteration if multiple)
-      // Simple split approach:
       const parts: React.ReactNode[] = [];
       const thinkRegex = /<think>([\s\S]*?)(?:<\/think>|$)/g;
 
@@ -262,7 +315,7 @@ export function MessageRenderer({
   };
 
   const hasTextContent = message.parts?.some(
-    (p) => p.type === "text" && p.text,
+    (p) => p.type === "text" && (p as any).text,
   );
 
   return (

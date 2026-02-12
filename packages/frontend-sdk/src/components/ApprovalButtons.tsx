@@ -4,8 +4,9 @@ type ApprovalButtonsProps = {
   toolCallId: string;
   toolName: string;
   args: Record<string, any>;
-  onApprove: (toolCallId: string, toolName: string) => void;
-  onDeny: (toolCallId: string, toolName: string) => void;
+  approvalId?: string;
+  onApprove: (toolCallId: string, toolName: string, approvalId?: string) => void;
+  onDeny: (toolCallId: string, toolName: string, approvalId?: string) => void;
 };
 
 /** Approve/Deny buttons for tool approval flow — mirrors the reference UI pattern */
@@ -13,6 +14,7 @@ export function ApprovalButtons({
   toolCallId,
   toolName,
   args,
+  approvalId,
   onApprove,
   onDeny,
 }: ApprovalButtonsProps) {
@@ -22,7 +24,7 @@ export function ApprovalButtons({
       <div className="px-4 py-3 border-b border-border bg-surface-secondary flex items-center gap-2">
         <span className="text-sm">🔧</span>
         <span className="text-sm font-semibold text-text-primary">
-          tool-{toolName}
+          {toolName}
         </span>
         <span className="ml-auto flex items-center gap-1.5 text-xs text-amber-600">
           <span className="w-1.5 h-1.5 rounded-full bg-amber-400" />
@@ -43,13 +45,13 @@ export function ApprovalButtons({
       {/* Buttons */}
       <div className="px-4 py-3 border-t border-border flex justify-end gap-2">
         <button
-          onClick={() => onDeny(toolCallId, toolName)}
+          onClick={() => onDeny(toolCallId, toolName, approvalId)}
           className="px-4 py-2 text-sm font-medium text-text-secondary hover:text-text-primary hover:bg-surface-tertiary rounded-lg transition-colors cursor-pointer"
         >
           Deny
         </button>
         <button
-          onClick={() => onApprove(toolCallId, toolName)}
+          onClick={() => onApprove(toolCallId, toolName, approvalId)}
           className="px-4 py-2 text-sm font-medium text-white bg-ocean-600 hover:bg-ocean-700 rounded-lg transition-colors shadow-sm cursor-pointer"
         >
           Allow

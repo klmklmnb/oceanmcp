@@ -1,6 +1,6 @@
 import { getServerStatus, echo } from "./server-tools";
-import { browserExecute } from "./browser-proxy-tool";
-import { executePlan } from "./execute-plan-tool";
+import { createBrowserExecuteTool } from "./browser-proxy-tool";
+import { createExecutePlanTool } from "./execute-plan-tool";
 import type { FunctionSchema, ParameterDefinition } from "@ocean-mcp/shared";
 import { tool, type Tool } from "ai";
 import { z } from "zod";
@@ -12,11 +12,12 @@ export const serverTools = {
   echo,
 };
 
-/** Browser proxy tools */
-export const browserTools = {
-  browserExecute,
-  executePlan,
-};
+function getBrowserTools(connectionId?: string): Record<string, Tool<any, any>> {
+  return {
+    browserExecute: createBrowserExecuteTool(connectionId),
+    executePlan: createExecutePlanTool(connectionId),
+  };
+}
 
 // Helper to convert parameter definitions to Zod schema
 function createZodSchema(parameters: ParameterDefinition[]) {
@@ -65,10 +66,11 @@ function createZodSchema(parameters: ParameterDefinition[]) {
  */
 export function getMergedTools(
   dynamicToolSchemas?: FunctionSchema[],
+  connectionId?: string,
 ): Record<string, Tool<any, any>> {
   const tools: Record<string, Tool<any, any>> = {
     ...serverTools,
-    ...browserTools,
+    ...getBrowserTools(connectionId),
   };
 
   // If dynamic tool schemas are provided from the frontend,
@@ -82,7 +84,12 @@ export function getMergedTools(
         description: schema.description,
         inputSchema: createZodSchema(schema.parameters),
         execute: async (args) => {
-          return await connectionManager.executeBrowserTool(schema.id, args);
+          return connectionManager.executeBrowserTool(
+            schema.id,
+            args,
+            30_000,
+            connectionId,
+          );
         },
       });
     }

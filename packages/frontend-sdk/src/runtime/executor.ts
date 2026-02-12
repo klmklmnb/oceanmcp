@@ -44,8 +44,7 @@ async function executeCodeFunction(
       `"use strict"; return (async () => { ${code} })()`,
     );
 
-    const result = await fn(args, window, document, fetch.bind(window));
-    return result;
+    return await fn(args, window, document, fetch.bind(window));
   } catch (error) {
     throw new Error(
       `Code execution failed: ${error instanceof Error ? error.message : String(error)}`,

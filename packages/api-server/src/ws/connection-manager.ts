@@ -34,13 +34,25 @@ class ConnectionManager {
     this.toolSchemas.set(connectionId, tools);
   }
 
-  /** Get all registered tool schemas from all connected clients */
-  getAllToolSchemas(): FunctionSchema[] {
+  /**
+   * Get tool schemas.
+   * - When `connectionId` is provided, returns schemas only for that connection.
+   * - Otherwise returns schemas from all connected clients.
+   */
+  getToolSchemas(connectionId?: string): FunctionSchema[] {
+    if (connectionId) {
+      return this.toolSchemas.get(connectionId) ?? [];
+    }
+
     const allTools: FunctionSchema[] = [];
     for (const tools of this.toolSchemas.values()) {
       allTools.push(...tools);
     }
     return allTools;
+  }
+
+  hasConnection(connectionId: string): boolean {
+    return this.connections.has(connectionId);
   }
 
   /** Find which connection has a tool with the given function ID */
@@ -58,7 +70,28 @@ class ConnectionManager {
     functionId: string,
     args: Record<string, any>,
     timeoutMs = 30_000,
+    preferredConnectionId?: string,
   ): Promise<any> {
+    if (preferredConnectionId) {
+      if (!this.connections.has(preferredConnectionId)) {
+        throw new Error(`Connection ${preferredConnectionId} not found`);
+      }
+
+      const preferredTools = this.toolSchemas.get(preferredConnectionId) ?? [];
+      if (!preferredTools.some((tool) => tool.id === functionId)) {
+        throw new Error(
+          `Tool ${functionId} is not registered on connection ${preferredConnectionId}`,
+        );
+      }
+
+      return this._sendAndWait(
+        preferredConnectionId,
+        functionId,
+        args,
+        timeoutMs,
+      );
+    }
+
     const connectionId = this.findConnectionForTool(functionId);
     if (!connectionId) {
       // Fall back to first available connection
@@ -101,24 +134,18 @@ class ConnectionManager {
         functionId,
         arguments: args,
       };
-      ws.send(
-        createWSMessage({
-          type: WSMessageType.EXECUTE_TOOL,
-          payload: request,
-        }),
-      );
+      const message = createWSMessage({
+        type: WSMessageType.EXECUTE_TOOL,
+        payload: request,
+      });
+      ws.send(message);
     });
   }
 
   /** Called when we receive a TOOL_RESULT from the browser */
   resolveToolResult(result: ToolResultResponse) {
     const pending = this.pendingRequests.get(result.requestId);
-    if (!pending) {
-      console.warn(
-        `[WS] Received result for unknown request: ${result.requestId}`,
-      );
-      return;
-    }
+    if (!pending) return;
 
     clearTimeout(pending.timer);
     this.pendingRequests.delete(result.requestId);

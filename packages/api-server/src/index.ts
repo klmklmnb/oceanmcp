@@ -86,23 +86,14 @@ const server = Bun.serve<{ connectionId: string }>({
               ws.data.connectionId,
               (msg.payload as { tools: FunctionSchema[] }).tools,
             );
-            console.log(
-              `[WS] Tools registered from ${ws.data.connectionId}:`,
-              (msg.payload as { tools: FunctionSchema[] }).tools.map(
-                (t) => t.id,
-              ),
-            );
             break;
 
           case WSMessageType.PING:
             ws.send(createWSMessage({ type: WSMessageType.PONG }));
             break;
-
-          default:
-            console.warn(`[WS] Unknown message type:`, msg);
         }
       } catch (err) {
-        console.error(`[WS] Failed to parse message:`, err);
+        console.error("[WS] Failed to parse message:", err);
       }
     },
 
