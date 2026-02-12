@@ -13,6 +13,20 @@ The project is structured as a Monorepo using `bun` workspaces.
 - **AI Framework:** Vercel AI SDK (`ai` v6, `@ai-sdk/react`)
 - **LLM Providers:** Pluggable — Anthropic, OpenAI, or any OpenAI-compatible private endpoint (via adapter)
 
+### Key Dependencies
+
+| Package                     | Version    | Scope                                  |
+| --------------------------- | ---------- | -------------------------------------- |
+| `ai`                        | `6.0.37`   | api-server (core Vercel AI SDK)        |
+| `@ai-sdk/react`             | `3.0.39`   | frontend-sdk (React hooks: `useChat`)  |
+| `@ai-sdk/openai-compatible` | `^2.0.27`  | api-server (private LLM adapter)       |
+| `@ai-sdk/provider`          | `^3.0.3`   | api-server (provider interface)        |
+| `zod`                       | `^3.25.76` | api-server, shared (schema validation) |
+| `react`                     | `19.0.1`   | frontend-sdk                           |
+| `react-dom`                 | `19.0.1`   | frontend-sdk                           |
+| `tailwindcss`               | `^4.1.13`  | frontend-sdk                           |
+| `typescript`                | `^5.6.3`   | all packages                           |
+
 ### Directory Structure
 
 ```text
