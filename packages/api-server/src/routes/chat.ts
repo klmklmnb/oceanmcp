@@ -3,6 +3,7 @@ import {
   createUIMessageStream,
   createUIMessageStreamResponse,
   convertToModelMessages,
+  stepCountIs,
 } from "ai";
 import { getLanguageModel } from "../ai/providers";
 import { systemPrompt } from "../ai/prompts";
@@ -44,6 +45,7 @@ export async function handleChatRequest(req: Request): Promise<Response> {
           system: systemPrompt,
           messages: await convertToModelMessages(messages),
           tools: mergedTools,
+          stopWhen: stepCountIs(10),
           onError: (error) => {
             console.error("[Chat] streamText error:", error);
           },
