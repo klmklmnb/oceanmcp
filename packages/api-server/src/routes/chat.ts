@@ -1,7 +1,5 @@
 import {
   streamText,
-  createUIMessageStream,
-  createUIMessageStreamResponse,
   convertToModelMessages,
   stepCountIs,
 } from "ai";
@@ -9,6 +7,63 @@ import { getLanguageModel } from "../ai/providers";
 import { systemPrompt } from "../ai/prompts";
 import { getMergedTools } from "../ai/tools";
 import { connectionManager } from "../ws/connection-manager";
+
+const AUTO_DENY_REASON =
+  "User sent a new message instead of responding to approval.";
+
+function isToolPart(part: any): boolean {
+  return typeof part?.type === "string" && part.type.startsWith("tool-");
+}
+
+function shouldAutoDeny(part: any): boolean {
+  return (
+    isToolPart(part) &&
+    part.state === "approval-responded" &&
+    part.approval?.approved === false
+  );
+}
+
+/**
+ * OpenAI-compatible chat completions require a tool result message for each
+ * prior tool call before the next user turn. Approval-only parts do not satisfy
+ * that requirement, so we convert stale approval waits (when user already moved
+ * on) and explicit denied approvals into `output-denied` to emit a proper
+ * tool result.
+ */
+function normalizeStaleApprovals(messages: any[]): any[] {
+  return messages.map((message, index) => {
+    if (message.role !== "assistant" || !Array.isArray(message.parts)) {
+      return message;
+    }
+
+    const hasLaterUserMessage = messages
+      .slice(index + 1)
+      .some((m) => m?.role === "user");
+
+    let changed = false;
+    const parts = message.parts.map((part: any) => {
+      const denyBecauseMovedOn =
+        isToolPart(part) &&
+        part.state === "approval-requested" &&
+        hasLaterUserMessage;
+
+      if (!denyBecauseMovedOn && !shouldAutoDeny(part)) return part;
+      changed = true;
+
+      return {
+        ...part,
+        state: "output-denied",
+        approval: {
+          id: part.approval?.id ?? `auto-deny-${part.toolCallId ?? index}`,
+          approved: false,
+          reason: part.approval?.reason ?? AUTO_DENY_REASON,
+        },
+      };
+    });
+
+    return changed ? { ...message, parts } : message;
+  });
+}
 
 /**
  * POST /api/chat handler
@@ -59,7 +114,8 @@ export async function handleChatRequest(req: Request): Promise<Response> {
     const dynamicSchemas = connectionManager.getToolSchemas(connectionId);
     const mergedTools = getMergedTools(dynamicSchemas, connectionId);
 
-    const modelMessages = await convertToModelMessages(messages);
+    const normalizedMessages = normalizeStaleApprovals(messages);
+    const modelMessages = await convertToModelMessages(normalizedMessages);
 
     const result = streamText({
       model: getLanguageModel(modelId),

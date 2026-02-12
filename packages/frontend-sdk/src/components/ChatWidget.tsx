@@ -8,6 +8,56 @@ const API_URL =
   (typeof window !== "undefined" && (window as any).__OCEAN_MCP_SERVER_URL__) ||
   "http://localhost:4000";
 
+const AUTO_DENY_REASON =
+  "User sent a new message instead of responding to approval";
+
+function isToolPart(part: any): boolean {
+  return typeof part?.type === "string" && part.type.startsWith("tool-");
+}
+
+function shouldAutoDeny(part: any): boolean {
+  return (
+    isToolPart(part) &&
+    (part.state === "approval-requested" ||
+      (part.state === "approval-responded" && part.approval?.approved === false))
+  );
+}
+
+function denyPendingApprovalParts(messages: any[]): {
+  messages: any[];
+  changed: boolean;
+} {
+  let changed = false;
+
+  const nextMessages = messages.map((message, index) => {
+    if (message.role !== "assistant" || !Array.isArray(message.parts)) {
+      return message;
+    }
+
+    let messageChanged = false;
+    const nextParts = message.parts.map((part: any) => {
+      if (!shouldAutoDeny(part)) return part;
+
+      messageChanged = true;
+      changed = true;
+
+      return {
+        ...part,
+        state: "output-denied",
+        approval: {
+          id: part.approval?.id ?? `auto-deny-${part.toolCallId ?? index}`,
+          approved: false,
+          reason: part.approval?.reason ?? AUTO_DENY_REASON,
+        },
+      };
+    });
+
+    return messageChanged ? { ...message, parts: nextParts } : message;
+  });
+
+  return { messages: nextMessages, changed };
+}
+
 /** Send icon */
 function SendIcon() {
   return (
@@ -39,6 +89,7 @@ export function ChatWidget() {
 
   const {
     messages,
+    setMessages,
     status,
     error,
     addToolResult,
@@ -84,22 +135,27 @@ export function ChatWidget() {
     setInput(e.target.value);
   };
 
+  const sendUserText = async (text: string) => {
+    if (!text.trim()) return;
+
+    const normalized = denyPendingApprovalParts(messages as any[]);
+    if (normalized.changed) {
+      setMessages(normalized.messages as any);
+    }
+
+    await sendMessage({
+      role: "user",
+      parts: [{ type: "text", text }],
+    });
+  };
+
   const handleSubmit = async (e?: React.FormEvent) => {
     e?.preventDefault();
     if (!input.trim()) return;
     const value = input;
     setInput("");
 
-    // Use append to match legacy behavior closer if sendMessage is tricky
-    // But ai-chatbot uses sendMessage. Let's try append first as it's more standard for simple usage
-    // defined in useChat? Wait, useChat v3 return doesn't seem to have append in my grep?
-    // ai-chatbot used sendMessage.
-    // sendMessage({ role: 'user', parts: [{ type: 'text', text: value }] })
-
-    await sendMessage({
-      role: "user",
-      parts: [{ type: "text", text: value }],
-    });
+    await sendUserText(value);
   };
 
   // Auto-scroll to bottom on new messages
@@ -213,14 +269,8 @@ export function ChatWidget() {
                   <button
                     key={suggestion}
                     onClick={() => {
-                      setInput(suggestion);
-                      // Trigger submit slightly later to allow state update?
-                      // Actually better to just call submit logic directly
-                      sendMessage({
-                        role: "user",
-                        parts: [{ type: "text", text: suggestion }],
-                      });
                       setInput("");
+                      void sendUserText(suggestion);
                     }}
                     className="px-4 py-2 text-sm text-text-secondary border border-border rounded-xl hover:bg-surface hover:border-ocean-300 hover:text-ocean-600 transition-all cursor-pointer"
                   >

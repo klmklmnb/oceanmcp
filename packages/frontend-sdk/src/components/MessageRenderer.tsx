@@ -179,6 +179,7 @@ export function MessageRenderer({
               toolCallId={toolCallId}
               toolName={toolName}
               args={input || {}}
+              approvalId={approvalId}
               onApprove={onApprove}
               onDeny={onDeny}
             />
