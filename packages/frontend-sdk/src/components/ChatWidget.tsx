@@ -71,7 +71,9 @@ export function ChatWidget() {
           typeof part.type === "string" && part.type.startsWith("tool-");
         if (!isToolPart) return false;
         // Only trigger when a tool has been explicitly approved/denied by the user
-        return part.state === "approval-responded" && part.approval?.approved != null;
+        return (
+          part.state === "approval-responded" && part.approval?.approved != null
+        );
       });
 
       return hasApprovalResponse ?? false;
@@ -121,7 +123,11 @@ export function ChatWidget() {
    * The `approvalId` is passed from the ApprovalButtons component (extracted
    * from `part.approval.id` in the MessageRenderer).
    */
-  const handleApprove = (toolCallId: string, toolName: string, approvalId?: string) => {
+  const handleApprove = (
+    toolCallId: string,
+    toolName: string,
+    approvalId?: string,
+  ) => {
     if (approvalId) {
       // AI SDK v6: use addToolApprovalResponse for needsApproval tools
       addToolApprovalResponse({
@@ -138,7 +144,11 @@ export function ChatWidget() {
     }
   };
 
-  const handleDeny = (toolCallId: string, toolName: string, approvalId?: string) => {
+  const handleDeny = (
+    toolCallId: string,
+    toolName: string,
+    approvalId?: string,
+  ) => {
     if (approvalId) {
       // AI SDK v6: use addToolApprovalResponse for needsApproval tools
       addToolApprovalResponse({
@@ -222,12 +232,12 @@ export function ChatWidget() {
           )}
 
           {messages.map((message) => (
-              <MessageRenderer
-                key={message.id}
-                message={message}
-                onApprove={handleApprove}
-                onDeny={handleDeny}
-              />
+            <MessageRenderer
+              key={message.id}
+              message={message}
+              onApprove={handleApprove}
+              onDeny={handleDeny}
+            />
           ))}
 
           {/* Loading indicator */}
@@ -253,7 +263,7 @@ export function ChatWidget() {
 
       {/* Error display */}
       {error && (
-        <div className="px-4 py-2 mx-4 mb-2 bg-red-50 border border-red-200 rounded-xl text-sm text-red-600 ocean-fade-in">
+        <div className="px-4 py-2 mx-auto max-w-3xl mb-2 bg-red-50 border border-red-200 rounded-xl text-sm text-red-600 ocean-fade-in">
           <strong>Error:</strong> {error.message}
         </div>
       )}
