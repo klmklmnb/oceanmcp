@@ -3,6 +3,7 @@ import { z } from "zod";
 import { FLOW_STEP_STATUS } from "@ocean-mcp/shared";
 import { connectionManager } from "../../ws/connection-manager";
 import { createZodSchema } from "./index";
+import { containsVariableRef, resolveVariableRefs } from "./variable-ref";
 
 type Step = {
   functionId: string;
@@ -12,13 +13,24 @@ type Step = {
 
 /**
  * Validate all steps' arguments against their registered Zod schemas.
- * Returns null if all steps are valid, or a descriptive error string on first failure.
+ * Steps whose arguments contain $N variable references are skipped because
+ * their actual values are only known at execution time.
+ * Returns null if all (validatable) steps are valid, or a descriptive error
+ * string on first failure.
  */
 function validateSteps(steps: Step[], connectionId?: string): string | null {
   const toolSchemas = connectionManager.getToolSchemas(connectionId);
 
   for (let i = 0; i < steps.length; i++) {
     const step = steps[i];
+
+    // Skip validation for steps that contain variable references —
+    // their argument values depend on previous step results and can't
+    // be validated statically.
+    if (containsVariableRef(step.arguments)) {
+      continue;
+    }
+
     const schema = toolSchemas.find((s) => s.id === step.functionId);
     if (schema && schema.parameters.length > 0) {
       const zodSchema = createZodSchema(schema.parameters);
@@ -91,6 +103,8 @@ export function createExecutePlanTool(connectionId?: string) {
       }
 
       // All steps validated — proceed with actual execution.
+      // stepResults maps step index → its return value, used for $N resolution.
+      const stepResults = new Map<number, any>();
       const results: Array<{
         stepIndex: number;
         title: string;
@@ -105,12 +119,22 @@ export function createExecutePlanTool(connectionId?: string) {
       for (let i = 0; i < steps.length; i++) {
         const step = steps[i];
         try {
+          // Resolve $N variable references in arguments using previous step results.
+          const resolvedArgs = resolveVariableRefs(
+            step.arguments,
+            stepResults,
+          ) as Record<string, any>;
+
           const result = await connectionManager.executeBrowserTool(
             step.functionId,
-            step.arguments,
+            resolvedArgs,
             30_000,
             connectionId,
           );
+
+          // Store the result so subsequent steps can reference it via $i.
+          stepResults.set(i, result);
+
           results.push({
             stepIndex: i,
             title: step.title,
