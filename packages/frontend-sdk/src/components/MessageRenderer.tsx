@@ -10,6 +10,7 @@ import {
 import { FlowNodeCard } from "./FlowNodeCard";
 import { ApprovalButtons } from "./ApprovalButtons";
 import { UserSelectCard } from "./UserSelectCard";
+import { registry } from "../registry";
 
 type MessageRendererProps = {
   message: UIMessage;
@@ -206,6 +207,16 @@ export function MessageRenderer({
       }
 
       // Other tools — render as generic tool card
+      // For browserExecute, show the registered function name as the card title
+      // For loadSkill, show the skill name
+      let displayName = toolName;
+      if (toolName === "browserExecute" && input?.functionId) {
+        const fnDef = registry.get(input.functionId);
+        displayName = fnDef?.name || input.functionId;
+      } else if (toolName === "loadSkill" && input?.name) {
+        displayName = `Load Skill: ${input.name}`;
+      }
+
       return (
         <div key={toolCallId || index}>
           {state === TOOL_PART_STATE.INPUT_STREAMING ? (
@@ -224,7 +235,7 @@ export function MessageRenderer({
               <div className="px-4 py-3 border-b border-border bg-surface-secondary flex items-center gap-2">
                 <span className="text-sm">🔧</span>
                 <span className="text-sm font-semibold text-text-primary">
-                  {toolName}
+                  {displayName}
                 </span>
                 {state === TOOL_PART_STATE.OUTPUT_AVAILABLE && (
                   <span className="ml-auto flex items-center gap-1.5 text-xs text-emerald-600">
@@ -249,9 +260,23 @@ export function MessageRenderer({
                   </span>
                 )}
               </div>
+              {/* Show parameters when available */}
+              {input !== undefined &&
+                Object.keys(input).length > 0 && (
+                <div className="px-4 pt-3 pb-1">
+                  <p className="text-xs font-medium text-text-tertiary mb-1.5">Parameters</p>
+                  <pre className="text-xs bg-surface-tertiary rounded-lg p-3 overflow-x-auto text-text-secondary font-mono max-h-32 overflow-y-auto">
+                    {toolName === "browserExecute"
+                      ? JSON.stringify(input.arguments ?? {}, null, 2)
+                      : JSON.stringify(input, null, 2)}
+                  </pre>
+                </div>
+                )}
+              {/* Show result when available */}
               {state === TOOL_PART_STATE.OUTPUT_AVAILABLE &&
                 output !== undefined && (
-                <div className="p-4">
+                <div className="px-4 pt-2 pb-3">
+                  <p className="text-xs font-medium text-text-tertiary mb-1.5">Result</p>
                   <pre className="text-xs bg-surface-tertiary rounded-lg p-3 overflow-x-auto text-text-secondary font-mono max-h-32 overflow-y-auto">
                     {typeof output === "string"
                       ? output

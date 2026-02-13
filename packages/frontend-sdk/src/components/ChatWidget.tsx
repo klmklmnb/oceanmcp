@@ -112,6 +112,8 @@ export function ChatWidget() {
   const [input, setInput] = useState("");
   /** Track approval IDs that have already triggered an auto-submit to prevent re-sends. */
   const submittedApprovalIdsRef = useRef<Set<string>>(new Set());
+  /** Track userSelect toolCallIds that have already triggered an auto-submit to prevent re-sends. */
+  const submittedUserSelectIdsRef = useRef<Set<string>>(new Set());
 
   const {
     messages,
@@ -168,14 +170,19 @@ export function ChatWidget() {
         );
       });
 
-      const hasUserSelectResult = lastMsg.parts?.some((part: any) => {
-        if (!isToolPart(part)) return false;
+      // Only consider userSelect results that haven't already been submitted,
+      // so we don't re-trigger an infinite send loop (same logic as approvals).
+      const settledUserSelectParts = toolParts.filter((part: any) => {
         if (getToolName(part) !== "userSelect") return false;
+        if (!part.toolCallId) return false;
+        if (submittedUserSelectIdsRef.current.has(part.toolCallId)) return false;
         return (
           part.state === TOOL_PART_STATE.OUTPUT_AVAILABLE ||
           part.state === TOOL_PART_STATE.OUTPUT_ERROR
         );
       });
+
+      const hasUserSelectResult = settledUserSelectParts.length > 0;
 
       const decision = Boolean(
         allToolPartsSettled &&
@@ -184,11 +191,16 @@ export function ChatWidget() {
             : hasUserSelectResult),
       );
 
-      // Mark these approval IDs as submitted so we never re-trigger for them.
+      // Mark these IDs as submitted so we never re-trigger for them.
       if (decision) {
         for (const part of approvalRespondedParts) {
           if ((part as any).approval?.id) {
             submittedApprovalIdsRef.current.add((part as any).approval.id);
+          }
+        }
+        for (const part of settledUserSelectParts) {
+          if ((part as any).toolCallId) {
+            submittedUserSelectIdsRef.current.add((part as any).toolCallId);
           }
         }
       }
