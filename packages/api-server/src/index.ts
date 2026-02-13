@@ -8,11 +8,19 @@ import {
 } from "@ocean-mcp/shared";
 import { handleChatRequest } from "./routes/chat";
 import { connectionManager } from "./ws/connection-manager";
+import { initSkills } from "./ai/prompts";
 
 const PORT = Number(process.env.PORT) || 4000;
 
+// ── Initialize the skills system before starting the server ──────────────────
+// Skills are discovered from configured directories (e.g. packages/api-server/skills/).
+// This must complete before the server starts accepting chat requests, so the
+// system prompt includes the skills catalog and the loadSkill tool is available.
+await initSkills();
+
 const server = Bun.serve<{ connectionId: string }>({
   port: PORT,
+  idleTimeout: 300, // 300 seconds
 
   async fetch(req, server) {
     const url = new URL(req.url);

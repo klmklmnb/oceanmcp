@@ -10,6 +10,8 @@ import {
 import { tool, type Tool } from "ai";
 import { z } from "zod";
 import { connectionManager } from "../../ws/connection-manager";
+import { createLoadSkillTool } from "../skills/loader";
+import { getSkillsContext } from "../prompts";
 
 /** Static tools that are always available */
 export const serverTools = {
@@ -144,7 +146,15 @@ export function createZodSchema(parameters: ParameterDefinition[]) {
 
 /**
  * Merge all tools for a streamText call.
- * Combines server tools + browser proxy tools + dynamic tools from the frontend registry.
+ * Combines server tools + browser proxy tools + dynamic tools from the frontend
+ * registry + the loadSkill tool + any tools bundled by discovered skills.
+ *
+ * Tool priority (collision avoidance — first defined wins):
+ *   1. Built-in server tools (userSelect, etc.)
+ *   2. Browser proxy tools (browserExecute, executePlan)
+ *   3. loadSkill tool (when skills are discovered)
+ *   4. Skill-bundled tools (from skills' tools.ts exports)
+ *   5. Dynamic tools from frontend registry (via WebSocket)
  */
 export function getMergedTools(
   dynamicToolSchemas?: FunctionSchema[],
@@ -155,6 +165,26 @@ export function getMergedTools(
     // ...serverTools,
     ...getBrowserTools(connectionId),
   };
+
+  // ── Skills integration ─────────────────────────────────────────────────
+  // Add the loadSkill tool and merge skill-bundled tools when skills exist.
+  const { sandbox, skills } = getSkillsContext();
+
+  if (skills.length > 0) {
+    // The loadSkill tool allows the LLM to load full skill instructions
+    // on-demand (progressive disclosure pattern).
+    tools.loadSkill = createLoadSkillTool(sandbox, skills);
+
+    // Merge tools exported by skill directories (from tools.ts files).
+    // Skip if the tool name already exists (collision avoidance).
+    for (const skill of skills) {
+      if (!skill.tools) continue;
+      for (const [name, skillTool] of Object.entries(skill.tools)) {
+        if (tools[name]) continue; // Built-in tools take priority
+        tools[name] = skillTool;
+      }
+    }
+  }
 
   // If dynamic tool schemas are provided from the frontend,
   // we register them as native tools for the LLM.

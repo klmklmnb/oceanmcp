@@ -9,7 +9,7 @@ import {
   TOOL_PART_TYPE_PREFIX,
 } from "@ocean-mcp/shared";
 import { getLanguageModel } from "../ai/providers";
-import { systemPrompt } from "../ai/prompts";
+import { getSystemPrompt } from "../ai/prompts";
 import { getMergedTools } from "../ai/tools";
 import { connectionManager } from "../ws/connection-manager";
 
@@ -130,7 +130,7 @@ export async function handleChatRequest(req: Request): Promise<Response> {
 
     const result = streamText({
       model: getLanguageModel(modelId),
-      system: systemPrompt,
+      system: getSystemPrompt(),
       messages: modelMessages,
       tools: mergedTools,
       stopWhen: stepCountIs(10),
