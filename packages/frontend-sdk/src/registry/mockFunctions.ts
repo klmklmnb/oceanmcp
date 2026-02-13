@@ -638,9 +638,46 @@ return fetch("${apiBase(p)}/deploy/group/" + args.group_id, {
   };
 }
 
-function makeExecuteDeployWorkflow(p: PlatformConfig): CodeFunctionDefinition {
+function makeDeployGroupPreCheck(p: PlatformConfig): CodeFunctionDefinition {
   return {
-    id: `executeDeployWorkflow${p.key}`,
+    id: `deployGroupPreCheck${p.key}`,
+    name: `Deploy Group Pre Check For ${p.key}`,
+    description: `Check whether a deploy group already has an existing deploy work order. MUST be called before createDeployWorkOrder${p.key}. If response field "passed" is false and "exist_workflow.id" exists, a work order already exists — do NOT create a new one, instead use exist_workflow.id directly for subsequent flows (e.g. executeDeployWorkOrder${p.key}). Only create a new work order when "passed" is true.`,
+    type: FUNCTION_TYPE.CODE,
+    operationType: OPERATION_TYPE.READ,
+    code: `const url = new URL("${apiBase(p)}/deploy_workflow/workflow/deploy_group_pre_check");
+url.searchParams.set("app_id", "${p.appId}");
+url.searchParams.set("biz_id", "${p.bizId}");
+url.searchParams.set("scope_type", "app");
+url.searchParams.set("group_id", args.group_id);
+return fetch(url.toString(), {
+  body: null,
+  method: "GET",
+  mode: "cors",
+  credentials: "include",
+  headers: ${HEADERS},
+}).then(response => response.json()).then(res => {
+    if (res.retcode !== 0) {
+        throw new Error(res.message);
+    }
+    return res.data;
+});
+`,
+    parameters: [
+      {
+        name: "group_id",
+        type: PARAMETER_TYPE.STRING,
+        description:
+          "Deploy group id (extract from the target item in the deploy group list).",
+        required: true,
+      },
+    ],
+  };
+}
+
+function makeExecuteDeployWorkOrder(p: PlatformConfig): CodeFunctionDefinition {
+  return {
+    id: `executeDeployWorkOrder${p.key}`,
     name: `Execute Deploy Workflow For ${p.key}`,
     description: `Execute a deploy workflow (start the actual deployment). Call this after createDeployWorkOrder${p.key} succeeds, using the id field from its response as workflow_id.`,
     type: FUNCTION_TYPE.CODE,
@@ -674,6 +711,94 @@ function makeExecuteDeployWorkflow(p: PlatformConfig): CodeFunctionDefinition {
   };
 }
 
+function makeGetWorkOrderDetail(p: PlatformConfig): CodeFunctionDefinition {
+  return {
+    id: `getWorkOrderDetail${p.key}`,
+    name: `Get Work Order Detail For ${p.key}`,
+    description: `Fetch the current detail/status of a deploy work order by workflow_id.`,
+    type: FUNCTION_TYPE.CODE,
+    operationType: OPERATION_TYPE.READ,
+    code: `const url = new URL("${apiBase(p)}/deploy_workflow/workflow/detail/" + args.workflow_id);
+url.searchParams.set("app_id", "${p.appId}");
+url.searchParams.set("biz_id", "${p.bizId}");
+return fetch(url.toString(), {
+  body: null,
+  method: "GET",
+  mode: "cors",
+  credentials: "include",
+  headers: ${HEADERS},
+}).then(response => response.json()).then(res => {
+  if (res.retcode !== 0) {
+    throw new Error(res.message);
+  }
+  return res.data;
+});
+`,
+    parameters: [
+      {
+        name: "workflow_id",
+        type: PARAMETER_TYPE.STRING,
+        description:
+          "Workflow id (the id field from createDeployWorkOrder response or exist_workflow.id from deployGroupPreCheck).",
+        required: true,
+      },
+    ],
+  };
+}
+
+function makeWaitForWorkOrderStatusChange(
+  p: PlatformConfig,
+): CodeFunctionDefinition {
+  return {
+    id: `waitForWorkOrderStatusChange${p.key}`,
+    name: `Wait For Work Order Status Change For ${p.key}`,
+    description: `Poll the work order detail until its status is no longer "pending" or "running", then return the final result. Use this after executeDeployWorkOrder${p.key} to wait for the deployment to finish.`,
+    type: FUNCTION_TYPE.CODE,
+    operationType: OPERATION_TYPE.READ,
+    code: `const pollInterval = 3000;
+const maxAttempts = 100;
+
+async function poll() {
+  for (let i = 0; i < maxAttempts; i++) {
+    const url = new URL("${apiBase(p)}/deploy_workflow/workflow/detail/" + args.workflow_id);
+    url.searchParams.set("app_id", "${p.appId}");
+    url.searchParams.set("biz_id", "${p.bizId}");
+    const res = await fetch(url.toString(), {
+      body: null,
+      method: "GET",
+      mode: "cors",
+      credentials: "include",
+      headers: ${HEADERS},
+    }).then(r => r.json());
+
+    if (res.retcode !== 0) {
+      throw new Error(res.message);
+    }
+
+    const status = res.data?.status;
+    if (status !== "pending" && status !== "running") {
+      return res.data;
+    }
+
+    await new Promise(resolve => setTimeout(resolve, pollInterval));
+  }
+  throw new Error("Timed out waiting for work order status change after " + maxAttempts + " attempts");
+}
+
+return poll();
+`,
+    parameters: [
+      {
+        name: "workflow_id",
+        type: PARAMETER_TYPE.STRING,
+        description:
+          "Workflow id to poll (the id field from createDeployWorkOrder response or exist_workflow.id from deployGroupPreCheck).",
+        required: true,
+      },
+    ],
+  };
+}
+
 // ---------------------------------------------------------------------------
 // Generate all hoyocloud functions from platform configs
 // ---------------------------------------------------------------------------
@@ -684,10 +809,13 @@ const hoyocloudFunctions: CodeFunctionDefinition[] = PLATFORMS.flatMap((p) => [
   makeGetDeployGroupDetail(p),
   makeGetDeployGroupArchives(p),
   makeListAllReviewStreams(p),
+  makeDeployGroupPreCheck(p),
   makeCreateCluster(p),
   makeCreateDeployGroup(p),
   makeCreateDeployWorkOrder(p),
-  makeExecuteDeployWorkflow(p),
+  makeExecuteDeployWorkOrder(p),
+  makeGetWorkOrderDetail(p),
+  makeWaitForWorkOrderStatusChange(p),
   makeUpdateDynamicRenderHtml(p),
 ]);
 
