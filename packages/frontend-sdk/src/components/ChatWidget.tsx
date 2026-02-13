@@ -129,32 +129,36 @@ export function ChatWidget() {
     /**
      * AI SDK v6: After approval responses or client-side tool outputs are added,
      * decide whether to auto-submit the updated message back to the server.
-     * We only auto-submit on:
-     * 1) explicit approval responses, or
-     * 2) completed userSelect outputs (with all tool parts settled).
+     *
+     * Important: we only auto-submit approval responses once *all* tool parts in
+     * the last assistant message are settled. Otherwise we can submit a mixed
+     * state (one approval responded, another still approval-requested), which
+     * leads to missing tool-result pairs for OpenAI-compatible APIs.
      */
     sendAutomaticallyWhen: ({ messages: msgs }) => {
       const lastMsg = msgs[msgs.length - 1];
       if (!lastMsg || lastMsg.role !== MESSAGE_ROLE.ASSISTANT) return false;
 
-      const hasApprovalResponse = lastMsg.parts?.some((part: any) => {
-        const isToolPart =
-          typeof part.type === "string" &&
-          part.type.startsWith(TOOL_PART_TYPE_PREFIX);
-        if (!isToolPart) return false;
-        // Only trigger when a tool has been explicitly approved/denied by the user
+      const toolParts = (lastMsg.parts || []).filter(isToolPart);
+      const approvalRespondedParts = toolParts.filter((part: any) => {
         return (
           part.state === TOOL_PART_STATE.APPROVAL_RESPONDED &&
           part.approval?.approved != null
         );
       });
 
-      const toolParts = (lastMsg.parts || []).filter(isToolPart);
+      const hasApprovedApprovalResponse = approvalRespondedParts.some(
+        (part: any) => part.approval?.approved === true,
+      );
+
+      const hasAnyApprovalResponse = approvalRespondedParts.length > 0;
+
       const allToolPartsSettled = toolParts.every((part: any) => {
         return (
           part.state === TOOL_PART_STATE.OUTPUT_AVAILABLE ||
           part.state === TOOL_PART_STATE.OUTPUT_ERROR ||
-          part.state === TOOL_PART_STATE.APPROVAL_RESPONDED
+          part.state === TOOL_PART_STATE.APPROVAL_RESPONDED ||
+          part.state === TOOL_PART_STATE.OUTPUT_DENIED
         );
       });
 
@@ -167,9 +171,14 @@ export function ChatWidget() {
         );
       });
 
-      return Boolean(
-        hasApprovalResponse || (hasUserSelectResult && allToolPartsSettled),
+      const decision = Boolean(
+        allToolPartsSettled &&
+          (hasAnyApprovalResponse
+            ? hasApprovedApprovalResponse
+            : hasUserSelectResult),
       );
+
+      return decision;
     },
   });
 

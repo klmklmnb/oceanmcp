@@ -20,6 +20,10 @@ type FlowNodeCardProps = {
     }>;
   };
   state: string;
+  approval?: {
+    approved?: boolean;
+    reason?: string;
+  };
   /** Approval props — only needed when state === "approval-requested" */
   toolCallId?: string;
   toolName?: string;
@@ -37,6 +41,7 @@ export function FlowNodeCard({
   steps,
   result,
   state,
+  approval,
   toolCallId,
   toolName,
   approvalId,
@@ -53,10 +58,20 @@ export function FlowNodeCard({
         return FLOW_STEP_STATUS.PENDING;
       }
       if (
-        state === TOOL_PART_STATE.APPROVAL_RESPONDED ||
+        state === TOOL_PART_STATE.APPROVAL_RESPONDED &&
+        approval?.approved === false
+      ) {
+        return FLOW_STEP_STATUS.FAILED;
+      }
+      if (
+        (state === TOOL_PART_STATE.APPROVAL_RESPONDED &&
+          approval?.approved === true) ||
         state === TOOL_PART_STATE.INPUT_AVAILABLE
       ) {
         return FLOW_STEP_STATUS.RUNNING;
+      }
+      if (state === TOOL_PART_STATE.OUTPUT_DENIED) {
+        return FLOW_STEP_STATUS.FAILED;
       }
       return FLOW_STEP_STATUS.PENDING;
     }

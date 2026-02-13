@@ -28,6 +28,11 @@ const HEADERS = `{
 }`;
 const CLUSTER_ENV_DESC =
   "Cluster env for dest dir (testing/pre/prod). Map user intent: test/testing/uat -> testing; pp/pre/pre-release -> pre; prod/production -> prod";
+const CLUSTER_ENV_ENUM_MAP = {
+  testing: "测试集群",
+  pre: "预发集群",
+  prod: "生产集群",
+};
 const CLUSTER_ID_DESC =
   "Target cluster ID. Determine by listing clusters and matching the env derived from user input.";
 const CLUSTER_TAG_DESC =
@@ -223,6 +228,7 @@ return fetch(url.toString(), {
         name: "env",
         type: PARAMETER_TYPE.STRING,
         description: CLUSTER_ENV_DESC,
+        enumMap: CLUSTER_ENV_ENUM_MAP,
         required: true,
       },
       {

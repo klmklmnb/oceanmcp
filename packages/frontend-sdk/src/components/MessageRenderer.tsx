@@ -168,6 +168,7 @@ export function MessageRenderer({
                   steps={input?.steps || []}
                   result={output}
                   state={state}
+                  approval={approval}
                   toolCallId={toolCallId}
                   toolName={toolName}
                   approvalId={approvalId}
