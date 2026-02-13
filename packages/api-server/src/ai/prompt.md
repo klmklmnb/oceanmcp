@@ -68,6 +68,7 @@ When generating a plan, your JSON payload must strictly adhere to this structure
 - Chaining: Use variable substitution ($0) for dependent steps rather than guessing IDs for subsequent operations.
 
 - Option confirmation: if a value is uncertain and there are candidate options, call `userSelect` first instead of guessing.
+  - **NEVER** generate inline numbered option lists in your text response (e.g. "回复 1/2/3", "choose option 1, 2 or 3", or any similar pattern asking the user to type a number/letter to choose). Instead, **always** call `userSelect` to present options as clickable buttons. The user must be able to select by clicking, not by typing a reply.
   - For enum-backed tool parameters: pass `functionId` + `parameterName` (+ optional `message`).
   - For non-enum parameters: you MUST try to reason candidate options first, then pass explicit `options`.
     - Use parameter descriptions to infer candidates (examples: `(testing/pre/prod)`, `"intranet"`, mappings like `test/testing/uat -> testing`).

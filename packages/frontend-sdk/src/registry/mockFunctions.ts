@@ -494,7 +494,12 @@ return fetch("${apiBase(p)}/deploy_workflow/workflow/create", {
   mode: "cors",
   credentials: "include",
   headers: ${HEADERS},
-}).then(response => response.json());
+}).then(response => response.json()).then(res => {
+    if (res.retcode !== 0) {
+        throw new Error(res.message);
+    }
+    return res.data;
+});
 `,
     parameters: [
       {
@@ -633,6 +638,42 @@ return fetch("${apiBase(p)}/deploy/group/" + args.group_id, {
   };
 }
 
+function makeExecuteDeployWorkflow(p: PlatformConfig): CodeFunctionDefinition {
+  return {
+    id: `executeDeployWorkflow${p.key}`,
+    name: `Execute Deploy Workflow For ${p.key}`,
+    description: `Execute a deploy workflow (start the actual deployment). Call this after createDeployWorkOrder${p.key} succeeds, using the id field from its response as workflow_id.`,
+    type: FUNCTION_TYPE.CODE,
+    operationType: OPERATION_TYPE.WRITE,
+    code: `return fetch("${apiBase(p)}/deploy_workflow/workflow/control", {
+  body: JSON.stringify({
+    workflow_id: Number(args.workflow_id),
+    process: "deploy_pipeline",
+    action: "execute",
+  }),
+  method: "POST",
+  mode: "cors",
+  credentials: "include",
+  headers: ${HEADERS},
+}).then(response => response.json()).then(res => {
+  if (res.retcode !== 0) {
+    throw new Error(res.message);
+  }
+  return res.data;
+});
+`,
+    parameters: [
+      {
+        name: "workflow_id",
+        type: PARAMETER_TYPE.STRING,
+        description:
+          "Workflow id (the id field from the createDeployWorkOrder response).",
+        required: true,
+      },
+    ],
+  };
+}
+
 // ---------------------------------------------------------------------------
 // Generate all hoyocloud functions from platform configs
 // ---------------------------------------------------------------------------
@@ -646,6 +687,7 @@ const hoyocloudFunctions: CodeFunctionDefinition[] = PLATFORMS.flatMap((p) => [
   makeCreateCluster(p),
   makeCreateDeployGroup(p),
   makeCreateDeployWorkOrder(p),
+  makeExecuteDeployWorkflow(p),
   makeUpdateDynamicRenderHtml(p),
 ]);
 
