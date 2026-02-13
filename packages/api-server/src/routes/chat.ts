@@ -12,6 +12,7 @@ import { getLanguageModel } from "../ai/providers";
 import { getSystemPrompt } from "../ai/prompts";
 import { getMergedTools } from "../ai/tools";
 import { connectionManager } from "../ws/connection-manager";
+import { deduplicateAssistantParts } from "./deduplicate-parts";
 
 const AUTO_DENY_REASON =
   "User sent a new message instead of responding to approval.";
@@ -125,7 +126,9 @@ export async function handleChatRequest(req: Request): Promise<Response> {
     const dynamicSchemas = connectionManager.getToolSchemas(connectionId);
     const mergedTools = getMergedTools(dynamicSchemas, connectionId);
 
-    const normalizedMessages = normalizeStaleApprovals(messages);
+    const normalizedMessages = deduplicateAssistantParts(
+      normalizeStaleApprovals(messages),
+    );
     const modelMessages = await convertToModelMessages(normalizedMessages);
 
     const result = streamText({
