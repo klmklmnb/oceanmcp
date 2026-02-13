@@ -4,24 +4,24 @@ Complete reference for deploying frontend-static deploy groups via the Trinity A
 
 ## Key Concepts
 
-| Concept | Description |
-|---------|-------------|
-| **Platform** | A deployment target configuration (e.g. Mihoyo, LML) with its own `biz_id`, `app_id`, `deploy_app_id`, API prefix. |
-| **Cluster** | An infrastructure grouping bound to an environment. Each env (testing/pre/prod) has one or more clusters. The `cluster_tag` field distinguishes sub-environments (e.g. `"uat"` within testing). |
-| **Deploy Group** | A named frontend-static resource group within a cluster. Holds OSS bucket config, domain, public_path, cache settings, and optional dynamic_render_html. |
-| **Archive** | A versioned build artifact (bundle) that can be deployed to a group. |
-| **Work Order (Workflow)** | A deploy request entity that goes through pre-check, creation, execution, and completion. |
-| **Review Stream** | An approval flow required for production deployments. Must be resolved before creating a prod work order. |
+| Concept                   | Description                                                                                                                                                                                     |
+| ------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Platform**              | A deployment target configuration (e.g. Mihoyo, LML) with its own `biz_id`, `app_id`, `deploy_app_id`, API prefix.                                                                              |
+| **Cluster**               | An infrastructure grouping bound to an environment. Each env (testing/pre/prod) has one or more clusters. The `cluster_tag` field distinguishes sub-environments (e.g. `"uat"` within testing). |
+| **Deploy Group**          | A named frontend-static resource group within a cluster. Holds OSS bucket config, domain, public_path, cache settings, and optional dynamic_render_html.                                        |
+| **Archive**               | A versioned build artifact (bundle) that can be deployed to a group.                                                                                                                            |
+| **Work Order (Workflow)** | A deploy request entity that goes through pre-check, creation, execution, and completion.                                                                                                       |
+| **Review Stream**         | An approval flow required for production deployments. Must be resolved before creating a prod work order.                                                                                       |
 
 ## Environment Mapping
 
 When the user describes a target environment, map their intent as follows:
 
-| User says | `env` value | Notes |
-|-----------|-------------|-------|
-| test, testing, uat | `testing` | For UAT, also set `cluster_tag = "uat"` |
-| pp, pre, pre-release | `pre` | |
-| prod, production, online | `prod` | Requires review stream |
+| User says                | `env` value | Notes                                   |
+| ------------------------ | ----------- | --------------------------------------- |
+| test, testing, uat       | `testing`   | For UAT, also set `cluster_tag = "uat"` |
+| pp, pre, pre-release     | `pre`       |                                         |
+| prod, production, online | `prod`      | Requires review stream                  |
 
 ## Standard Deploy Flow
 
@@ -41,6 +41,7 @@ Extract `cluster_id` for use in subsequent steps.
 **Params:** `env`, `cluster_id`
 
 Fetch all deploy groups in the target cluster. Find the group matching the user's intent (by name or other criteria). Extract:
+
 - `group_id` (the `id` field of the matching group)
 - `group_name`
 
@@ -80,6 +81,7 @@ Creates the deploy work order. The response contains the `id` field — this is 
 **Params:** `workflow_id`
 
 Triggers the actual deployment pipeline. The `workflow_id` comes from either:
+
 - The `id` in the `createDeployWorkOrder` response (Step 5), OR
 - The `exist_workflow.id` from the pre-check (Step 4) if reusing an existing work order.
 
@@ -91,6 +93,7 @@ Triggers the actual deployment pipeline. The `workflow_id` comes from either:
 Polls the work order detail every 3 seconds (up to 100 attempts / ~5 minutes) until the status is no longer `"pending"` or `"running"`. Returns the final work order state.
 
 Report the final status to the user:
+
 - `"success"` -> Deployment completed successfully.
 - `"failed"` -> Deployment failed; inspect the response for error details.
 - Other statuses -> Report as-is and suggest the user check the platform UI.
@@ -102,25 +105,26 @@ Report the final status to the user:
 **Function:** `createDeployGroup{Platform}`
 
 Only create a new group if **no group with the same name exists** in the target env (verified via Step 2). Required parameters from the user:
+
 - `domain` — The domain for the static resources.
 - `public_path` — Must start with `/`.
 - `bucket_tag` — `"intranet"` (default) or `"external_network"`. **For the LML platform, the default is `"external_network"`.**
 - `group_name` — Naming priority: 1) user-specified, 2) cluster_tag, 3) cluster_env.
 
+> **Domain with path:** If the user provides a domain that includes a path (e.g. `example.com/path`), automatically separate it: use the host part (`example.com`) as `domain` and the path part (`/path`) as `public_path`. Do not pass the full string as the domain.
+
 The OSS bucket is auto-determined based on `cluster_env`, `cluster_tag`, and `bucket_tag`:
 
-| env | cluster_tag | bucket_tag | oss_upload_bucket |
-|-----|-------------|------------|-------------------|
-| testing | (empty) | intranet | ee-infra-seed-ydy-test |
-| testing | (empty) | external_network | ee-infra-seed-test |
-| testing | uat | intranet | ee-infra-seed-ydy-uat |
-| testing | uat | external_network | ee-infra-seed-uat |
-| pre | — | intranet | ee-infra-seed-ydy-pp |
-| pre | — | external_network | ee-infra-seed-pp |
-| prod | — | intranet | ee-infra-seed-ydy-prod |
-| prod | — | external_network | ee-infra-seed-prod |
-
-The `oss_upload_dest_dir` is computed as `{domain}{public_path}-{cluster_env}`.
+| env     | cluster_tag | bucket_tag       | oss_upload_bucket      |
+| ------- | ----------- | ---------------- | ---------------------- |
+| testing | (empty)     | intranet         | ee-infra-seed-ydy-test |
+| testing | (empty)     | external_network | ee-infra-seed-test     |
+| testing | uat         | intranet         | ee-infra-seed-ydy-uat  |
+| testing | uat         | external_network | ee-infra-seed-uat      |
+| pre     | —           | intranet         | ee-infra-seed-ydy-pp   |
+| pre     | —           | external_network | ee-infra-seed-pp       |
+| prod    | —           | intranet         | ee-infra-seed-ydy-prod |
+| prod    | —           | external_network | ee-infra-seed-prod     |
 
 ### Creating a New Cluster
 
@@ -135,6 +139,7 @@ Only needed if no cluster exists for the target environment. This is rare — mo
 **Params:** `current_frontend_static_group`, `cluster_id`, `group_name`, `targetVersion`, `group_id`
 
 Used to update version strings in `//fecdn` URLs within the group's `dynamic_render_html`. Flow:
+
 1. Call `getDeployGroupDetail{Platform}` to get the current `frontend_static_group`.
 2. Call `updateDynamicRenderHtml{Platform}` with the current config and the new target version.
 
