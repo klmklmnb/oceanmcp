@@ -110,6 +110,8 @@ export function ChatWidget() {
   const scrollRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const [input, setInput] = useState("");
+  /** Track approval IDs that have already triggered an auto-submit to prevent re-sends. */
+  const submittedApprovalIdsRef = useRef<Set<string>>(new Set());
 
   const {
     messages,
@@ -140,10 +142,14 @@ export function ChatWidget() {
       if (!lastMsg || lastMsg.role !== MESSAGE_ROLE.ASSISTANT) return false;
 
       const toolParts = (lastMsg.parts || []).filter(isToolPart);
+
+      // Only consider approval responses that haven't already been submitted,
+      // so we don't re-trigger an infinite send loop.
       const approvalRespondedParts = toolParts.filter((part: any) => {
         return (
           part.state === TOOL_PART_STATE.APPROVAL_RESPONDED &&
-          part.approval?.approved != null
+          part.approval?.approved != null &&
+          !submittedApprovalIdsRef.current.has(part.approval?.id)
         );
       });
 
@@ -177,6 +183,15 @@ export function ChatWidget() {
             ? hasApprovedApprovalResponse
             : hasUserSelectResult),
       );
+
+      // Mark these approval IDs as submitted so we never re-trigger for them.
+      if (decision) {
+        for (const part of approvalRespondedParts) {
+          if ((part as any).approval?.id) {
+            submittedApprovalIdsRef.current.add((part as any).approval.id);
+          }
+        }
+      }
 
       return decision;
     },
