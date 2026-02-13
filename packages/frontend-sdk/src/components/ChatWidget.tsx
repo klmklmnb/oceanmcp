@@ -25,6 +25,16 @@ function isToolPart(part: any): boolean {
   );
 }
 
+function getToolName(part: any): string {
+  if (
+    typeof part?.type === "string" &&
+    part.type.startsWith(TOOL_PART_TYPE_PREFIX)
+  ) {
+    return part.type.slice(TOOL_PART_TYPE_PREFIX.length);
+  }
+  return part?.toolName || "unknown";
+}
+
 function shouldAutoDeny(part: any): boolean {
   return (
     isToolPart(part) &&
@@ -117,15 +127,11 @@ export function ChatWidget() {
       }),
     }),
     /**
-     * AI SDK v6: After `addToolApprovalResponse` or `addToolOutput` updates
-     * the message state, this callback determines whether to automatically
-     * re-send to the server.
-     *
-     * IMPORTANT: Only trigger on "approval-responded" (user just clicked
-     * Allow/Deny on a needsApproval tool). Do NOT trigger on "output-available"
-     * because regular auto-executing tools also reach that state after the
-     * server returns their result — re-sending would cause errors since the
-     * LLM provider expects tool responses for any pending tool calls.
+     * AI SDK v6: After approval responses or client-side tool outputs are added,
+     * decide whether to auto-submit the updated message back to the server.
+     * We only auto-submit on:
+     * 1) explicit approval responses, or
+     * 2) completed userSelect outputs (with all tool parts settled).
      */
     sendAutomaticallyWhen: ({ messages: msgs }) => {
       const lastMsg = msgs[msgs.length - 1];
@@ -143,7 +149,27 @@ export function ChatWidget() {
         );
       });
 
-      return hasApprovalResponse ?? false;
+      const toolParts = (lastMsg.parts || []).filter(isToolPart);
+      const allToolPartsSettled = toolParts.every((part: any) => {
+        return (
+          part.state === TOOL_PART_STATE.OUTPUT_AVAILABLE ||
+          part.state === TOOL_PART_STATE.OUTPUT_ERROR ||
+          part.state === TOOL_PART_STATE.APPROVAL_RESPONDED
+        );
+      });
+
+      const hasUserSelectResult = lastMsg.parts?.some((part: any) => {
+        if (!isToolPart(part)) return false;
+        if (getToolName(part) !== "userSelect") return false;
+        return (
+          part.state === TOOL_PART_STATE.OUTPUT_AVAILABLE ||
+          part.state === TOOL_PART_STATE.OUTPUT_ERROR
+        );
+      });
+
+      return Boolean(
+        hasApprovalResponse || (hasUserSelectResult && allToolPartsSettled),
+      );
     },
   });
 
@@ -237,6 +263,14 @@ export function ChatWidget() {
     }
   };
 
+  const handleUserSelect = (toolCallId: string, output: Record<string, any>) => {
+    addToolResult({
+      toolCallId,
+      tool: "userSelect",
+      output,
+    });
+  };
+
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
@@ -303,6 +337,7 @@ export function ChatWidget() {
               message={message}
               onApprove={handleApprove}
               onDeny={handleDeny}
+              onUserSelect={handleUserSelect}
             />
           ))}
 

@@ -31,7 +31,7 @@ const CLUSTER_ENV_DESC =
 const CLUSTER_ID_DESC =
   "Target cluster ID. Determine by listing clusters and matching the env derived from user input.";
 const CLUSTER_TAG_DESC =
-  "Cluster tag: only set to 'uat' for the uat env; leave empty otherwise.";
+  "Cluster tag: only set to 'uat' for the uat env; otherwise leave empty and **do not prompt user**.";
 
 const hoyocloudFunctions: CodeFunctionDefinition[] = [
   // =====================

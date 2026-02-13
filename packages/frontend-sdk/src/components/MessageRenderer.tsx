@@ -9,6 +9,7 @@ import {
 } from "@ocean-mcp/shared";
 import { FlowNodeCard } from "./FlowNodeCard";
 import { ApprovalButtons } from "./ApprovalButtons";
+import { UserSelectCard } from "./UserSelectCard";
 
 type MessageRendererProps = {
   message: UIMessage;
@@ -18,6 +19,7 @@ type MessageRendererProps = {
     approvalId?: string,
   ) => void;
   onDeny: (toolCallId: string, toolName: string, approvalId?: string) => void;
+  onUserSelect: (toolCallId: string, output: Record<string, any>) => void;
 };
 
 /** Sparkle icon for AI messages */
@@ -138,6 +140,7 @@ export function MessageRenderer({
   message,
   onApprove,
   onDeny,
+  onUserSelect,
 }: MessageRendererProps) {
   const isUser = message.role === MESSAGE_ROLE.USER;
 
@@ -177,6 +180,25 @@ export function MessageRenderer({
                   </div>
                 )}
               </>
+            )}
+          </div>
+        );
+      }
+
+      if (toolName === "userSelect") {
+        return (
+          <div key={toolCallId || index}>
+            {state === TOOL_PART_STATE.INPUT_STREAMING ? (
+              <TypingIndicator />
+            ) : (
+              <UserSelectCard
+                toolCallId={toolCallId}
+                input={input}
+                output={output}
+                state={state}
+                errorText={errorText}
+                onSubmit={onUserSelect}
+              />
             )}
           </div>
         );

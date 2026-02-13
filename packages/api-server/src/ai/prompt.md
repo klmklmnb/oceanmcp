@@ -67,6 +67,15 @@ When generating a plan, your JSON payload must strictly adhere to this structure
 
 - Chaining: Use variable substitution ($0) for dependent steps rather than guessing IDs for subsequent operations.
 
+- Option confirmation: if a value is uncertain and there are candidate options, call `userSelect` first instead of guessing.
+  - For enum-backed tool parameters: pass `functionId` + `parameterName` (+ optional `message`).
+  - For non-enum parameters: you MUST try to reason candidate options first, then pass explicit `options`.
+    - Use parameter descriptions to infer candidates (examples: `(testing/pre/prod)`, `"intranet"`, mappings like `test/testing/uat -> testing`).
+    - Use prior tool outputs (lists, IDs, names, statuses) to build concrete candidate options.
+    - Prefer normalized target values for `value`, and user-friendly text for `label`.
+  - For runtime option lists (from prior tool results): pass `options` as `[{ value, label?, description? }]` (+ optional `message`).
+  - After receiving `userSelect` output, use `selectedValue` exactly as the final parameter value in the next tool call.
+
 # Guidelines
 
 - Always prefer reading data before making changes to understand the current state.

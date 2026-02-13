@@ -1,6 +1,7 @@
 import { getServerStatus, echo } from "./server-tools";
 import { createBrowserExecuteTool } from "./browser-proxy-tool";
 import { createExecutePlanTool } from "./execute-plan-tool";
+import { userSelect } from "./user-select-tool";
 import {
   PARAMETER_TYPE,
   type FunctionSchema,
@@ -12,9 +13,55 @@ import { connectionManager } from "../../ws/connection-manager";
 
 /** Static tools that are always available */
 export const serverTools = {
+  userSelect,
   getServerStatus,
   echo,
 };
+
+function dedupeStrings(values: string[]): string[] {
+  const seen = new Set<string>();
+  const output: string[] = [];
+  for (const value of values) {
+    const normalized = value.trim();
+    if (!normalized) continue;
+    if (seen.has(normalized)) continue;
+    seen.add(normalized);
+    output.push(normalized);
+  }
+  return output;
+}
+
+function deriveCandidateValuesFromDescription(description?: string): string[] {
+  if (!description) return [];
+
+  const candidates: string[] = [];
+
+  // Quoted literals: "prod", 'intranet'
+  for (const match of description.matchAll(/["'`]([^"'`]{1,80})["'`]/g)) {
+    const token = match[1]?.trim();
+    if (token && /^[a-zA-Z0-9_.-]+$/.test(token)) {
+      candidates.push(token);
+    }
+  }
+
+  // Parenthesized groups with separators: (testing/pre/prod)
+  for (const match of description.matchAll(/\(([^)]+)\)/g)) {
+    const inner = match[1] ?? "";
+    const parts = inner
+      .split(/[\/,|]/)
+      .map((part) => part.trim())
+      .filter((part) => /^[a-zA-Z0-9_.-]+$/.test(part));
+    candidates.push(...parts);
+  }
+
+  // Mapping targets: foo -> prod
+  for (const match of description.matchAll(/->\s*([a-zA-Z0-9_.-]+)/g)) {
+    const token = match[1]?.trim();
+    if (token) candidates.push(token);
+  }
+
+  return dedupeStrings(candidates);
+}
 
 function getBrowserTools(
   connectionId?: string,
@@ -31,10 +78,19 @@ export function createZodSchema(parameters: ParameterDefinition[]) {
 
   for (const param of parameters) {
     let schema: z.ZodTypeAny;
+    const enumEntries = Object.entries(param.enumMap ?? {});
+    const enumValues = enumEntries.map(([value]) => value);
+    const inferredValues =
+      param.type === PARAMETER_TYPE.STRING && enumEntries.length === 0
+        ? deriveCandidateValuesFromDescription(param.description)
+        : [];
 
     switch (param.type) {
       case PARAMETER_TYPE.STRING:
-        schema = z.string();
+        schema =
+          enumValues.length > 0
+            ? z.enum(enumValues as [string, ...string[]])
+            : z.string();
         break;
       case PARAMETER_TYPE.NUMBER:
         schema = z.number();
@@ -52,8 +108,28 @@ export function createZodSchema(parameters: ParameterDefinition[]) {
         schema = z.any();
     }
 
-    if (param.description) {
-      schema = schema.describe(param.description);
+    const enumDescription =
+      enumEntries.length > 0
+        ? `Allowed values: ${enumEntries
+            .map(([value, label]) =>
+              `${value}${label != null ? ` (${String(label)})` : ""}`,
+            )
+            .join(", ")}.`
+        : "";
+
+    const uncertainSelectionHint =
+      param.type === PARAMETER_TYPE.STRING
+        ? inferredValues.length > 0
+          ? `Inferred candidate values: ${inferredValues.join(", ")}. If user intent is ambiguous, call userSelect with options derived from these values before setting this parameter.`
+          : "If user intent is ambiguous, reason candidate options from context and this description, then call userSelect with explicit options before setting this parameter."
+        : "";
+
+    const description = [param.description, enumDescription, uncertainSelectionHint]
+      .filter(Boolean)
+      .join(" ");
+
+    if (description) {
+      schema = schema.describe(description);
     }
 
     if (!param.required) {
@@ -75,6 +151,7 @@ export function getMergedTools(
   connectionId?: string,
 ): Record<string, Tool<any, any>> {
   const tools: Record<string, Tool<any, any>> = {
+    userSelect,
     // ...serverTools,
     ...getBrowserTools(connectionId),
   };
