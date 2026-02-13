@@ -421,7 +421,7 @@ return fetch("${apiBase(p)}/deploy/group/bulk", {
         name: "bucket_tag",
         type: PARAMETER_TYPE.STRING,
         description:
-          'Bucket tag: "intranet" or "external_network", defaults to "intranet" if not specified',
+          'Bucket tag: "intranet" or "external_network", defaults to "intranet" in mihoyo namespace if not specified, defaults to "external_network" in lml namespace if not specified',
         required: true,
         showName: "网络环境",
         enumMap: {

@@ -104,7 +104,7 @@ Report the final status to the user:
 Only create a new group if **no group with the same name exists** in the target env (verified via Step 2). Required parameters from the user:
 - `domain` — The domain for the static resources.
 - `public_path` — Must start with `/`.
-- `bucket_tag` — `"intranet"` (default) or `"external_network"`.
+- `bucket_tag` — `"intranet"` (default) or `"external_network"`. **For the LML platform, the default is `"external_network"`.**
 - `group_name` — Naming priority: 1) user-specified, 2) cluster_tag, 3) cluster_env.
 
 The OSS bucket is auto-determined based on `cluster_env`, `cluster_tag`, and `bucket_tag`:
