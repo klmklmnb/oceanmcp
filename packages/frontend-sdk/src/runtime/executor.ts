@@ -1,5 +1,5 @@
 import { FUNCTION_TYPE, type FunctionDefinition } from "@ocean-mcp/shared";
-import { registry } from "../registry";
+import { functionRegistry } from "../registry";
 
 /**
  * Execution engine — executes function definitions on the browser side.
@@ -9,7 +9,7 @@ export async function executeFunction(
   functionId: string,
   args: Record<string, any>,
 ): Promise<any> {
-  const fn = registry.get(functionId);
+  const fn = functionRegistry.get(functionId);
 
   if (!fn) {
     throw new Error(`Function not found: ${functionId}`);

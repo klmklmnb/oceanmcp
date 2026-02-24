@@ -1,6 +1,6 @@
 import React from "react";
 import { TOOL_PART_STATE } from "@ocean-mcp/shared";
-import { registry } from "../registry";
+import { functionRegistry } from "../registry";
 
 type UserSelectOptionInput = {
   value: unknown;
@@ -136,7 +136,7 @@ export function UserSelectCard({
 }: UserSelectCardProps) {
   const paramDef = React.useMemo(() => {
     if (!input?.functionId || !input?.parameterName) return undefined;
-    const fnDef = registry.get(input.functionId);
+    const fnDef = functionRegistry.get(input.functionId);
     return fnDef?.parameters.find((p) => p.name === input.parameterName);
   }, [input?.functionId, input?.parameterName]);
 

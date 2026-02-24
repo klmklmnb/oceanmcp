@@ -3,6 +3,7 @@ import type {
   ToolResultResponse,
   FunctionSchema,
 } from "./types";
+import type { SkillSchema } from "./skills";
 
 // ─── Message Types ───────────────────────────────────────────────────────────
 
@@ -11,10 +12,10 @@ export enum WSMessageType {
   EXECUTE_TOOL = "EXECUTE_TOOL",
   /** Browser → Server: result of a tool execution */
   TOOL_RESULT = "TOOL_RESULT",
-  /** Browser → Server: register available tool schemas */
-  REGISTER_TOOLS = "REGISTER_TOOLS",
-  /** Server → Browser: acknowledge tool registration */
-  TOOLS_REGISTERED = "TOOLS_REGISTERED",
+  /** Browser → Server: register available tools and skills */
+  REGISTER_CAPABILITIES = "REGISTER_CAPABILITIES",
+  /** Server → Browser: acknowledge capabilities registration */
+  CAPABILITIES_REGISTERED = "CAPABILITIES_REGISTERED",
   /** Ping / Pong for keep-alive */
   PING = "PING",
   PONG = "PONG",
@@ -26,10 +27,17 @@ export type WSMessage =
   | { type: WSMessageType.EXECUTE_TOOL; payload: ExecuteToolRequest }
   | { type: WSMessageType.TOOL_RESULT; payload: ToolResultResponse }
   | {
-      type: WSMessageType.REGISTER_TOOLS;
-      payload: { connectionId: string; tools: FunctionSchema[] };
+      type: WSMessageType.REGISTER_CAPABILITIES;
+      payload: {
+        connectionId: string;
+        tools: FunctionSchema[];
+        skills: SkillSchema[];
+      };
     }
-  | { type: WSMessageType.TOOLS_REGISTERED; payload: { connectionId: string } }
+  | {
+      type: WSMessageType.CAPABILITIES_REGISTERED;
+      payload: { connectionId: string };
+    }
   | { type: WSMessageType.PING }
   | { type: WSMessageType.PONG };
 

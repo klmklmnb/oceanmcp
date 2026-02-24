@@ -7,14 +7,18 @@
  *   3. Building the full system prompt (base + skills catalog)
  *   4. Exposing the sandbox + skills context for the loadSkill tool
  *
- * The transition from a static `systemPrompt` export to `getSystemPrompt()`
- * is necessary because skill discovery is async (filesystem I/O), while the
- * base prompt can still be loaded synchronously at module evaluation time.
+ * The system prompt includes skills from two sources:
+ *   - File-based skills: discovered from SKILL.md files at startup
+ *   - Frontend-registered skills: sent by browser clients via WebSocket
+ *
+ * When a connectionId is provided, the system prompt merges both sources
+ * with file-based skills taking priority on name conflicts.
  *
  * Initialization order:
  *   1. Module loads → basePrompt read from disk (sync)
  *   2. Server startup → calls `initSkills()` (async)
- *   3. Chat requests → call `getSystemPrompt()` which includes discovered skills
+ *   3. Chat requests → call `getSystemPrompt(connectionId?)` which includes
+ *      both discovered and frontend-registered skills
  */
 
 import { readFileSync } from "fs";
@@ -26,6 +30,7 @@ import {
   buildSkillsPrompt,
   type DiscoveredSkill,
 } from "./skills";
+import { connectionManager } from "../ws/connection-manager";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -90,12 +95,30 @@ export async function initSkills(): Promise<void> {
 /**
  * Get the full system prompt, including the skills catalog.
  *
+ * When `connectionId` is provided, merges file-based skills with
+ * frontend-registered skills from that connection. File-based skills
+ * take priority on name conflicts.
+ *
  * Called on every chat request to ensure the latest skills are included.
- * The skills catalog section is empty if no skills were discovered,
- * making this safe to call even before initSkills().
+ * The skills catalog section is empty if no skills exist, making this
+ * safe to call even before initSkills() or without a connectionId.
  */
-export function getSystemPrompt(): string {
-  return basePrompt + buildSkillsPrompt(discoveredSkills);
+export function getSystemPrompt(connectionId?: string): string {
+  // Start with file-based skills
+  const fileSkills = discoveredSkills;
+
+  // Merge frontend-registered skills, skipping name conflicts
+  const frontendSkills = connectionManager.getSkillSchemas(connectionId);
+  const fileSkillNames = new Set(fileSkills.map((s) => s.name.toLowerCase()));
+
+  const allSkills: Array<{ name: string; description: string }> = [
+    ...fileSkills,
+    ...frontendSkills.filter(
+      (s) => !fileSkillNames.has(s.name.toLowerCase()),
+    ),
+  ];
+
+  return basePrompt + buildSkillsPrompt(allSkills);
 }
 
 /**

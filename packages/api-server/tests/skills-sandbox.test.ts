@@ -218,7 +218,7 @@ These are the instructions.
     const { createLoadSkillTool } = await import("../src/ai/skills/loader");
 
     const skills = await discoverSkills(sandbox, [skillDir]);
-    const tool = createLoadSkillTool(sandbox, skills);
+    const tool = createLoadSkillTool(sandbox, skills, []);
     const result = await tool.execute!({ name: "e2e-skill" }, {
       toolCallId: "test",
       messages: [],

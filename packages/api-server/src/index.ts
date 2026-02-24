@@ -4,6 +4,7 @@ import {
   parseWSMessage,
   createWSMessage,
   type FunctionSchema,
+  type SkillSchema,
   type ToolResultResponse,
 } from "@ocean-mcp/shared";
 import { handleChatRequest } from "./routes/chat";
@@ -67,7 +68,7 @@ const server = Bun.serve<{ connectionId: string }>({
       connectionManager.addConnection(connectionId, ws);
       ws.send(
         createWSMessage({
-          type: WSMessageType.TOOLS_REGISTERED,
+          type: WSMessageType.CAPABILITIES_REGISTERED,
           payload: { connectionId },
         }),
       );
@@ -89,10 +90,29 @@ const server = Bun.serve<{ connectionId: string }>({
             );
             break;
 
-          case WSMessageType.REGISTER_TOOLS:
+          case WSMessageType.REGISTER_CAPABILITIES:
             connectionManager.registerTools(
               ws.data.connectionId,
-              (msg.payload as { tools: FunctionSchema[] }).tools,
+              (
+                msg.payload as {
+                  tools: FunctionSchema[];
+                  skills: SkillSchema[];
+                }
+              ).tools,
+            );
+            connectionManager.registerSkills(
+              ws.data.connectionId,
+              (
+                msg.payload as {
+                  tools: FunctionSchema[];
+                  skills: SkillSchema[];
+                }
+              ).skills,
+            );
+            console.log(
+              `[WS] Capabilities registered for ${ws.data.connectionId}: ` +
+                `${(msg.payload as { tools: FunctionSchema[] }).tools.length} tool(s), ` +
+                `${(msg.payload as { skills: SkillSchema[] }).skills.length} skill(s)`,
             );
             break;
 

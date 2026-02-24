@@ -4,7 +4,6 @@ import {
   PARAMETER_TYPE,
   type CodeFunctionDefinition,
 } from "@ocean-mcp/shared";
-import { hoyocloudFunctions } from "./preregistered";
 
 // ---------------------------------------------------------------------------
 // Exported mock functions
@@ -13,9 +12,11 @@ import { hoyocloudFunctions } from "./preregistered";
 /**
  * Pre-registered mock functions for testing.
  * These are bundled with the SDK and available immediately.
+ *
+ * Note: Domain-specific tools (e.g. hoyocloud) are now registered via
+ * skills (see preregistered/devops-skill.ts) instead of being listed here.
  */
 export const mockFunctions: CodeFunctionDefinition[] = [
-  ...hoyocloudFunctions,
   {
     id: "getCurrentPageInfo",
     name: "Get Current Page Info",

@@ -152,7 +152,7 @@ Then do this.
     const sandbox = createMockSandbox({
       "/skills/my-skill/SKILL.md": validSkillContent,
     });
-    const tool = createLoadSkillTool(sandbox, skills);
+    const tool = createLoadSkillTool(sandbox, skills, []);
     const result = await tool.execute!({ name: "my-skill" }, {
       toolCallId: "test",
       messages: [],
@@ -171,7 +171,7 @@ Then do this.
     const sandbox = createMockSandbox({
       "/skills/my-skill/SKILL.md": validSkillContent,
     });
-    const tool = createLoadSkillTool(sandbox, skills);
+    const tool = createLoadSkillTool(sandbox, skills, []);
     const result = await tool.execute!({ name: "my-skill" }, {
       toolCallId: "test",
       messages: [],
@@ -184,7 +184,7 @@ Then do this.
     const sandbox = createMockSandbox({
       "/skills/my-skill/SKILL.md": validSkillContent,
     });
-    const tool = createLoadSkillTool(sandbox, skills);
+    const tool = createLoadSkillTool(sandbox, skills, []);
 
     // Uppercase
     const result1 = await tool.execute!({ name: "MY-SKILL" }, {
@@ -203,7 +203,7 @@ Then do this.
 
   test("returns error for unknown skill name", async () => {
     const sandbox = createMockSandbox({});
-    const tool = createLoadSkillTool(sandbox, skills);
+    const tool = createLoadSkillTool(sandbox, skills, []);
     const result = await tool.execute!({ name: "nonexistent" }, {
       toolCallId: "test",
       messages: [],
@@ -215,7 +215,7 @@ Then do this.
 
   test("error message lists available skill names", async () => {
     const sandbox = createMockSandbox({});
-    const tool = createLoadSkillTool(sandbox, skills);
+    const tool = createLoadSkillTool(sandbox, skills, []);
     const result = await tool.execute!({ name: "bad-name" }, {
       toolCallId: "test",
       messages: [],
@@ -227,7 +227,7 @@ Then do this.
 
   test("error message handles empty skills list", async () => {
     const sandbox = createMockSandbox({});
-    const tool = createLoadSkillTool(sandbox, []);
+    const tool = createLoadSkillTool(sandbox, [], []);
     const result = await tool.execute!({ name: "anything" }, {
       toolCallId: "test",
       messages: [],
@@ -250,7 +250,7 @@ Then do this.
         throw new Error("not needed");
       },
     };
-    const tool = createLoadSkillTool(failingSandbox, skills);
+    const tool = createLoadSkillTool(failingSandbox, skills, []);
     const result = await tool.execute!({ name: "my-skill" }, {
       toolCallId: "test",
       messages: [],
@@ -269,7 +269,7 @@ description: Does something.
 ---
 `,
     });
-    const tool = createLoadSkillTool(sandbox, skills);
+    const tool = createLoadSkillTool(sandbox, skills, []);
     const result = await tool.execute!({ name: "my-skill" }, {
       toolCallId: "test",
       messages: [],
@@ -281,13 +281,13 @@ description: Does something.
 
   test("tool has correct description", () => {
     const sandbox = createMockSandbox({});
-    const tool = createLoadSkillTool(sandbox, skills);
+    const tool = createLoadSkillTool(sandbox, skills, []);
     expect(tool.description).toContain("Load a skill");
   });
 
   test("tool has name in input schema", () => {
     const sandbox = createMockSandbox({});
-    const tool = createLoadSkillTool(sandbox, skills);
+    const tool = createLoadSkillTool(sandbox, skills, []);
     // The tool should accept a 'name' parameter
     expect(tool.inputSchema).toBeDefined();
   });

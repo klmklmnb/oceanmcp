@@ -5,6 +5,7 @@ import {
   type ExecuteToolRequest,
   type ToolResultResponse,
   type FunctionSchema,
+  type SkillSchema,
 } from "@ocean-mcp/shared";
 
 type PendingRequest = {
@@ -19,6 +20,7 @@ class ConnectionManager {
     ServerWebSocket<{ connectionId: string }>
   >();
   private toolSchemas = new Map<string, FunctionSchema[]>();
+  private skillSchemas = new Map<string, SkillSchema[]>();
   private pendingRequests = new Map<string, PendingRequest>();
 
   addConnection(id: string, ws: ServerWebSocket<{ connectionId: string }>) {
@@ -28,10 +30,15 @@ class ConnectionManager {
   removeConnection(id: string) {
     this.connections.delete(id);
     this.toolSchemas.delete(id);
+    this.skillSchemas.delete(id);
   }
 
   registerTools(connectionId: string, tools: FunctionSchema[]) {
     this.toolSchemas.set(connectionId, tools);
+  }
+
+  registerSkills(connectionId: string, skills: SkillSchema[]) {
+    this.skillSchemas.set(connectionId, skills);
   }
 
   /**
@@ -51,6 +58,23 @@ class ConnectionManager {
     return allTools;
   }
 
+  /**
+   * Get skill schemas registered by frontend clients.
+   * - When `connectionId` is provided, returns schemas only for that connection.
+   * - Otherwise returns schemas from all connected clients.
+   */
+  getSkillSchemas(connectionId?: string): SkillSchema[] {
+    if (connectionId) {
+      return this.skillSchemas.get(connectionId) ?? [];
+    }
+
+    const allSkills: SkillSchema[] = [];
+    for (const skills of this.skillSchemas.values()) {
+      allSkills.push(...skills);
+    }
+    return allSkills;
+  }
+
   hasConnection(connectionId: string): boolean {
     return this.connections.has(connectionId);
   }
@@ -60,6 +84,14 @@ class ConnectionManager {
     for (const [connId, tools] of this.toolSchemas.entries()) {
       if (tools.some((t) => t.id === functionId)) {
         return connId;
+      }
+    }
+    // Also check tools bundled inside frontend-registered skills
+    for (const [connId, skills] of this.skillSchemas.entries()) {
+      for (const skill of skills) {
+        if (skill.tools?.some((t) => t.id === functionId)) {
+          return connId;
+        }
       }
     }
     return undefined;
@@ -78,7 +110,17 @@ class ConnectionManager {
       }
 
       const preferredTools = this.toolSchemas.get(preferredConnectionId) ?? [];
-      if (!preferredTools.some((tool) => tool.id === functionId)) {
+      const preferredSkills =
+        this.skillSchemas.get(preferredConnectionId) ?? [];
+
+      const hasStandaloneTool = preferredTools.some(
+        (tool) => tool.id === functionId,
+      );
+      const hasSkillTool = preferredSkills.some((skill) =>
+        skill.tools?.some((tool) => tool.id === functionId),
+      );
+
+      if (!hasStandaloneTool && !hasSkillTool) {
         throw new Error(
           `Tool ${functionId} is not registered on connection ${preferredConnectionId}`,
         );

@@ -1,8 +1,10 @@
 import React from "react";
 import { createRoot } from "react-dom/client";
 import { ChatWidget } from "./components/ChatWidget";
-import { registry } from "./registry";
-import { mockFunctions } from "./registry/mockFunctions";
+import { functionRegistry, skillRegistry } from "./registry";
+import type { SkillDefinition } from "./registry";
+import { mockFunctions } from "./registry/mock/mockFunctions";
+import { devopsSkill } from "./registry/devops";
 import { wsClient } from "./runtime/ws-client";
 import {
   FUNCTION_TYPE,
@@ -13,7 +15,22 @@ import "./styles/index.css";
 
 // ─── Register pre-bundled mock functions ─────────────────────────────────────
 for (const fn of mockFunctions) {
-  registry.register(fn);
+    functionRegistry.register(fn);
+}
+
+// ─── Register pre-bundled skills ─────────────────────────────────────────────
+// Skills bundle both instructions (for the LLM) and tools (for browser-side
+// execution). The skill registry sends metadata to the server, while tools
+// are also added to the function registry for local execution.
+const preregisteredSkills: SkillDefinition[] = [devopsSkill];
+
+for (const skill of preregisteredSkills) {
+  skillRegistry.register(skill);
+  if (skill.tools) {
+    for (const tool of skill.tools) {
+      functionRegistry.register(tool);
+    }
+  }
 }
 
 // ─── Connect WebSocket to server ─────────────────────────────────────────────
@@ -54,7 +71,64 @@ function mountOceanMCP() {
 // ─── Expose Global SDK API ───────────────────────────────────────────────────
 const OceanMCPSDK = {
   /**
-   * Register a tool dynamically from the host application.
+   * Register a skill with bundled tools from the host application.
+   *
+   * The skill's metadata (name, description) is added to the system prompt
+   * catalog. Its full instructions are loaded on-demand via the `loadSkill`
+   * tool. Bundled tools are registered in both the tool registry (for
+   * browser-side execution) and sent to the server (for LLM access).
+   *
+   * @example
+   * ```ts
+   * OceanMCPSDK.registerSkill({
+   *   name: 'inventory-ops',
+   *   description: 'Manage product inventory.',
+   *   instructions: '# Inventory Ops\n\n...',
+   *   tools: [
+   *     { id: 'getStock', type: 'executor', operationType: 'read',
+   *       executor: async (args) => fetch(`/api/stock/${args.id}`).then(r => r.json()),
+   *       parameters: [{ name: 'id', type: 'string', required: true }] },
+   *   ],
+   * });
+   * ```
+   */
+  registerSkill(definition: SkillDefinition) {
+    skillRegistry.register(definition);
+
+    // Also register bundled tools into the function registry for browser-side execution
+    if (definition.tools) {
+      for (const tool of definition.tools) {
+        functionRegistry.register(tool);
+      }
+    }
+
+    // Sync capabilities to server
+    if (wsClient.isConnected) {
+      wsClient.registerCapabilities();
+    }
+
+    console.log(`[OceanMCP] Skill registered: ${definition.name}`);
+  },
+
+  /** Unregister a skill and its bundled tools by name */
+  unregisterSkill(name: string) {
+    const skill = skillRegistry.get(name);
+    if (skill?.tools) {
+      for (const tool of skill.tools) {
+        functionRegistry.unregister(tool.id);
+      }
+    }
+    skillRegistry.unregister(name);
+
+    if (wsClient.isConnected) {
+      wsClient.registerCapabilities();
+    }
+
+    console.log(`[OceanMCP] Skill unregistered: ${name}`);
+  },
+
+  /**
+   * Register a standalone tool dynamically from the host application.
    * Supports both 'code' and 'executor' type definitions.
    */
   registerTool(definition: Partial<FunctionDefinition> & { id: string }) {
@@ -67,11 +141,11 @@ const OceanMCPSDK = {
       ...definition,
     } as FunctionDefinition;
 
-    registry.register(fn);
+  functionRegistry.register(fn);
 
-    // Re-register tools with the server so it knows about the new tool
+    // Re-register capabilities with the server so it knows about the new tool
     if (wsClient.isConnected) {
-      wsClient.registerTools();
+      wsClient.registerCapabilities();
     }
 
     console.log(`[OceanMCP] Tool registered: ${fn.id}`);
@@ -79,22 +153,28 @@ const OceanMCPSDK = {
 
   /** Unregister a tool by ID */
   unregisterTool(id: string) {
-    registry.unregister(id);
+    functionRegistry.unregister(id);
     if (wsClient.isConnected) {
-      wsClient.registerTools();
+      wsClient.registerCapabilities();
     }
   },
 
   /** Get all registered tools */
   getTools() {
-    return registry.getAll();
+    return functionRegistry.getAll();
+  },
+
+  /** Get all registered skills */
+  getSkills() {
+    return skillRegistry.getAll();
   },
 
   /** Mount the chat widget (called automatically, can be re-called) */
   mount: mountOceanMCP,
 
   /** Registry and WebSocket client refs for advanced usage */
-  registry: registry as any,
+  functionRegistry: functionRegistry as any,
+  skillRegistry: skillRegistry as any,
   wsClient: wsClient as any,
 };
 

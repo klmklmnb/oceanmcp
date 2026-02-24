@@ -10,7 +10,7 @@ import {
 import { FlowNodeCard } from "./FlowNodeCard";
 import { ApprovalButtons } from "./ApprovalButtons";
 import { UserSelectCard } from "./UserSelectCard";
-import { registry } from "../registry";
+import { functionRegistry } from "../registry";
 
 type MessageRendererProps = {
   message: UIMessage;
@@ -211,7 +211,7 @@ export function MessageRenderer({
       // For loadSkill, show the skill name
       let displayName = toolName;
       if (toolName === "browserExecute" && input?.functionId) {
-        const fnDef = registry.get(input.functionId);
+        const fnDef = functionRegistry.get(input.functionId);
         displayName = fnDef?.name || input.functionId;
       } else if (toolName === "loadSkill" && input?.name) {
         displayName = `Load Skill: ${input.name}`;

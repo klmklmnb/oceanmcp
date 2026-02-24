@@ -1,6 +1,6 @@
 import React from "react";
 import { FLOW_STEP_STATUS, TOOL_PART_STATE } from "@ocean-mcp/shared";
-import { registry } from "../registry";
+import { functionRegistry } from "../registry";
 
 type FlowNodeCardProps = {
   steps: Array<{
@@ -159,7 +159,7 @@ export function FlowNodeCard({
                     {step.title}
                   </p>
                   {(() => {
-                    const fnDef = registry.get(step.functionId);
+                    const fnDef = functionRegistry.get(step.functionId);
                     if (fnDef?.showRender) {
                       return fnDef.showRender({
                         id: step.functionId,

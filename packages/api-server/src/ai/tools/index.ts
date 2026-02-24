@@ -145,16 +145,40 @@ export function createZodSchema(parameters: ParameterDefinition[]) {
 }
 
 /**
+ * Create a browser-proxy tool wrapper for a given tool schema.
+ * The tool's `execute` sends the call to the browser via WebSocket.
+ */
+function createBrowserProxyToolFromSchema(
+  schema: FunctionSchema,
+  connectionId?: string,
+): Tool<any, any> {
+  return tool({
+    description: schema.description,
+    inputSchema: createZodSchema(schema.parameters),
+    execute: async (args) => {
+      return connectionManager.executeBrowserTool(
+        schema.id,
+        args,
+        30_000,
+        connectionId,
+      );
+    },
+  });
+}
+
+/**
  * Merge all tools for a streamText call.
  * Combines server tools + browser proxy tools + dynamic tools from the frontend
- * registry + the loadSkill tool + any tools bundled by discovered skills.
+ * registry + the loadSkill tool + skill-bundled tools from both file-based and
+ * frontend-registered skills.
  *
  * Tool priority (collision avoidance — first defined wins):
  *   1. Built-in server tools (userSelect, etc.)
  *   2. Browser proxy tools (browserExecute, executePlan)
- *   3. loadSkill tool (when skills are discovered)
- *   4. Skill-bundled tools (from skills' tools.ts exports)
- *   5. Dynamic tools from frontend registry (via WebSocket)
+ *   3. loadSkill tool (when any skills exist)
+ *   4. File-based skill-bundled tools (from skills' tools.ts exports)
+ *   5. Frontend skill-bundled tools (from SkillSchema.tools)
+ *   6. Standalone dynamic tools from frontend registry (via WebSocket)
  */
 export function getMergedTools(
   dynamicToolSchemas?: FunctionSchema[],
@@ -167,21 +191,42 @@ export function getMergedTools(
   };
 
   // ── Skills integration ─────────────────────────────────────────────────
-  // Add the loadSkill tool and merge skill-bundled tools when skills exist.
-  const { sandbox, skills } = getSkillsContext();
+  const { sandbox, skills: fileSkills } = getSkillsContext();
+  const frontendSkillSchemas = connectionManager.getSkillSchemas(connectionId);
 
-  if (skills.length > 0) {
+  const hasAnySkills = fileSkills.length > 0 || frontendSkillSchemas.length > 0;
+
+  if (hasAnySkills) {
     // The loadSkill tool allows the LLM to load full skill instructions
-    // on-demand (progressive disclosure pattern).
-    tools.loadSkill = createLoadSkillTool(sandbox, skills);
+    // on-demand (progressive disclosure pattern). It resolves both
+    // file-based and frontend-registered skills.
+    tools.loadSkill = createLoadSkillTool(
+      sandbox,
+      fileSkills,
+      frontendSkillSchemas,
+    );
 
-    // Merge tools exported by skill directories (from tools.ts files).
+    // Merge tools exported by file-based skill directories (from tools.ts files).
     // Skip if the tool name already exists (collision avoidance).
-    for (const skill of skills) {
+    for (const skill of fileSkills) {
       if (!skill.tools) continue;
       for (const [name, skillTool] of Object.entries(skill.tools)) {
         if (tools[name]) continue; // Built-in tools take priority
         tools[name] = skillTool;
+      }
+    }
+
+    // Merge tools bundled inside frontend-registered skills.
+    // These are browser-proxy tools — executed via WebSocket, same as
+    // standalone dynamic tools.
+    for (const skillSchema of frontendSkillSchemas) {
+      if (!skillSchema.tools) continue;
+      for (const toolSchema of skillSchema.tools) {
+        if (tools[toolSchema.id]) continue; // Collision avoidance
+        tools[toolSchema.id] = createBrowserProxyToolFromSchema(
+          toolSchema,
+          connectionId,
+        );
       }
     }
   }
@@ -193,18 +238,10 @@ export function getMergedTools(
       // Skip if already defined (collision avoidance)
       if (tools[schema.id]) continue;
 
-      tools[schema.id] = tool({
-        description: schema.description,
-        inputSchema: createZodSchema(schema.parameters),
-        execute: async (args) => {
-          return connectionManager.executeBrowserTool(
-            schema.id,
-            args,
-            30_000,
-            connectionId,
-          );
-        },
-      });
+      tools[schema.id] = createBrowserProxyToolFromSchema(
+        schema,
+        connectionId,
+      );
     }
   }
 

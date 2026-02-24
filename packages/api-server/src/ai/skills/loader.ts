@@ -16,14 +16,30 @@
  *   3. The LLM then follows the loaded instructions, using existing tools
  *      (browserExecute, executePlan, etc.) to access bundled resources via
  *      the `skillDirectory` path returned by loadSkill.
+ *
+ * Skills can come from two sources:
+ *   - File-based: discovered from SKILL.md files on disk (DiscoveredSkill)
+ *   - Frontend-registered: sent by the browser SDK via WebSocket (SkillSchema)
+ *
+ * File-based skills take priority over frontend-registered ones with the
+ * same name, allowing server-side skills to override client-side ones.
  */
 
 import { tool } from "ai";
 import { z } from "zod";
-import type { Sandbox } from "@ocean-mcp/shared";
+import type { Sandbox, SkillSchema } from "@ocean-mcp/shared";
 import { stripFrontmatter, type DiscoveredSkill } from "./discover";
 
 // ─── System Prompt Builder ───────────────────────────────────────────────────
+
+/**
+ * Minimal skill info needed for the system prompt catalog.
+ * Both DiscoveredSkill and SkillSchema satisfy this shape.
+ */
+interface SkillCatalogEntry {
+  name: string;
+  description: string;
+}
 
 /**
  * Build the skills catalog section to append to the system prompt.
@@ -36,10 +52,10 @@ import { stripFrontmatter, type DiscoveredSkill } from "./discover";
  *   2. Knows *how* to activate them (call `loadSkill`)
  *   3. Doesn't waste context on full instructions until needed
  *
- * @param skills - Discovered skill metadata from startup
+ * @param skills - Skill catalog entries from any source (file-based or frontend)
  * @returns Markdown section for the system prompt, or empty string
  */
-export function buildSkillsPrompt(skills: DiscoveredSkill[]): string {
+export function buildSkillsPrompt(skills: SkillCatalogEntry[]): string {
   if (skills.length === 0) return "";
 
   const skillsList = skills
@@ -63,27 +79,27 @@ ${skillsList}
  *
  * When called, this tool:
  *   1. Looks up the skill by name (case-insensitive)
- *   2. Reads the full SKILL.md from the sandbox
- *   3. Strips the YAML frontmatter
- *   4. Returns the instruction body + the skill directory path
+ *   2. For file-based skills: reads the full SKILL.md from the sandbox,
+ *      strips YAML frontmatter, returns instructions + skillDirectory
+ *   3. For frontend-registered skills: returns the in-memory instructions
+ *      directly (no skillDirectory — they don't live on the filesystem)
  *
- * The `skillDirectory` in the response is important: it allows the LLM to
- * construct full paths to bundled resources. For example, if a skill's
- * instructions say "read the template at templates/config.json", the LLM
- * can use `${skillDirectory}/templates/config.json` with the readFile tool.
+ * Resolution priority:
+ *   1. File-based DiscoveredSkill (from disk) — highest priority
+ *   2. Frontend-registered SkillSchema (from WebSocket) — fallback
  *
- * Error handling:
- *   - Unknown skill name → returns error with list of available skills
- *     (helps the LLM self-correct)
- *   - Sandbox read failure → returns error with the underlying message
+ * This ensures server-side skills can override client-side ones with the
+ * same name, which is useful for testing or gradual migration.
  *
  * @param sandbox - Filesystem abstraction for reading skill files
- * @param skills - Discovered skill metadata from startup
+ * @param fileSkills - File-based skills discovered at startup
+ * @param frontendSkills - Frontend-registered skills from the current connection
  * @returns A Vercel AI SDK Tool instance
  */
 export function createLoadSkillTool(
   sandbox: Sandbox,
-  skills: DiscoveredSkill[],
+  fileSkills: DiscoveredSkill[],
+  frontendSkills: SkillSchema[],
 ) {
   return tool({
     description:
@@ -95,39 +111,56 @@ export function createLoadSkillTool(
         .describe("The name of the skill to load (case-insensitive match)"),
     }),
     execute: async ({ name }) => {
-      // ── Look up skill by name (case-insensitive) ─────────────────────
-      const skill = skills.find(
+      // ── 1. Look up file-based skill (highest priority) ───────────────
+      const fileSkill = fileSkills.find(
         (s) => s.name.toLowerCase() === name.toLowerCase(),
       );
 
-      if (!skill) {
-        const available = skills.map((s) => s.name).join(", ");
+      if (fileSkill) {
+        try {
+          const content = await sandbox.readFile(
+            `${fileSkill.path}/SKILL.md`,
+            "utf-8",
+          );
+          const body = stripFrontmatter(content);
+
+          return {
+            /** Absolute path to the skill directory for resource access */
+            skillDirectory: fileSkill.path,
+            /** Full skill instructions (SKILL.md body without frontmatter) */
+            content: body,
+          };
+        } catch (err) {
+          return {
+            error: `Failed to load skill '${name}': ${
+              err instanceof Error ? err.message : String(err)
+            }`,
+          };
+        }
+      }
+
+      // ── 2. Look up frontend-registered skill (fallback) ──────────────
+      const frontendSkill = frontendSkills.find(
+        (s) => s.name.toLowerCase() === name.toLowerCase(),
+      );
+
+      if (frontendSkill) {
         return {
-          error: `Skill '${name}' not found. Available skills: ${available || "none"}`,
+          /** Full skill instructions from the frontend registration */
+          content: frontendSkill.instructions,
+          // No skillDirectory — frontend skills don't have filesystem paths
         };
       }
 
-      // ── Read and return the full SKILL.md body ──────────────────────
-      try {
-        const content = await sandbox.readFile(
-          `${skill.path}/SKILL.md`,
-          "utf-8",
-        );
-        const body = stripFrontmatter(content);
-
-        return {
-          /** Absolute path to the skill directory for resource access */
-          skillDirectory: skill.path,
-          /** Full skill instructions (SKILL.md body without frontmatter) */
-          content: body,
-        };
-      } catch (err) {
-        return {
-          error: `Failed to load skill '${name}': ${
-            err instanceof Error ? err.message : String(err)
-          }`,
-        };
-      }
+      // ── 3. Skill not found ───────────────────────────────────────────
+      const allNames = [
+        ...fileSkills.map((s) => s.name),
+        ...frontendSkills.map((s) => s.name),
+      ];
+      const available = allNames.join(", ");
+      return {
+        error: `Skill '${name}' not found. Available skills: ${available || "none"}`,
+      };
     },
   });
 }

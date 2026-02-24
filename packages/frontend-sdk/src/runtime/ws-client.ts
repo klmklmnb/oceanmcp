@@ -4,7 +4,7 @@ import {
   parseWSMessage,
   type ExecuteToolRequest,
 } from "@ocean-mcp/shared";
-import { registry } from "../registry";
+import { functionRegistry, skillRegistry } from "../registry";
 import { executeFunction } from "./executor";
 
 /**
@@ -41,8 +41,8 @@ class WSClient {
         console.log("[OceanMCP] WebSocket connected");
         this.reconnectDelay = 1_000; // Reset on successful connection
         this.startPing();
-        // Register all current tool schemas with the server
-        this.registerTools();
+        // Register all current tool schemas and skill schemas with the server
+        this.registerCapabilities();
       };
 
       this.ws.onmessage = async (event) => {
@@ -50,7 +50,7 @@ class WSClient {
           const msg = parseWSMessage(event.data);
 
           switch (msg.type) {
-            case WSMessageType.TOOLS_REGISTERED:
+            case WSMessageType.CAPABILITIES_REGISTERED:
               this.connectionId = msg.payload.connectionId;
               break;
 
@@ -97,17 +97,20 @@ class WSClient {
     }
   }
 
-  /** Send current tool schemas to the server */
-  registerTools(): void {
+  /** Send current tool schemas and skill schemas to the server */
+  registerCapabilities(): void {
     if (!this.ws || this.ws.readyState !== WebSocket.OPEN) return;
 
-    const schemas = registry.getAllSchemas();
+    const tools = functionRegistry.getAllSchemas();
+    const skills = skillRegistry.getAllSchemas();
+
     this.ws.send(
       createWSMessage({
-        type: WSMessageType.REGISTER_TOOLS,
+        type: WSMessageType.REGISTER_CAPABILITIES,
         payload: {
           connectionId: this.connectionId || "",
-          tools: schemas,
+          tools,
+          skills,
         },
       }),
     );

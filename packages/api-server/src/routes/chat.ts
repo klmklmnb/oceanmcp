@@ -133,7 +133,7 @@ export async function handleChatRequest(req: Request): Promise<Response> {
 
     const result = streamText({
       model: getLanguageModel(modelId),
-      system: getSystemPrompt(),
+      system: getSystemPrompt(connectionId),
       messages: modelMessages,
       tools: mergedTools,
       stopWhen: stepCountIs(10),
