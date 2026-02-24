@@ -20,7 +20,7 @@ await initSkills();
 
 const server = Bun.serve<{ connectionId: string }>({
   port: PORT,
-  idleTimeout: 300, // 300 seconds
+  idleTimeout: 255,
 
   async fetch(req, server) {
     const url = new URL(req.url);
