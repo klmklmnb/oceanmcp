@@ -194,7 +194,7 @@ export function FlowNodeCard({
                       <div className="text-xs text-text-tertiary mt-0.5 font-mono">
                         <span>{step.functionId}(</span>
                         {Object.entries(step.arguments || {}).length > 0 && (
-                          <div className="pl-4">
+                          <div className="pl-4 overflow-x-auto">
                             {Object.entries(step.arguments || {}).map(
                               ([key, value], idx, arr) => (
                                 <div key={key}>
