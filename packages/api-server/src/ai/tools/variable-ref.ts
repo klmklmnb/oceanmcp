@@ -1,29 +1,127 @@
 /**
  * Pattern matching variable references with optional property paths:
- *   $0, $1, $0.id, $0.data.name, $0[0], $0.items[0].name
+ *   $0, $1, $0.id, $0.data.name, $0[0], $0.items[0].name,
+ *   $0.find(name=="test"), $0.find(name=="test").id,
+ *   $0.items.find(status=="active").config.region
  *
  * Captures:
  *   Group 1: step index (digits)
- *   Group 2: property path (optional, e.g. ".id", ".data.name", "[0].name")
+ *   Group 2: property path (optional, e.g. ".id", ".data.name", "[0].name", ".find(...).id")
+ *
+ * Path segments:
+ *   - .identifier     — dot property access
+ *   - [digits]        — array index access
+ *   - .find(pred)     — array query: find first element matching predicate
  */
-const VARIABLE_REF_PATTERN = /\$(\d+)((?:\.[a-zA-Z_]\w*|\[\d+\])*)/;
-const VARIABLE_REF_PATTERN_GLOBAL = /\$(\d+)((?:\.[a-zA-Z_]\w*|\[\d+\])*)/g;
+const PATH_SEGMENT =
+  /(?:\.find\([^)]+\)|\.[a-zA-Z_]\w*|\[\d+\])/;
+const VARIABLE_REF_PATTERN = new RegExp(
+  `\\$(\\d+)(${PATH_SEGMENT.source}*)`,
+);
+const VARIABLE_REF_PATTERN_GLOBAL = new RegExp(
+  `\\$(\\d+)(${PATH_SEGMENT.source}*)`,
+  "g",
+);
 
 /**
- * Resolve a property path (e.g. ".id", ".data.name", "[0].name") against a value.
+ * Parse a find() predicate string like `name=="test"` or `count==3` into its
+ * constituent parts: field name, operator, and comparison value.
+ *
+ * Supported operators: == (equals), != (not equals)
+ * Supported value literals:
+ *   - Quoted strings: "hello", "my-cluster"
+ *   - Numbers: 3, 42.5, -1
+ *   - Booleans: true, false
+ *   - Null: null
+ */
+function parseFindPredicate(predicate: string): {
+  field: string;
+  operator: "==" | "!=";
+  value: string | number | boolean | null;
+} {
+  // Match: <identifier> <operator> <value>
+  const match = predicate.match(
+    /^([a-zA-Z_]\w*)\s*(==|!=)\s*(.+)$/,
+  );
+  if (!match) {
+    throw new Error(
+      `Invalid find() predicate: "${predicate}". Expected format: field==value or field!=value`,
+    );
+  }
+
+  const field = match[1];
+  const operator = match[2] as "==" | "!=";
+  const rawValue = match[3].trim();
+
+  let value: string | number | boolean | null;
+
+  // Quoted string: "..."
+  if (rawValue.startsWith('"') && rawValue.endsWith('"')) {
+    value = rawValue.slice(1, -1);
+  }
+  // Boolean
+  else if (rawValue === "true") {
+    value = true;
+  } else if (rawValue === "false") {
+    value = false;
+  }
+  // Null
+  else if (rawValue === "null") {
+    value = null;
+  }
+  // Number
+  else if (!Number.isNaN(Number(rawValue))) {
+    value = Number(rawValue);
+  }
+  // Fallback: treat as unquoted string
+  else {
+    value = rawValue;
+  }
+
+  return { field, operator, value };
+}
+
+/**
+ * Check whether a single item matches a find() predicate.
+ */
+function matchesPredicate(
+  item: any,
+  predicate: { field: string; operator: "==" | "!="; value: string | number | boolean | null },
+): boolean {
+  if (item == null || typeof item !== "object") return false;
+  const actual = item[predicate.field];
+  if (predicate.operator === "==") {
+    return actual === predicate.value;
+  }
+  // !=
+  return actual !== predicate.value;
+}
+
+/**
+ * Resolve a property path (e.g. ".id", ".data.name", "[0].name",
+ * ".find(name==\"test\").id") against a value.
  * Returns undefined if traversal fails at any point.
  */
 function resolvePath(root: unknown, path: string): unknown {
   if (!path) return root;
 
   let current: any = root;
-  // Tokenize: split ".foo" and "[0]" segments
-  const segments = path.match(/\.[a-zA-Z_]\w*|\[\d+\]/g);
+  // Tokenize: split ".foo", "[0]", and ".find(...)" segments
+  const segments = path.match(
+    /\.find\([^)]+\)|\.[a-zA-Z_]\w*|\[\d+\]/g,
+  );
   if (!segments) return root;
 
   for (const segment of segments) {
     if (current == null) return undefined;
-    if (segment.startsWith("[")) {
+
+    if (segment.startsWith(".find(")) {
+      // Extract predicate from ".find(<predicate>)"
+      const predicateStr = segment.slice(6, -1); // strip ".find(" and ")"
+      if (!Array.isArray(current)) return undefined;
+      const predicate = parseFindPredicate(predicateStr);
+      current = current.find((item: any) => matchesPredicate(item, predicate));
+    } else if (segment.startsWith("[")) {
       // Array index: "[0]"
       const idx = Number(segment.slice(1, -1));
       current = current[idx];
@@ -64,6 +162,12 @@ export function containsVariableRef(value: unknown): boolean {
  *   - "$0.data.name" → nested property access
  *   - "$0[0]"        → array index access
  *   - "$0[0].name"   → mixed access
+ *   - "$0.find(name==\"test\")"        → find first element in array where name == "test"
+ *   - "$0.find(name==\"test\").id"     → find + property access
+ *   - "$0.items.find(status==\"active\").config" → nested array find + deep access
+ *
+ * Find predicate operators: == (equals), != (not equals)
+ * Find predicate value literals: "string", number, true, false, null
  *
  * When the entire string is a single reference (exact match), the resolved
  * value preserves its original type (object, array, number, etc.).

@@ -153,6 +153,48 @@ describe("containsVariableRef", () => {
       expect(containsVariableRef("hello")).toBe(false);
     });
   });
+
+  describe("find() query detection", () => {
+    test("detects $0.find(name==\"test\")", () => {
+      expect(containsVariableRef('$0.find(name=="test")')).toBe(true);
+    });
+
+    test("detects $0.find(name==\"test\").id", () => {
+      expect(containsVariableRef('$0.find(name=="test").id')).toBe(true);
+    });
+
+    test("detects $0.items.find(id==\"abc\")", () => {
+      expect(containsVariableRef('$0.items.find(id=="abc")')).toBe(true);
+    });
+
+    test("detects embedded find() ref in string", () => {
+      expect(containsVariableRef('prefix-$0.find(name=="test").id')).toBe(true);
+    });
+
+    test("detects find() with numeric predicate", () => {
+      expect(containsVariableRef("$0.find(count==3)")).toBe(true);
+    });
+
+    test("detects find() with boolean predicate", () => {
+      expect(containsVariableRef("$0.find(enabled==true)")).toBe(true);
+    });
+
+    test("detects find() with != operator", () => {
+      expect(containsVariableRef('$0.find(name!="skip")')).toBe(true);
+    });
+
+    test("detects find() in object value", () => {
+      expect(
+        containsVariableRef({ target: '$0.find(name=="test").id' }),
+      ).toBe(true);
+    });
+
+    test("detects find() in array element", () => {
+      expect(
+        containsVariableRef(['$0.find(name=="test").id', "literal"]),
+      ).toBe(true);
+    });
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -654,6 +696,447 @@ describe("resolveVariableRefs", () => {
         zone: "az-1",
         label: "resource-res-001",
       });
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  // find() query — exact match (type-preserving)
+  // -------------------------------------------------------------------------
+  describe("find() query (exact match, type-preserving)", () => {
+    test('resolves $0.find(name=="test") — returns matched object', () => {
+      const results = new Map<number, any>([
+        [0, [
+          { name: "alpha", id: "a1" },
+          { name: "test", id: "t1" },
+          { name: "beta", id: "b1" },
+        ]],
+      ]);
+      expect(resolveVariableRefs('$0.find(name=="test")', results)).toEqual({
+        name: "test",
+        id: "t1",
+      });
+    });
+
+    test('resolves $0.find(name=="test").id — property access after find', () => {
+      const results = new Map<number, any>([
+        [0, [
+          { name: "alpha", id: "a1" },
+          { name: "test", id: "t1" },
+        ]],
+      ]);
+      expect(resolveVariableRefs('$0.find(name=="test").id', results)).toBe("t1");
+    });
+
+    test('resolves $0.find(id=="abc").config.region — deep access after find', () => {
+      const results = new Map<number, any>([
+        [0, [
+          { id: "abc", config: { region: "us-east", tier: "premium" } },
+          { id: "def", config: { region: "eu-west", tier: "basic" } },
+        ]],
+      ]);
+      expect(
+        resolveVariableRefs('$0.find(id=="abc").config.region', results),
+      ).toBe("us-east");
+    });
+
+    test('resolves $0.items.find(status=="active") — find in nested array', () => {
+      const results = new Map<number, any>([
+        [0, {
+          items: [
+            { status: "inactive", name: "old" },
+            { status: "active", name: "current" },
+          ],
+        }],
+      ]);
+      expect(
+        resolveVariableRefs('$0.items.find(status=="active")', results),
+      ).toEqual({ status: "active", name: "current" });
+    });
+
+    test('resolves $0.items.find(status=="active").name — nested array + property', () => {
+      const results = new Map<number, any>([
+        [0, {
+          items: [
+            { status: "inactive", name: "old" },
+            { status: "active", name: "current" },
+          ],
+        }],
+      ]);
+      expect(
+        resolveVariableRefs('$0.items.find(status=="active").name', results),
+      ).toBe("current");
+    });
+
+    test("resolves $0.find(count==3) — numeric predicate", () => {
+      const results = new Map<number, any>([
+        [0, [
+          { count: 1, label: "one" },
+          { count: 3, label: "three" },
+          { count: 5, label: "five" },
+        ]],
+      ]);
+      expect(resolveVariableRefs("$0.find(count==3)", results)).toEqual({
+        count: 3,
+        label: "three",
+      });
+    });
+
+    test("resolves $0.find(count==3).label — numeric predicate + property", () => {
+      const results = new Map<number, any>([
+        [0, [
+          { count: 1, label: "one" },
+          { count: 3, label: "three" },
+        ]],
+      ]);
+      expect(resolveVariableRefs("$0.find(count==3).label", results)).toBe(
+        "three",
+      );
+    });
+
+    test("resolves $0.find(enabled==true) — boolean predicate", () => {
+      const results = new Map<number, any>([
+        [0, [
+          { enabled: false, name: "disabled" },
+          { enabled: true, name: "enabled" },
+        ]],
+      ]);
+      expect(resolveVariableRefs("$0.find(enabled==true)", results)).toEqual({
+        enabled: true,
+        name: "enabled",
+      });
+    });
+
+    test("resolves $0.find(enabled==false) — false boolean predicate", () => {
+      const results = new Map<number, any>([
+        [0, [
+          { enabled: true, name: "on" },
+          { enabled: false, name: "off" },
+        ]],
+      ]);
+      expect(resolveVariableRefs("$0.find(enabled==false)", results)).toEqual({
+        enabled: false,
+        name: "off",
+      });
+    });
+
+    test("resolves $0.find(value==null) — null predicate", () => {
+      const results = new Map<number, any>([
+        [0, [
+          { value: "something", label: "has-value" },
+          { value: null, label: "null-value" },
+        ]],
+      ]);
+      expect(resolveVariableRefs("$0.find(value==null)", results)).toEqual({
+        value: null,
+        label: "null-value",
+      });
+    });
+
+    test('resolves $0.find(name!="skip") — not-equal operator', () => {
+      const results = new Map<number, any>([
+        [0, [
+          { name: "skip", id: "s1" },
+          { name: "keep", id: "k1" },
+          { name: "also-keep", id: "k2" },
+        ]],
+      ]);
+      // Should return the first non-matching element
+      expect(resolveVariableRefs('$0.find(name!="skip")', results)).toEqual({
+        name: "keep",
+        id: "k1",
+      });
+    });
+
+    test('resolves $0.find(name!="skip").id — not-equal + property', () => {
+      const results = new Map<number, any>([
+        [0, [
+          { name: "skip", id: "s1" },
+          { name: "keep", id: "k1" },
+        ]],
+      ]);
+      expect(resolveVariableRefs('$0.find(name!="skip").id', results)).toBe("k1");
+    });
+
+    test("returns undefined when no element matches find()", () => {
+      const results = new Map<number, any>([
+        [0, [
+          { name: "alpha", id: "a1" },
+          { name: "beta", id: "b1" },
+        ]],
+      ]);
+      expect(
+        resolveVariableRefs('$0.find(name=="nonexistent")', results),
+      ).toBe(undefined);
+    });
+
+    test("returns undefined when find() is called on a non-array", () => {
+      const results = new Map<number, any>([
+        [0, { name: "not-an-array" }],
+      ]);
+      expect(
+        resolveVariableRefs('$0.find(name=="test")', results),
+      ).toBe(undefined);
+    });
+
+    test("returns undefined when find() matches but subsequent property missing", () => {
+      const results = new Map<number, any>([
+        [0, [{ name: "test", id: "t1" }]],
+      ]);
+      expect(
+        resolveVariableRefs('$0.find(name=="test").nonExistent', results),
+      ).toBe(undefined);
+    });
+
+    test("returns first match when multiple elements match find()", () => {
+      const results = new Map<number, any>([
+        [0, [
+          { status: "active", name: "first" },
+          { status: "active", name: "second" },
+          { status: "inactive", name: "third" },
+        ]],
+      ]);
+      expect(
+        resolveVariableRefs('$0.find(status=="active").name', results),
+      ).toBe("first");
+    });
+
+    test("chained find() across nested arrays", () => {
+      const results = new Map<number, any>([
+        [0, {
+          groups: [
+            {
+              name: "viewers",
+              members: [
+                { role: "viewer", email: "v@test.com" },
+              ],
+            },
+            {
+              name: "admins",
+              members: [
+                { role: "editor", email: "e@test.com" },
+                { role: "owner", email: "o@test.com" },
+              ],
+            },
+          ],
+        }],
+      ]);
+      expect(
+        resolveVariableRefs(
+          '$0.groups.find(name=="admins").members.find(role=="owner").email',
+          results,
+        ),
+      ).toBe("o@test.com");
+    });
+
+    test("find() with step index other than 0", () => {
+      const results = new Map<number, any>([
+        [0, "step-zero-result"],
+        [2, [
+          { env: "staging", url: "https://staging.example.com" },
+          { env: "prod", url: "https://prod.example.com" },
+        ]],
+      ]);
+      expect(
+        resolveVariableRefs('$2.find(env=="prod").url', results),
+      ).toBe("https://prod.example.com");
+    });
+
+    test("find() combined with array index access", () => {
+      const results = new Map<number, any>([
+        [0, {
+          clusters: [
+            { name: "dev", nodes: ["node-d1", "node-d2"] },
+            { name: "prod", nodes: ["node-p1", "node-p2", "node-p3"] },
+          ],
+        }],
+      ]);
+      expect(
+        resolveVariableRefs('$0.clusters.find(name=="prod").nodes[2]', results),
+      ).toBe("node-p3");
+    });
+
+    test("find() with float numeric predicate", () => {
+      const results = new Map<number, any>([
+        [0, [
+          { score: 1.5, label: "low" },
+          { score: 42.5, label: "high" },
+        ]],
+      ]);
+      expect(
+        resolveVariableRefs("$0.find(score==42.5).label", results),
+      ).toBe("high");
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  // find() query — embedded in string
+  // -------------------------------------------------------------------------
+  describe("find() query (embedded in string)", () => {
+    test('resolves embedded $0.find(name=="test").id in string', () => {
+      const results = new Map<number, any>([
+        [0, [
+          { name: "test", id: "t1" },
+          { name: "other", id: "o1" },
+        ]],
+      ]);
+      expect(
+        resolveVariableRefs('user=$0.find(name=="test").id', results),
+      ).toBe("user=t1");
+    });
+
+    test("resolves multiple embedded refs with find()", () => {
+      const results = new Map<number, any>([
+        [0, [
+          { name: "a", id: "id-a" },
+          { name: "b", id: "id-b" },
+        ]],
+        [1, [
+          { name: "x", id: "id-x" },
+          { name: "y", id: "id-y" },
+        ]],
+      ]);
+      expect(
+        resolveVariableRefs(
+          '$0.find(name=="a").id-$1.find(name=="y").id',
+          results,
+        ),
+      ).toBe("id-a-id-y");
+    });
+
+    test("resolves embedded find() with object result (JSON stringified)", () => {
+      const results = new Map<number, any>([
+        [0, [
+          { name: "target", config: { a: 1, b: 2 } },
+        ]],
+      ]);
+      expect(
+        resolveVariableRefs('cfg=$0.find(name=="target").config', results),
+      ).toBe('cfg={"a":1,"b":2}');
+    });
+
+    test("embedded find() mixed with regular path refs", () => {
+      const results = new Map<number, any>([
+        [0, { id: "proj-1" }],
+        [1, [
+          { env: "prod", region: "us-east" },
+          { env: "staging", region: "eu-west" },
+        ]],
+      ]);
+      expect(
+        resolveVariableRefs(
+          '$0.id/$1.find(env=="prod").region',
+          results,
+        ),
+      ).toBe("proj-1/us-east");
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  // find() query — in nested structures
+  // -------------------------------------------------------------------------
+  describe("find() query (in nested structures)", () => {
+    test("resolves find() ref inside an object argument", () => {
+      const results = new Map<number, any>([
+        [0, [
+          { name: "my-cluster", id: "cls-123", region: "us-east" },
+          { name: "other", id: "cls-456", region: "eu-west" },
+        ]],
+      ]);
+      const input = {
+        clusterId: '$0.find(name=="my-cluster").id',
+        region: '$0.find(name=="my-cluster").region',
+        static: "unchanged",
+      };
+      expect(resolveVariableRefs(input, results)).toEqual({
+        clusterId: "cls-123",
+        region: "us-east",
+        static: "unchanged",
+      });
+    });
+
+    test("resolves find() ref inside an array", () => {
+      const results = new Map<number, any>([
+        [0, [
+          { name: "test", id: "t1" },
+          { name: "other", id: "o1" },
+        ]],
+      ]);
+      expect(
+        resolveVariableRefs(['$0.find(name=="test").id', "literal"], results),
+      ).toEqual(["t1", "literal"]);
+    });
+
+    test("realistic plan: step returns list, next step uses find() to pick one", () => {
+      // Step 0: list clusters returns an array
+      // Step 1: create node uses find() to select a cluster by name
+      const results = new Map<number, any>([
+        [0, [
+          { id: "cls-001", name: "dev-cluster", region: "us-west", status: "active" },
+          { id: "cls-002", name: "prod-cluster", region: "us-east", status: "active" },
+          { id: "cls-003", name: "staging-cluster", region: "eu-west", status: "inactive" },
+        ]],
+      ]);
+      const input = {
+        clusterId: '$0.find(name=="prod-cluster").id',
+        region: '$0.find(name=="prod-cluster").region',
+        label: 'node-in-$0.find(name=="prod-cluster").id',
+      };
+      expect(resolveVariableRefs(input, results)).toEqual({
+        clusterId: "cls-002",
+        region: "us-east",
+        label: "node-in-cls-002",
+      });
+    });
+
+    test("realistic plan: multi-step chain with find()", () => {
+      // Step 0: list environments
+      // Step 1: list services in selected env
+      // Step 2 args: uses both find() queries
+      const results = new Map<number, any>([
+        [0, [
+          { name: "production", id: "env-prod" },
+          { name: "staging", id: "env-stg" },
+        ]],
+        [1, [
+          { name: "api-gateway", id: "svc-gw", port: 8080 },
+          { name: "auth-service", id: "svc-auth", port: 9090 },
+        ]],
+      ]);
+      const input = {
+        envId: '$0.find(name=="production").id',
+        serviceId: '$1.find(name=="auth-service").id',
+        port: '$1.find(name=="auth-service").port',
+        display: '$0.find(name=="production").id/$1.find(name=="auth-service").id',
+      };
+      expect(resolveVariableRefs(input, results)).toEqual({
+        envId: "env-prod",
+        serviceId: "svc-auth",
+        port: 9090,
+        display: "env-prod/svc-auth",
+      });
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  // find() query — error handling
+  // -------------------------------------------------------------------------
+  describe("find() query (error handling)", () => {
+    test("throws when find() ref references non-existent step", () => {
+      const results = new Map<number, any>();
+      expect(() =>
+        resolveVariableRefs('$0.find(name=="test")', results),
+      ).toThrow(
+        "Variable reference $0 cannot be resolved: step 0 has no result.",
+      );
+    });
+
+    test("throws for invalid predicate format in find()", () => {
+      const results = new Map<number, any>([
+        [0, [{ name: "test" }]],
+      ]);
+      expect(() =>
+        resolveVariableRefs("$0.find(!!!)", results),
+      ).toThrow('Invalid find() predicate');
     });
   });
 });

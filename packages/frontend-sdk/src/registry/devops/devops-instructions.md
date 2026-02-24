@@ -15,6 +15,8 @@ Assists with frontend-static deployment operations on the Trinity platform (Miho
 ```
 listAppClusters -> resolve cluster_id
        |
+( if not found -> createCluster )
+       |
 getDeployGroups -> resolve group_id
        |
 getDeployGroupArchives -> resolve archive_id
@@ -32,12 +34,19 @@ waitForWorkOrderStatusChange(workflow_id) -> report result
 
 ## Environment Mapping
 
-| User intent | `env` value | `cluster_tag` |
-|-------------|-------------|---------------|
-| test, testing | `testing` | `""` |
+Use this mapping to determine `env` and `cluster_tag` from user intent or group name.
+
+| User intent / Group name | `env` value | `cluster_tag` |
+|--------------------------|-------------|---------------|
+| test, test2, testing, any name containing "test" (case-insensitive) | `testing` | `""` |
 | uat | `testing` | `"uat"` |
 | pp, pre, pre-release | `pre` | `""` |
 | prod, production, online | `prod` | `""` |
+
+**When to use this mapping:**
+
+- If the user explicitly specifies an `env` parameter, use that value directly.
+- If no cluster exists for the target environment (Step 1), infer `env` from the deploy group name using the table above.
 
 ## Critical Rules
 
@@ -56,14 +65,14 @@ Complete reference for deploying frontend-static deploy groups via the Trinity A
 
 ## Key Concepts
 
-| Concept                   | Description                                                                                                                                                                                     |
-| ------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **Platform**              | A deployment target configuration (e.g. Mihoyo, LML) with its own `biz_id`, `app_id`, `deploy_app_id`, API prefix.                                                                              |
-| **Cluster**               | An infrastructure grouping bound to an environment. Each env (testing/pre/prod) has one or more clusters. The `cluster_tag` field distinguishes sub-environments (e.g. `"uat"` within testing). |
-| **Deploy Group**          | A named frontend-static resource group within a cluster. Holds OSS bucket config, domain, public_path, cache settings, and optional dynamic_render_html.                                        |
-| **Archive**               | A versioned build artifact (bundle) that can be deployed to a group.                                                                                                                            |
-| **Work Order (Workflow)** | A deploy request entity that goes through pre-check, creation, execution, and completion.                                                                                                       |
-| **Review Stream**         | An approval flow required for production deployments. Must be resolved before creating a prod work order.                                                                                       |
+| Concept | Description |
+| ------- | ----------- |
+| **Platform** | A deployment target configuration (e.g. Mihoyo, LML) with its own `biz_id`, `app_id`, `deploy_app_id`, API prefix. |
+| **Cluster** | An infrastructure grouping bound to an environment. Each env (testing/pre/prod) has one or more clusters. The `cluster_tag` field distinguishes sub-environments (e.g. `"uat"` within testing). |
+| **Deploy Group** | A named frontend-static resource group within a cluster. Holds OSS bucket config, domain, public_path, cache settings, and optional dynamic_render_html. |
+| **Archive** | A versioned build artifact (bundle) that can be deployed to a group. |
+| **Work Order (Workflow)** | A deploy request entity that goes through pre-check, creation, execution, and completion. |
+| **Review Stream** | An approval flow required for production deployments. Must be resolved before creating a prod work order. |
 
 ## Standard Deploy Flow
 
@@ -76,6 +85,15 @@ Follow these steps **in order**. Each step corresponds to a registered function.
 Fetch all available clusters for the app. From the result, identify the cluster matching the user's target environment by checking the `env` field. Within the `testing` env, differentiate test vs. uat clusters using the `cluster_tag` field (empty string = test, `"uat"` = uat).
 
 Extract `cluster_id` for use in subsequent steps.
+
+### Step 1.5 — Create Cluster if Not Found (Conditional)
+
+**Function:** `createCluster{Platform}`
+**Params:** `env`, `cluster_tag` (optional)
+
+If Step 1 did not return a matching cluster for the target environment, you **must create the cluster first** before proceeding. Use the [Environment Mapping](#environment-mapping) section to determine the correct `env` and `cluster_tag` values based on the deploy group name or user intent.
+
+After creating the cluster, extract the new `cluster_id` from the response and use it in subsequent steps.
 
 ### Step 2 — Get Deploy Groups
 
@@ -157,16 +175,16 @@ Only create a new group if **no group with the same name exists** in the target 
 
 The OSS bucket is auto-determined based on `cluster_env`, `cluster_tag`, and `bucket_tag`:
 
-| env     | cluster_tag | bucket_tag       | oss_upload_bucket      |
-| ------- | ----------- | ---------------- | ---------------------- |
-| testing | (empty)     | intranet         | ee-infra-seed-ydy-test |
-| testing | (empty)     | external_network | ee-infra-seed-test     |
-| testing | uat         | intranet         | ee-infra-seed-ydy-uat  |
-| testing | uat         | external_network | ee-infra-seed-uat      |
-| pre     | —           | intranet         | ee-infra-seed-ydy-pp   |
-| pre     | —           | external_network | ee-infra-seed-pp       |
-| prod    | —           | intranet         | ee-infra-seed-ydy-prod |
-| prod    | —           | external_network | ee-infra-seed-prod     |
+| env | cluster_tag | bucket_tag | oss_upload_bucket |
+| --- | ----------- | ---------- | ----------------- |
+| testing | (empty) | intranet | ee-infra-seed-ydy-test |
+| testing | (empty) | external_network | ee-infra-seed-test |
+| testing | uat | intranet | ee-infra-seed-ydy-uat |
+| testing | uat | external_network | ee-infra-seed-uat |
+| pre | — | intranet | ee-infra-seed-ydy-pp |
+| pre | — | external_network | ee-infra-seed-pp |
+| prod | — | intranet | ee-infra-seed-ydy-prod |
+| prod | — | external_network | ee-infra-seed-prod |
 
 ### Creating a New Cluster
 
