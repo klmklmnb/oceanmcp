@@ -10,6 +10,7 @@
   },
   "dependencies": {
     "@ai-sdk/react": "3.0.39",
+    "@monaco-editor/react": "^4.7.0",
     "@ocean-mcp/shared": "workspace:*",
     "ai": "6.0.37",
     "react": "19.0.1",

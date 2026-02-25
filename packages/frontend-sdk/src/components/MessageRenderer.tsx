@@ -207,15 +207,31 @@ export function MessageRenderer({
       }
 
       // Other tools — render as generic tool card
-      // For browserExecute, show the registered function name as the card title
-      // For loadSkill, show the skill name
+      // Resolve the registered function definition for custom rendering.
+      // Tools can reach here via two paths:
+      //   1. browserExecute — wraps a function call (input.functionId identifies the function)
+      //   2. Direct proxy tool — skill-bundled tools registered as native tools on the server
+      //      (toolName IS the function ID, input contains the function's own arguments)
       let displayName = toolName;
+      let fnDef: ReturnType<typeof functionRegistry.get> | undefined;
+      let fnArgs: Record<string, any> = {};
       if (toolName === "browserExecute" && input?.functionId) {
-        const fnDef = functionRegistry.get(input.functionId);
+        fnDef = functionRegistry.get(input.functionId);
         displayName = fnDef?.name || input.functionId;
+        fnArgs = input.arguments || {};
       } else if (toolName === "loadSkill" && input?.name) {
         displayName = `Load Skill: ${input.name}`;
+      } else {
+        // Direct proxy tool — toolName is the function ID itself
+        fnDef = functionRegistry.get(toolName);
+        if (fnDef) {
+          displayName = fnDef.name || toolName;
+          fnArgs = input || {};
+        }
       }
+
+      // Check if the registered function has a custom showRender
+      const hasCustomRender = !!fnDef?.showRender;
 
       return (
         <div key={toolCallId || index}>
@@ -260,30 +276,61 @@ export function MessageRenderer({
                   </span>
                 )}
               </div>
-              {/* Show parameters when available */}
-              {input !== undefined &&
-                Object.keys(input).length > 0 && (
-                <div className="px-4 pt-3 pb-1">
-                  <p className="text-xs font-medium text-text-tertiary mb-1.5">Parameters</p>
-                  <pre className="text-xs bg-surface-tertiary rounded-lg p-3 overflow-x-auto text-text-secondary font-mono max-h-32 overflow-y-auto">
-                    {toolName === "browserExecute"
-                      ? JSON.stringify(input.arguments ?? {}, null, 2)
-                      : JSON.stringify(input, null, 2)}
-                  </pre>
+              {hasCustomRender ? (
+                /* Custom showRender from the registered function (e.g. Monaco diff editor) */
+                <div className="px-4 py-3">
+                  {fnDef!.showRender!({
+                    id: fnDef!.id,
+                    functionId: fnDef!.id,
+                    title: displayName,
+                    arguments: fnArgs,
+                    status: state === TOOL_PART_STATE.OUTPUT_AVAILABLE
+                      ? ("success" as any)
+                      : state === TOOL_PART_STATE.OUTPUT_ERROR
+                        ? ("failed" as any)
+                        : ("running" as any),
+                  })}
+                  {/* Still show result summary below the custom render */}
+                  {state === TOOL_PART_STATE.OUTPUT_AVAILABLE &&
+                    output !== undefined && (
+                    <div className="pt-2">
+                      <p className="text-xs font-medium text-text-tertiary mb-1.5">Result</p>
+                      <pre className="text-xs bg-surface-tertiary rounded-lg p-3 overflow-x-auto text-text-secondary font-mono max-h-32 overflow-y-auto">
+                        {typeof output === "string"
+                          ? output
+                          : JSON.stringify(output, null, 2)}
+                      </pre>
+                    </div>
+                  )}
                 </div>
-                )}
-              {/* Show result when available */}
-              {state === TOOL_PART_STATE.OUTPUT_AVAILABLE &&
-                output !== undefined && (
-                <div className="px-4 pt-2 pb-3">
-                  <p className="text-xs font-medium text-text-tertiary mb-1.5">Result</p>
-                  <pre className="text-xs bg-surface-tertiary rounded-lg p-3 overflow-x-auto text-text-secondary font-mono max-h-32 overflow-y-auto">
-                    {typeof output === "string"
-                      ? output
-                      : JSON.stringify(output, null, 2)}
-                  </pre>
-                </div>
-                )}
+              ) : (
+                <>
+                  {/* Show parameters when available */}
+                  {input !== undefined &&
+                    Object.keys(input).length > 0 && (
+                    <div className="px-4 pt-3 pb-1">
+                      <p className="text-xs font-medium text-text-tertiary mb-1.5">Parameters</p>
+                      <pre className="text-xs bg-surface-tertiary rounded-lg p-3 overflow-x-auto text-text-secondary font-mono max-h-32 overflow-y-auto">
+                        {toolName === "browserExecute"
+                          ? JSON.stringify(input.arguments ?? {}, null, 2)
+                          : JSON.stringify(input, null, 2)}
+                      </pre>
+                    </div>
+                    )}
+                  {/* Show result when available */}
+                  {state === TOOL_PART_STATE.OUTPUT_AVAILABLE &&
+                    output !== undefined && (
+                    <div className="px-4 pt-2 pb-3">
+                      <p className="text-xs font-medium text-text-tertiary mb-1.5">Result</p>
+                      <pre className="text-xs bg-surface-tertiary rounded-lg p-3 overflow-x-auto text-text-secondary font-mono max-h-32 overflow-y-auto">
+                        {typeof output === "string"
+                          ? output
+                          : JSON.stringify(output, null, 2)}
+                      </pre>
+                    </div>
+                    )}
+                </>
+              )}
               {state === TOOL_PART_STATE.OUTPUT_ERROR && errorText && (
                 <div className="p-4">
                   <p className="text-xs text-red-500">{errorText}</p>

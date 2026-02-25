@@ -1,9 +1,13 @@
+import React from "react";
 import {
   FUNCTION_TYPE,
   OPERATION_TYPE,
   PARAMETER_TYPE,
   type CodeFunctionDefinition,
+  type ExecutorFunctionDefinition,
+  type FunctionDefinition,
 } from "@ocean-mcp/shared";
+import { DiffViewer } from "../../components/DiffViewer";
 
 // ---------------------------------------------------------------------------
 // Platform configuration
@@ -465,7 +469,7 @@ function makeCreateDeployWorkOrder(p: PlatformConfig): CodeFunctionDefinition {
   return {
     id: `createDeployWorkOrder${p.key}`,
     name: `Create Deploy Work Order For ${p.key}`,
-    description: `Create a new deploy work order to deploy an archive to a specific deploy group; first fetch the deploy group list to get group_id, then fetch the archive list to get archive_id. For prod env, MUST call listAllReviewStreams${p.key} first to get review_stream_id before creating the work order.`,
+    description: `Create a new deploy work order to deploy an archive to a specific deploy group; first fetch the deploy group list to get group_id, then fetch the archive list to get archive_id. For prod env, MUST call listAllReviewStreams${p.key} first to get review_stream_id before creating the work order. Set job_type to 3 when the dynamic_render_html was actually changed; if the HTML already contained the target version, do not create a work order — inform the user no update is needed. Default job_type is 1 for standard deploys.`,
     type: FUNCTION_TYPE.CODE,
     operationType: OPERATION_TYPE.WRITE,
     code: `const name = "【" + args.env + "】【${p.appName}】" + args.deploy_group_name;
@@ -484,7 +488,7 @@ return fetch("${apiBase(p)}/deploy_workflow/workflow/create", {
     params: {
       cluster_id: Number(args.cluster_id),
       group_id: Number(args.group_id),
-      job_type: 1,
+      job_type: Number(args.job_type || 1),
       archive_id: Number(args.archive_id),
     },
     task_type: "frontend_static_deploy",
@@ -541,6 +545,13 @@ return fetch("${apiBase(p)}/deploy_workflow/workflow/create", {
         description: `Review stream id for prod env deployments. Obtain by calling listAllReviewStreams${p.key} first and extracting the id from the appropriate review stream.`,
         required: false,
       },
+      {
+        name: "job_type",
+        type: PARAMETER_TYPE.STRING,
+        description:
+          'Deploy job type. Use "3" ONLY when the dynamic_render_html actually changed in this deploy (i.e. updateDynamicRenderHtml was called with real changes). If the dynamic_render_html already contained the target version, the update should not have been performed and no deploy is needed — do not create a work order at all. Use "1" for all standard (non-dynamic-render) deploys. Defaults to "1".',
+        required: false,
+      },
     ],
   };
 }
@@ -551,35 +562,46 @@ function makeUpdateDynamicRenderHtml(
   return {
     id: `updateDynamicRenderHtml${p.key}`,
     name: `Update Dynamic Render HTML For ${p.key}`,
-    description: `Update the dynamic_render_html of a deploy group by replacing version strings in fecdn URLs. First call getDeployGroupDetail${p.key} to get the current frontend_static_group.`,
+    description: `Update the dynamic_render_html and dynamic_render_config.schema of a deploy group. Must be used as the final step in an executePlan, after diffString steps that preview the changes. The updated_dynamic_render_html and updated_dynamic_render_config_schema params MUST use $N.new_value variable references pointing to the preceding diffString step results, ensuring the written values are identical to those shown in the diff. The tool fetches the latest group detail internally, patches the two fields, and PUTs the update.`,
     type: FUNCTION_TYPE.CODE,
     operationType: OPERATION_TYPE.WRITE,
-    code: `const frontendStaticGroup = typeof args.current_frontend_static_group === 'string'
-  ? JSON.parse(args.current_frontend_static_group)
-  : args.current_frontend_static_group;
+    code: `// 1. Fetch the latest group detail
+const detailUrl = new URL("${apiBase(p)}/application/deploy/group");
+detailUrl.searchParams.set("group_id", args.group_id);
+detailUrl.searchParams.set("app_id", "${p.appId}");
+detailUrl.searchParams.set("biz_id", "${p.bizId}");
 
-const dynamicRenderHtml = frontendStaticGroup.dynamic_render_html || "";
+const detailRes = await fetch(detailUrl.toString(), {
+  method: "GET",
+  mode: "cors",
+  credentials: "include",
+  headers: ${HEADERS},
+}).then(r => r.json());
 
-// Replace version in URLs starting with //fecdn
-const updatedHtml = dynamicRenderHtml.replace(
-  /(\\/\\/fecdn[^"'\\s]*?)\\/(\\d+\\.\\d+\\.\\d+)\\//g,
-  (match, prefix, oldVersion) => prefix + "/" + args.targetVersion + "/"
-);
+const group = detailRes?.data?.groups?.[0];
+if (!group) throw new Error("Failed to fetch group detail for group_id=" + args.group_id);
 
-const updatedFrontendStaticGroup = {
-  ...frontendStaticGroup,
-  dynamic_render_html: updatedHtml,
-};
+// 2. Extract and update frontend_static_group
+const fsg = { ...group.frontend_static_group };
+fsg.dynamic_render_html = args.updated_dynamic_render_html;
 
-// Remove fields that should not be submitted
-delete updatedFrontendStaticGroup.cdn_preheat_type;
-delete updatedFrontendStaticGroup.cdn_refresh_type;
-delete updatedFrontendStaticGroup.cloud_vendor;
-delete updatedFrontendStaticGroup.redirection_address;
-delete updatedFrontendStaticGroup.render_config;
-delete updatedFrontendStaticGroup.service_group_id;
-delete updatedFrontendStaticGroup.url;
+// Update dynamic_render_config.schema
+const drc = fsg.dynamic_render_config ? { ...fsg.dynamic_render_config } : {};
+drc.schema = typeof args.updated_dynamic_render_config_schema === 'string'
+  ? args.updated_dynamic_render_config_schema
+  : JSON.stringify(args.updated_dynamic_render_config_schema);
+fsg.dynamic_render_config = drc;
 
+// 3. Strip read-only fields
+delete fsg.cdn_preheat_type;
+delete fsg.cdn_refresh_type;
+delete fsg.cloud_vendor;
+delete fsg.redirection_address;
+delete fsg.render_config;
+delete fsg.service_group_id;
+delete fsg.url;
+
+// 4. PUT the update
 return fetch("${apiBase(p)}/deploy/group/" + args.group_id, {
   body: JSON.stringify({
     app_id: ${p.appId},
@@ -588,7 +610,7 @@ return fetch("${apiBase(p)}/deploy/group/" + args.group_id, {
     cluster_id: Number(args.cluster_id),
     description: "",
     environment: {},
-    frontend_static_group: updatedFrontendStaticGroup,
+    frontend_static_group: fsg,
     group_chinese_name: "",
     group_name: args.group_name,
     group_type: "frontend-static",
@@ -603,9 +625,10 @@ return fetch("${apiBase(p)}/deploy/group/" + args.group_id, {
 `,
     parameters: [
       {
-        name: "current_frontend_static_group",
+        name: "group_id",
         type: PARAMETER_TYPE.STRING,
-        description: `The frontend_static_group field from getDeployGroupDetail${p.key} response (as JSON string or object).`,
+        description:
+          "Deploy group id (extract from the target item in the deploy group list).",
         required: true,
       },
       {
@@ -621,18 +644,99 @@ return fetch("${apiBase(p)}/deploy/group/" + args.group_id, {
         required: true,
       },
       {
-        name: "targetVersion",
+        name: "updated_dynamic_render_html",
         type: PARAMETER_TYPE.STRING,
         description:
-          "The new version to replace existing versions with (e.g., '1.48.0').",
+          'The complete new dynamic_render_html. In an executePlan, use the $N.new_value variable reference from the preceding diffString step (e.g. "$0.new_value").',
         required: true,
       },
       {
-        name: "group_id",
+        name: "updated_dynamic_render_config_schema",
         type: PARAMETER_TYPE.STRING,
         description:
-          "Deploy group id (extract from the target item in the deploy group list).",
+          'The complete new dynamic_render_config.schema. In an executePlan, use the $N.new_value variable reference from the preceding diffString step (e.g. "$1.new_value").',
         required: true,
+      },
+    ],
+  };
+}
+
+function makeDiffString(): ExecutorFunctionDefinition {
+  return {
+    id: "diffString",
+    name: "Diff String",
+    description:
+      "Compare two string values and display a visual diff using Monaco Editor. Use this in an executePlan to preview changes before applying updates. The result includes a `new_value` field so subsequent steps can reference it via $N.new_value variable placeholders to guarantee identical values.",
+    type: FUNCTION_TYPE.EXECUTOR,
+    operationType: OPERATION_TYPE.READ,
+    executor: async (args) => {
+      const oldLines = (args.old_value || "").split("\n");
+      const newLines = (args.new_value || "").split("\n");
+
+      let added = 0;
+      let removed = 0;
+      let unchanged = 0;
+      const maxLen = Math.max(oldLines.length, newLines.length);
+
+      for (let i = 0; i < maxLen; i++) {
+        const oldLine = i < oldLines.length ? oldLines[i] : undefined;
+        const newLine = i < newLines.length ? newLines[i] : undefined;
+        if (oldLine === newLine) {
+          unchanged++;
+        } else {
+          if (oldLine !== undefined && newLine !== undefined) {
+            removed++;
+            added++;
+          } else if (oldLine === undefined) {
+            added++;
+          } else {
+            removed++;
+          }
+        }
+      }
+
+      return {
+        label: args.label,
+        new_value: args.new_value || "",
+        summary: { added, removed, unchanged },
+        totalOldLines: oldLines.length,
+        totalNewLines: newLines.length,
+      };
+    },
+    showRender: (step) => {
+      return React.createElement(DiffViewer, {
+        label: step.arguments.label || "Diff",
+        oldValue: step.arguments.old_value || "",
+        newValue: step.arguments.new_value || "",
+        language: step.arguments.language || "html",
+      });
+    },
+    parameters: [
+      {
+        name: "label",
+        type: PARAMETER_TYPE.STRING,
+        description:
+          'A label describing what is being diffed (e.g. "dynamic_render_html", "schema").',
+        required: true,
+      },
+      {
+        name: "old_value",
+        type: PARAMETER_TYPE.STRING,
+        description: "The original string value.",
+        required: true,
+      },
+      {
+        name: "new_value",
+        type: PARAMETER_TYPE.STRING,
+        description: "The new string value to compare against.",
+        required: true,
+      },
+      {
+        name: "language",
+        type: PARAMETER_TYPE.STRING,
+        description:
+          'Language hint for syntax highlighting (e.g. "html", "json"). Defaults to "html".',
+        required: false,
       },
     ],
   };
@@ -803,8 +907,8 @@ return poll();
 // Generate all hoyocloud functions from platform configs
 // ---------------------------------------------------------------------------
 
-export const hoyocloudFunctions: CodeFunctionDefinition[] = PLATFORMS.flatMap(
-  (p) => [
+export const hoyocloudFunctions: FunctionDefinition[] = [
+  ...PLATFORMS.flatMap((p) => [
     makeListAppClusters(p),
     makeGetDeployGroups(p),
     makeGetDeployGroupDetail(p),
@@ -818,5 +922,6 @@ export const hoyocloudFunctions: CodeFunctionDefinition[] = PLATFORMS.flatMap(
     makeGetWorkOrderDetail(p),
     makeWaitForWorkOrderStatusChange(p),
     makeUpdateDynamicRenderHtml(p),
-  ],
-);
+  ]),
+  makeDiffString(),
+];

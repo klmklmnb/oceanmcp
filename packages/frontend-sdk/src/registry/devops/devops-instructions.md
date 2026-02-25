@@ -7,7 +7,7 @@ Assists with frontend-static deployment operations on the Trinity platform (Miho
 - **Deploy a group** — Full lifecycle from cluster resolution through work order execution and status polling.
 - **Create deploy groups** — Provision new frontend-static groups with correct OSS bucket mapping.
 - **Create clusters** — Provision new clusters for an environment (rare).
-- **Update dynamic render HTML** — Patch version strings in fecdn URLs within a group's configuration.
+- **Update dynamic render HTML** — Update `dynamic_render_html` and `dynamic_render_config.schema` with version-replaced fecdn URLs, with diff preview via Monaco editor before applying.
 - **Check deployment status** — Query or poll work order state.
 
 ## Quick Reference: Deploy Flow
@@ -195,15 +195,45 @@ Only needed if no cluster exists for the target environment. This is rare — mo
 
 ### Updating Dynamic Render HTML
 
-**Function:** `updateDynamicRenderHtml{Platform}`
-**Params:** `current_frontend_static_group`, `cluster_id`, `group_name`, `targetVersion`, `group_id`
+**Functions:**
+- `getDeployGroupDetail{Platform}` (read current state)
+- `diffString` (diff preview with Monaco editor — included in execution plan)
+- `updateDynamicRenderHtml{Platform}` (write)
 
-Used to update version strings in `//fecdn` URLs within the group's `dynamic_render_html`. Flow:
+Used to update the `dynamic_render_html` and `dynamic_render_config.schema` of a frontend-static group. Flow:
 
-1. Call `getDeployGroupDetail{Platform}` to get the current `frontend_static_group`.
-2. Call `updateDynamicRenderHtml{Platform}` with the current config and the new target version.
+1. Call `getDeployGroupDetail{Platform}` (via `browserExecute`) to get the current group detail.
+2. Extract `frontend_static_group.dynamic_render_html` and `frontend_static_group.dynamic_render_config.schema` from the response.
+3. Compare the existing fecdn version strings against the target version.
+   - **If already at the target version** (no URLs need updating): stop here — inform the user the group is already at the target version and no update or deploy is needed. Do NOT proceed further.
+   - **If changes are needed**: generate the updated HTML and schema by replacing the version in `fecdn.mihoyo.com/**/x.x.x/**.*` URLs with the target version, then continue to step 4.
+4. Submit a **single `executePlan`** containing all three steps below. The diff steps render Monaco diff editors in the plan card so the user can review changes before approving. The update step uses `$N.new_value` variable references to guarantee it receives the exact same text shown in the diff.
 
-The function performs a regex replacement on all `//fecdn.../{version}/` patterns, then PUTs the updated group configuration back. Certain read-only fields (`cdn_preheat_type`, `cdn_refresh_type`, `cloud_vendor`, `redirection_address`, `render_config`, `service_group_id`, `url`) are automatically stripped before submission.
+```
+executePlan:
+  Step 0: diffString(
+            label = "dynamic_render_html",
+            old_value = <current dynamic_render_html>,
+            new_value = <generated updated HTML>
+          )
+  Step 1: diffString(
+            label = "dynamic_render_config.schema",
+            old_value = <current schema>,
+            new_value = <generated updated schema>,
+            language = "json"
+          )
+  Step 2: updateDynamicRenderHtml{Platform}(
+            group_id = ...,
+            cluster_id = ...,
+            group_name = ...,
+            updated_dynamic_render_html = "$0.new_value",
+            updated_dynamic_render_config_schema = "$1.new_value"
+          )
+```
+
+**Critical:** The `updated_dynamic_render_html` and `updated_dynamic_render_config_schema` params in Step 2 **must** use the `$0.new_value` and `$1.new_value` variable placeholders respectively. This ensures the values written to the API are strictly identical to those shown in the diff preview. Never pass the generated text directly to Step 2 — always reference it from the diff steps.
+
+The update function fetches the latest group detail internally, patches only the `dynamic_render_html` and `dynamic_render_config.schema` fields, strips read-only fields (`cdn_preheat_type`, `cdn_refresh_type`, `cloud_vendor`, `redirection_address`, `render_config`, `service_group_id`, `url`), and PUTs the updated configuration back.
 
 ### Checking Work Order Status
 
