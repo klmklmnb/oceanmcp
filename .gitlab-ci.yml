@@ -77,7 +77,7 @@ ci-frontend-prod:
     - push_archive
   timeout: 6000s
 
-ci_test_api:
+ci-api-test:
   extends: .build-api-template
   only:
     refs:
@@ -87,7 +87,7 @@ ci_test_api:
       - 'packages/shared/**/*'
       - '.gitlab-ci.yml'
 
-ci_prod_api:
+ci-api-prod:
   extends: .build-api-template
   needs:
     - test-api-server
