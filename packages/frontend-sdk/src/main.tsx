@@ -184,8 +184,8 @@ if (typeof window !== "undefined") {
   (window as any).OceanMCPSDK = OceanMCPSDK;
 }
 
-// Auto-mount when script loads
-if (typeof document !== "undefined") {
+// Auto-mount when script loads (dev mode only)
+if (typeof document !== "undefined" && import.meta.env.DEV) {
   if (document.readyState === "loading") {
     document.addEventListener("DOMContentLoaded", mountOceanMCP);
   } else {
