@@ -85,73 +85,37 @@ export async function initSkills(): Promise<void> {
   }
 }
 
-/**
- * Dynamically add skills discovered from a zip file (or other runtime source).
- *
- * Appends the given skills to the in-memory `discoveredSkills` array with
- * deduplication: if a skill with the same name (case-insensitive) already
- * exists, the existing one is kept and the duplicate is skipped.
- *
- * This allows zip-loaded skills to be treated identically to startup-time
- * file-based skills — they get a `skillDirectory` path, appear in the
- * system prompt catalog, and are loadable via the `loadSkill` tool.
- *
- * @param skills - Skills to add (typically from `loadSkillsFromZip`)
- * @returns The skills that were actually added (after deduplication)
- */
-export function addDiscoveredSkills(skills: DiscoveredSkill[]): DiscoveredSkill[] {
-  const existingNames = new Set(
-    discoveredSkills.map((s) => s.name.toLowerCase()),
-  );
-
-  const added: DiscoveredSkill[] = [];
-
-  for (const skill of skills) {
-    if (existingNames.has(skill.name.toLowerCase())) {
-      console.log(
-        `[Skills] Skipping duplicate zip skill "${skill.name}" — already discovered`,
-      );
-      continue;
-    }
-    existingNames.add(skill.name.toLowerCase());
-    discoveredSkills.push(skill);
-    added.push(skill);
-  }
-
-  if (added.length > 0) {
-    console.log(
-      `[Skills] Added ${added.length} zip skill(s): ${added.map((s) => s.name).join(", ")}`,
-    );
-  }
-
-  return added;
-}
-
 // ─── Public API ──────────────────────────────────────────────────────────────
 
 /**
  * Get the full system prompt, including the skills catalog.
  *
- * When `connectionId` is provided, merges file-based skills with
- * frontend-registered skills from that connection. File-based skills
- * take priority on name conflicts.
+ * Merges skills from three sources (in priority order):
+ *   1. File-based skills: discovered from SKILL.md files at startup (global)
+ *   2. Zip-loaded skills: downloaded from CDN URLs (per-connection)
+ *   3. Frontend-registered skills: sent by browser clients via WebSocket (per-connection)
+ *
+ * File-based and zip-loaded skills (server-side) take priority over
+ * frontend-registered skills on name conflicts.
  *
  * Called on every chat request to ensure the latest skills are included.
- * The skills catalog section is empty if no skills exist, making this
- * safe to call even before initSkills() or without a connectionId.
  */
 export function getSystemPrompt(connectionId?: string): string {
-  // Start with file-based skills
+  // Server-side skills: file-based (global) + zip-loaded (per-connection)
   const fileSkills = discoveredSkills;
+  const zipSkills = connectionManager.getZipSkills(connectionId);
+  const serverSkillNames = new Set(
+    [...fileSkills, ...zipSkills].map((s) => s.name.toLowerCase()),
+  );
 
-  // Merge frontend-registered skills, skipping name conflicts
+  // Frontend-registered skills (per-connection), excluding name conflicts
   const frontendSkills = connectionManager.getSkillSchemas(connectionId);
-  const fileSkillNames = new Set(fileSkills.map((s) => s.name.toLowerCase()));
 
   const allSkills: Array<{ name: string; description: string }> = [
     ...fileSkills,
+    ...zipSkills,
     ...frontendSkills.filter(
-      (s) => !fileSkillNames.has(s.name.toLowerCase()),
+      (s) => !serverSkillNames.has(s.name.toLowerCase()),
     ),
   ];
 
@@ -162,10 +126,19 @@ export function getSystemPrompt(connectionId?: string): string {
  * Get the sandbox and discovered skills for use by the loadSkill tool
  * and for merging skill-bundled tools into getMergedTools().
  *
- * Returns the sandbox instance and the current list of discovered skills.
- * The tools/index.ts module calls this to wire up the loadSkill tool and
- * merge any tools exported by skill directories.
+ * Returns the sandbox instance and the combined list of file-based +
+ * zip-loaded skills for the given connection. The tools/index.ts module
+ * calls this to wire up the loadSkill tool and merge any tools exported
+ * by skill directories.
+ *
+ * @param connectionId - Optional WS connection ID to include per-connection zip skills
  */
-export function getSkillsContext() {
-  return { sandbox, skills: discoveredSkills };
+export function getSkillsContext(connectionId?: string) {
+  return {
+    sandbox,
+    skills: [
+      ...discoveredSkills,
+      ...connectionManager.getZipSkills(connectionId),
+    ],
+  };
 }

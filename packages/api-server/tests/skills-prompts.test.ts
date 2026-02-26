@@ -1,204 +1,296 @@
-import { describe, test, expect, beforeEach } from "bun:test";
+import { describe, test, expect, beforeEach, afterEach } from "bun:test";
 import {
   initSkills,
-  addDiscoveredSkills,
   getSystemPrompt,
   getSkillsContext,
 } from "../src/ai/prompts";
+import { connectionManager } from "../src/ws/connection-manager";
 import type { DiscoveredSkill } from "../src/ai/skills/discover";
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Tests for addDiscoveredSkills and its integration with getSystemPrompt
+// Tests for session-isolated zip skills via ConnectionManager
 //
-// These tests verify that dynamically added skills (from zip files or other
-// runtime sources) are correctly:
-//   1. Deduplicated against existing skills
-//   2. Visible in getSystemPrompt() output
-//   3. Accessible via getSkillsContext()
-//
-// Note: initSkills() is called at server startup and scans configured
-// directories. We call it in beforeEach to reset to a known state, but the
-// existing example skill may or may not be present depending on the test env.
-// Tests are designed to work regardless of what initSkills finds.
+// These tests verify that:
+//   1. Zip skills registered for one connection are visible only to that connection
+//   2. Zip skills appear in getSystemPrompt() and getSkillsContext() for the owning connection
+//   3. Zip skills from different URLs coexist within a connection
+//   4. Re-registering the same URL replaces the previous skills
+//   5. Skills are cleaned up on disconnect
 // ─────────────────────────────────────────────────────────────────────────────
 
-describe("addDiscoveredSkills", () => {
+// Mock WS object for connection registration
+function createMockWs(connectionId: string) {
+  return {
+    data: { connectionId },
+    send: () => {},
+    close: () => {},
+  } as any;
+}
+
+describe("zip skills — session isolation", () => {
+  const connA = "conn-a";
+  const connB = "conn-b";
+
   beforeEach(async () => {
-    // Re-initialize to reset discoveredSkills to the startup baseline
     await initSkills();
+    // Set up two mock connections
+    connectionManager.addConnection(connA, createMockWs(connA));
+    connectionManager.addConnection(connB, createMockWs(connB));
   });
 
-  test("adds a new skill to the discovered skills", () => {
-    const newSkill: DiscoveredSkill = {
-      name: "zip-test-skill",
-      description: "A skill added from a zip file.",
-      path: "/tmp/ocean-mcp-skills/test-uuid/zip-test-skill",
-    };
-
-    const added = addDiscoveredSkills([newSkill]);
-    expect(added).toHaveLength(1);
-    expect(added[0].name).toBe("zip-test-skill");
-
-    // Should now be in the skills context
-    const { skills } = getSkillsContext();
-    const found = skills.find((s) => s.name === "zip-test-skill");
-    expect(found).toBeDefined();
-    expect(found!.description).toBe("A skill added from a zip file.");
+  // Clean up connections after each test
+  afterEach(() => {
+    connectionManager.removeConnection(connA);
+    connectionManager.removeConnection(connB);
   });
 
-  test("adds multiple skills at once", () => {
-    const newSkills: DiscoveredSkill[] = [
-      {
-        name: "zip-skill-a",
-        description: "First zip skill.",
-        path: "/tmp/a",
-      },
-      {
-        name: "zip-skill-b",
-        description: "Second zip skill.",
-        path: "/tmp/b",
-      },
+  test("zip skills registered for connection A are visible to A", () => {
+    const skills: DiscoveredSkill[] = [
+      { name: "zip-skill-a", description: "Skill for A.", path: "/tmp/a" },
     ];
+    connectionManager.registerZipSkills(connA, "https://example.com/a.zip", skills, "/tmp/a");
 
-    const added = addDiscoveredSkills(newSkills);
-    expect(added).toHaveLength(2);
-
-    const { skills } = getSkillsContext();
-    const names = skills.map((s) => s.name);
-    expect(names).toContain("zip-skill-a");
-    expect(names).toContain("zip-skill-b");
+    const { skills: ctx } = getSkillsContext(connA);
+    const zipSkill = ctx.find((s) => s.name === "zip-skill-a");
+    expect(zipSkill).toBeDefined();
+    expect(zipSkill!.description).toBe("Skill for A.");
   });
 
-  test("deduplicates against existing skills (case-insensitive)", () => {
-    // First add a skill
-    addDiscoveredSkills([
-      {
-        name: "Unique-Skill",
-        description: "First version.",
-        path: "/tmp/first",
-      },
-    ]);
-
-    // Try to add a skill with the same name (different case)
-    const added = addDiscoveredSkills([
-      {
-        name: "unique-skill",
-        description: "Duplicate, should be skipped.",
-        path: "/tmp/second",
-      },
-    ]);
-
-    expect(added).toHaveLength(0);
-
-    // Original version should still be there
-    const { skills } = getSkillsContext();
-    const found = skills.find(
-      (s) => s.name.toLowerCase() === "unique-skill",
-    );
-    expect(found!.description).toBe("First version.");
-  });
-
-  test("deduplicates within the same batch", () => {
-    const newSkills: DiscoveredSkill[] = [
-      {
-        name: "dup-skill",
-        description: "First one wins.",
-        path: "/tmp/a",
-      },
-      {
-        name: "dup-skill",
-        description: "Should be skipped.",
-        path: "/tmp/b",
-      },
+  test("zip skills registered for connection A are NOT visible to B", () => {
+    const skills: DiscoveredSkill[] = [
+      { name: "zip-skill-a", description: "Skill for A.", path: "/tmp/a" },
     ];
+    connectionManager.registerZipSkills(connA, "https://example.com/a.zip", skills, "/tmp/a");
 
-    const added = addDiscoveredSkills(newSkills);
-    expect(added).toHaveLength(1);
-    expect(added[0].description).toBe("First one wins.");
+    const { skills: ctx } = getSkillsContext(connB);
+    const zipSkill = ctx.find((s) => s.name === "zip-skill-a");
+    expect(zipSkill).toBeUndefined();
   });
 
-  test("returns empty array when all skills are duplicates", () => {
-    addDiscoveredSkills([
-      {
-        name: "existing-skill",
-        description: "Already here.",
-        path: "/tmp/existing",
-      },
-    ]);
+  test("zip skills appear in getSystemPrompt for the owning connection", () => {
+    const skills: DiscoveredSkill[] = [
+      { name: "prompt-visible", description: "Should appear in prompt.", path: "/tmp/pv" },
+    ];
+    connectionManager.registerZipSkills(connA, "https://example.com/pv.zip", skills, "/tmp/pv");
 
-    const added = addDiscoveredSkills([
-      {
-        name: "existing-skill",
-        description: "Duplicate.",
-        path: "/tmp/dup",
-      },
-    ]);
+    const promptA = getSystemPrompt(connA);
+    expect(promptA).toContain("**prompt-visible**");
+    expect(promptA).toContain("Should appear in prompt.");
 
-    expect(added).toHaveLength(0);
+    const promptB = getSystemPrompt(connB);
+    expect(promptB).not.toContain("prompt-visible");
   });
 
-  test("returns empty array for empty input", () => {
-    const added = addDiscoveredSkills([]);
-    expect(added).toHaveLength(0);
+  test("file-based skills are visible to all connections", async () => {
+    // initSkills discovers the example skill — it should be global
+    const promptA = getSystemPrompt(connA);
+    const promptB = getSystemPrompt(connB);
+
+    // Both should see the file-based skill (if any exist)
+    const { skills: fileSkills } = getSkillsContext();
+    if (fileSkills.length > 0) {
+      expect(promptA).toContain(fileSkills[0].name);
+      expect(promptB).toContain(fileSkills[0].name);
+    }
   });
 });
 
-// ═════════════════════════════════════════════════════════════════════════════
-// Integration: addDiscoveredSkills → getSystemPrompt
-// ═════════════════════════════════════════════════════════════════════════════
+describe("zip skills — multi-URL coexistence", () => {
+  const connId = "conn-multi";
 
-describe("addDiscoveredSkills → getSystemPrompt integration", () => {
   beforeEach(async () => {
     await initSkills();
+    connectionManager.addConnection(connId, createMockWs(connId));
   });
 
-  test("dynamically added skill appears in system prompt", () => {
-    addDiscoveredSkills([
-      {
-        name: "dynamic-zip-skill",
-        description: "Dynamically added via zip.",
-        path: "/tmp/dynamic",
-      },
-    ]);
-
-    const prompt = getSystemPrompt();
-    expect(prompt).toContain("dynamic-zip-skill");
-    expect(prompt).toContain("Dynamically added via zip.");
+  afterEach(() => {
+    connectionManager.removeConnection(connId);
   });
 
-  test("dynamically added skill appears in Available Skills section", () => {
-    addDiscoveredSkills([
-      {
-        name: "catalog-test",
-        description: "Should be in catalog.",
-        path: "/tmp/catalog",
-      },
-    ]);
+  test("skills from different URLs coexist in the same connection", () => {
+    connectionManager.registerZipSkills(
+      connId,
+      "https://cdn.example.com/pack-1.zip",
+      [{ name: "skill-from-pack-1", description: "Pack 1.", path: "/tmp/p1" }],
+      "/tmp/p1",
+    );
+    connectionManager.registerZipSkills(
+      connId,
+      "https://cdn.example.com/pack-2.zip",
+      [{ name: "skill-from-pack-2", description: "Pack 2.", path: "/tmp/p2" }],
+      "/tmp/p2",
+    );
 
-    const prompt = getSystemPrompt();
-    expect(prompt).toContain("# Available Skills");
-    expect(prompt).toContain("**catalog-test**");
-    expect(prompt).toContain("Should be in catalog.");
+    const zipSkills = connectionManager.getZipSkills(connId);
+    expect(zipSkills).toHaveLength(2);
+    const names = zipSkills.map((s) => s.name).sort();
+    expect(names).toEqual(["skill-from-pack-1", "skill-from-pack-2"]);
   });
 
-  test("multiple dynamically added skills all appear in prompt", () => {
-    addDiscoveredSkills([
-      {
-        name: "skill-x",
-        description: "Skill X.",
-        path: "/tmp/x",
-      },
-      {
-        name: "skill-y",
-        description: "Skill Y.",
-        path: "/tmp/y",
-      },
-    ]);
+  test("multiple zip URLs all appear in system prompt", () => {
+    connectionManager.registerZipSkills(
+      connId,
+      "https://cdn.example.com/a.zip",
+      [{ name: "zip-a", description: "A.", path: "/tmp/a" }],
+      "/tmp/a",
+    );
+    connectionManager.registerZipSkills(
+      connId,
+      "https://cdn.example.com/b.zip",
+      [{ name: "zip-b", description: "B.", path: "/tmp/b" }],
+      "/tmp/b",
+    );
 
-    const prompt = getSystemPrompt();
-    expect(prompt).toContain("**skill-x**");
-    expect(prompt).toContain("**skill-y**");
-    expect(prompt).toContain("Skill X.");
-    expect(prompt).toContain("Skill Y.");
+    const prompt = getSystemPrompt(connId);
+    expect(prompt).toContain("**zip-a**");
+    expect(prompt).toContain("**zip-b**");
+  });
+
+  test("multiple zip URLs all appear in getSkillsContext", () => {
+    connectionManager.registerZipSkills(
+      connId,
+      "https://cdn.example.com/x.zip",
+      [{ name: "skill-x", description: "X.", path: "/tmp/x" }],
+      "/tmp/x",
+    );
+    connectionManager.registerZipSkills(
+      connId,
+      "https://cdn.example.com/y.zip",
+      [{ name: "skill-y", description: "Y.", path: "/tmp/y" }],
+      "/tmp/y",
+    );
+
+    const { skills } = getSkillsContext(connId);
+    const zipNames = skills.filter((s) =>
+      s.name === "skill-x" || s.name === "skill-y",
+    );
+    expect(zipNames).toHaveLength(2);
+  });
+});
+
+describe("zip skills — per-URL replacement", () => {
+  const connId = "conn-replace";
+  const url = "https://cdn.example.com/replaceable.zip";
+
+  beforeEach(async () => {
+    await initSkills();
+    connectionManager.addConnection(connId, createMockWs(connId));
+  });
+
+  afterEach(() => {
+    connectionManager.removeConnection(connId);
+  });
+
+  test("re-registering same URL replaces skills", () => {
+    connectionManager.registerZipSkills(
+      connId,
+      url,
+      [{ name: "old-skill", description: "Old version.", path: "/tmp/old" }],
+      "/tmp/old",
+    );
+
+    // Verify old skill is there
+    let zipSkills = connectionManager.getZipSkills(connId);
+    expect(zipSkills.find((s) => s.name === "old-skill")).toBeDefined();
+
+    // Re-register with same URL but different skills
+    connectionManager.registerZipSkills(
+      connId,
+      url,
+      [{ name: "new-skill", description: "New version.", path: "/tmp/new" }],
+      "/tmp/new",
+    );
+
+    // Old skill should be gone, new skill should be present
+    zipSkills = connectionManager.getZipSkills(connId);
+    expect(zipSkills.find((s) => s.name === "old-skill")).toBeUndefined();
+    expect(zipSkills.find((s) => s.name === "new-skill")).toBeDefined();
+  });
+
+  test("re-registering one URL does NOT affect other URLs", () => {
+    const otherUrl = "https://cdn.example.com/other.zip";
+
+    connectionManager.registerZipSkills(
+      connId,
+      url,
+      [{ name: "replaceable-skill", description: "Will change.", path: "/tmp/r" }],
+      "/tmp/r",
+    );
+    connectionManager.registerZipSkills(
+      connId,
+      otherUrl,
+      [{ name: "stable-skill", description: "Should stay.", path: "/tmp/s" }],
+      "/tmp/s",
+    );
+
+    // Replace only the first URL
+    connectionManager.registerZipSkills(
+      connId,
+      url,
+      [{ name: "replaced-skill", description: "Changed.", path: "/tmp/r2" }],
+      "/tmp/r2",
+    );
+
+    const zipSkills = connectionManager.getZipSkills(connId);
+    expect(zipSkills).toHaveLength(2);
+    expect(zipSkills.find((s) => s.name === "stable-skill")).toBeDefined();
+    expect(zipSkills.find((s) => s.name === "replaced-skill")).toBeDefined();
+    expect(zipSkills.find((s) => s.name === "replaceable-skill")).toBeUndefined();
+  });
+});
+
+describe("zip skills — cleanup on disconnect", () => {
+  test("getZipSkills returns empty after disconnect", async () => {
+    const connId = "conn-cleanup";
+    await initSkills();
+    connectionManager.addConnection(connId, createMockWs(connId));
+
+    connectionManager.registerZipSkills(
+      connId,
+      "https://cdn.example.com/temp.zip",
+      [{ name: "temp-skill", description: "Temp.", path: "/tmp/temp" }],
+      "/tmp/temp",
+    );
+
+    expect(connectionManager.getZipSkills(connId)).toHaveLength(1);
+
+    // Disconnect
+    connectionManager.removeConnection(connId);
+
+    // Should be empty now
+    expect(connectionManager.getZipSkills(connId)).toHaveLength(0);
+  });
+
+  test("disconnecting one connection does not affect another", async () => {
+    const connA = "conn-cleanup-a";
+    const connB = "conn-cleanup-b";
+    await initSkills();
+    connectionManager.addConnection(connA, createMockWs(connA));
+    connectionManager.addConnection(connB, createMockWs(connB));
+
+    connectionManager.registerZipSkills(
+      connA,
+      "https://cdn.example.com/a.zip",
+      [{ name: "skill-a", description: "A.", path: "/tmp/a" }],
+      "/tmp/a",
+    );
+    connectionManager.registerZipSkills(
+      connB,
+      "https://cdn.example.com/b.zip",
+      [{ name: "skill-b", description: "B.", path: "/tmp/b" }],
+      "/tmp/b",
+    );
+
+    // Disconnect A
+    connectionManager.removeConnection(connA);
+
+    // A's skills gone
+    expect(connectionManager.getZipSkills(connA)).toHaveLength(0);
+    // B's skills still there
+    expect(connectionManager.getZipSkills(connB)).toHaveLength(1);
+    expect(connectionManager.getZipSkills(connB)[0].name).toBe("skill-b");
+
+    // Cleanup
+    connectionManager.removeConnection(connB);
   });
 });

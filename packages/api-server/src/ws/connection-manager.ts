@@ -7,12 +7,26 @@ import {
   type FunctionSchema,
   type SkillSchema,
 } from "@ocean-mcp/shared";
+import { rm } from "fs/promises";
+import type { DiscoveredSkill } from "../ai/skills/discover";
 
 type PendingRequest = {
   resolve: (value: any) => void;
   reject: (reason: any) => void;
   timer: ReturnType<typeof setTimeout>;
 };
+
+/**
+ * A set of zip-loaded skills originating from a single .zip URL.
+ * Keyed by URL so the same URL can be re-registered (replaced)
+ * without affecting skills from other URLs.
+ */
+interface ZipSkillEntry {
+  /** Skills discovered from the extracted zip */
+  skills: DiscoveredSkill[];
+  /** Absolute path to the extraction directory (for cleanup) */
+  extractDir: string;
+}
 
 class ConnectionManager {
   private connections = new Map<
@@ -23,6 +37,18 @@ class ConnectionManager {
   private skillSchemas = new Map<string, SkillSchema[]>();
   private pendingRequests = new Map<string, PendingRequest>();
 
+  /**
+   * Per-connection zip skill storage, keyed by URL.
+   *
+   * Structure: connectionId → (url → ZipSkillEntry)
+   *
+   * A connection can have multiple zip skill sets from different URLs.
+   * Re-registering the same URL replaces only that URL's entry
+   * (cleaning up the old extraction directory). Disconnecting cleans
+   * up all entries for that connection.
+   */
+  private zipSkillsByUrl = new Map<string, Map<string, ZipSkillEntry>>();
+
   addConnection(id: string, ws: ServerWebSocket<{ connectionId: string }>) {
     this.connections.set(id, ws);
   }
@@ -31,6 +57,7 @@ class ConnectionManager {
     this.connections.delete(id);
     this.toolSchemas.delete(id);
     this.skillSchemas.delete(id);
+    this.cleanupAllZipSkills(id);
   }
 
   registerTools(connectionId: string, tools: FunctionSchema[]) {
@@ -73,6 +100,96 @@ class ConnectionManager {
       allSkills.push(...skills);
     }
     return allSkills;
+  }
+
+  // ── Zip Skill Management ─────────────────────────────────────────────
+
+  /**
+   * Register zip-loaded skills for a connection, keyed by the source URL.
+   *
+   * If the same URL was previously registered on this connection, the old
+   * entry's extraction directory is cleaned up (rm -rf) and its skills are
+   * replaced with the new ones. Skills from other URLs are untouched.
+   *
+   * @param connectionId - The WS connection that owns these skills
+   * @param url - The CDN URL the zip was downloaded from (used as the key)
+   * @param skills - Skills discovered from the extracted zip
+   * @param extractDir - Absolute path to the extraction directory
+   */
+  registerZipSkills(
+    connectionId: string,
+    url: string,
+    skills: DiscoveredSkill[],
+    extractDir: string,
+  ): void {
+    let urlMap = this.zipSkillsByUrl.get(connectionId);
+    if (!urlMap) {
+      urlMap = new Map();
+      this.zipSkillsByUrl.set(connectionId, urlMap);
+    }
+
+    // If this URL was previously registered, clean up old extraction dir
+    const existing = urlMap.get(url);
+    if (existing) {
+      rm(existing.extractDir, { recursive: true, force: true }).catch((err) =>
+        console.error(
+          `[WS] Failed to clean up replaced zip skill dir: ${existing.extractDir}`,
+          err,
+        ),
+      );
+      console.log(
+        `[WS] Replacing zip skills for URL: ${url} (connection ${connectionId})`,
+      );
+    }
+
+    urlMap.set(url, { skills, extractDir });
+  }
+
+  /**
+   * Get all zip-loaded skills for a connection (from all registered URLs).
+   * - When `connectionId` is provided, returns zip skills only for that connection.
+   * - Otherwise returns zip skills from all connections.
+   */
+  getZipSkills(connectionId?: string): DiscoveredSkill[] {
+    if (connectionId) {
+      const urlMap = this.zipSkillsByUrl.get(connectionId);
+      if (!urlMap) return [];
+      const all: DiscoveredSkill[] = [];
+      for (const entry of urlMap.values()) {
+        all.push(...entry.skills);
+      }
+      return all;
+    }
+
+    const all: DiscoveredSkill[] = [];
+    for (const urlMap of this.zipSkillsByUrl.values()) {
+      for (const entry of urlMap.values()) {
+        all.push(...entry.skills);
+      }
+    }
+    return all;
+  }
+
+  /**
+   * Clean up all zip skill extraction directories for a connection.
+   * Called on disconnect to free temp disk space.
+   */
+  private cleanupAllZipSkills(connectionId: string): void {
+    const urlMap = this.zipSkillsByUrl.get(connectionId);
+    if (!urlMap) return;
+
+    for (const [url, entry] of urlMap.entries()) {
+      rm(entry.extractDir, { recursive: true, force: true }).catch((err) =>
+        console.error(
+          `[WS] Failed to clean up zip skill dir on disconnect: ${entry.extractDir}`,
+          err,
+        ),
+      );
+    }
+    this.zipSkillsByUrl.delete(connectionId);
+    console.log(
+      `[WS] Cleaned up ${urlMap.size} zip skill set(s) for disconnected connection ${connectionId}`,
+    );
   }
 
   hasConnection(connectionId: string): boolean {

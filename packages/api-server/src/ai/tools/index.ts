@@ -191,7 +191,7 @@ export function getMergedTools(
   };
 
   // ── Skills integration ─────────────────────────────────────────────────
-  const { sandbox, skills: fileSkills } = getSkillsContext();
+  const { sandbox, skills: fileSkills } = getSkillsContext(connectionId);
   const frontendSkillSchemas = connectionManager.getSkillSchemas(connectionId);
 
   const hasAnySkills = fileSkills.length > 0 || frontendSkillSchemas.length > 0;

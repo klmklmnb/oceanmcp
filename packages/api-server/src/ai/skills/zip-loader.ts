@@ -32,9 +32,23 @@
 
 import { tmpdir } from "os";
 import { join } from "path";
-import { mkdir, access } from "fs/promises";
+import { mkdir, access, unlink } from "fs/promises";
 import type { Sandbox, SkillMetadata } from "@ocean-mcp/shared";
 import { discoverSkills, parseFrontmatter, type DiscoveredSkill } from "./discover";
+
+// ─── Types ───────────────────────────────────────────────────────────────────
+
+/**
+ * Result of loading skills from a zip file.
+ * Includes both the discovered skills and the extraction directory path
+ * so callers can track the directory for lifecycle management (cleanup).
+ */
+export interface ZipLoadResult {
+  /** Skills discovered from the extracted zip contents */
+  skills: DiscoveredSkill[];
+  /** Absolute path to the extraction directory (caller is responsible for cleanup) */
+  extractDir: string;
+}
 
 // ─── Temp Directory Management ───────────────────────────────────────────────
 
@@ -99,7 +113,10 @@ async function downloadAndExtract(url: string): Promise<string> {
     );
   }
 
-  // ── 4. Handle __MACOSX and other junk directories ───────────────────
+  // ── 4. Delete the zip file — no longer needed after extraction ──────
+  await unlink(zipPath).catch(() => {});
+
+  // ── 5. Handle __MACOSX and other junk directories ───────────────────
   // macOS zip files often include a __MACOSX/ directory with resource
   // forks. We leave it in place — discoverSkills will skip it since it
   // won't contain a valid SKILL.md.
@@ -122,23 +139,24 @@ async function downloadAndExtract(url: string): Promise<string> {
  *
  * @param sandbox - Filesystem abstraction for reading extracted files
  * @param url - CDN URL pointing to the .zip file
- * @returns Array of discovered skills with metadata and filesystem paths
+ * @returns Object containing discovered skills and the extraction directory path
  * @throws If download, extraction, or discovery fails entirely
  *
  * @example
  * ```ts
  * const sandbox = createNodeSandbox(process.cwd());
- * const skills = await loadSkillsFromZip(
+ * const { skills, extractDir } = await loadSkillsFromZip(
  *   sandbox,
  *   'https://cdn.example.com/skills/my-skill-pack.zip',
  * );
  * // skills = [{ name: 'my-skill', description: '...', path: '/tmp/...' }]
+ * // extractDir = '/tmp/ocean-mcp-skills/<uuid>'
  * ```
  */
 export async function loadSkillsFromZip(
   sandbox: Sandbox,
   url: string,
-): Promise<DiscoveredSkill[]> {
+): Promise<ZipLoadResult> {
   const extractDir = await downloadAndExtract(url);
 
   // ── Check for root-level SKILL.md ─────────────────────────────────
@@ -157,7 +175,7 @@ export async function loadSkillsFromZip(
       path: extractDir,
     };
 
-    return [skill];
+    return { skills: [skill], extractDir };
   } catch {
     // No root SKILL.md — fall through to subdirectory scanning
   }
@@ -172,5 +190,5 @@ export async function loadSkillsFromZip(
     );
   }
 
-  return skills;
+  return { skills, extractDir };
 }

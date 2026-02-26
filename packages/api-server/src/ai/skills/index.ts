@@ -25,4 +25,4 @@ export {
 } from "./discover";
 export type { DiscoveredSkill } from "./discover";
 export { buildSkillsPrompt, createLoadSkillTool } from "./loader";
-export { loadSkillsFromZip } from "./zip-loader";
+export { loadSkillsFromZip, type ZipLoadResult } from "./zip-loader";

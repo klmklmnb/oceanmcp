@@ -9,7 +9,7 @@ import {
 } from "@ocean-mcp/shared";
 import { handleChatRequest } from "./routes/chat";
 import { connectionManager } from "./ws/connection-manager";
-import { initSkills, addDiscoveredSkills, getSkillsContext } from "./ai/prompts";
+import { initSkills, getSkillsContext } from "./ai/prompts";
 import { loadSkillsFromZip } from "./ai/skills";
 
 const PORT = Number(process.env.PORT) || 4000;
@@ -133,9 +133,16 @@ const server = Bun.serve<{ connectionId: string }>({
             // Async: download, extract, discover, and register — then respond
             const { sandbox } = getSkillsContext();
             loadSkillsFromZip(sandbox, url)
-              .then((newSkills) => {
-                const added = addDiscoveredSkills(newSkills);
-                const skillMeta = added.map((s) => ({
+              .then(({ skills: newSkills, extractDir }) => {
+                // Store per-connection, keyed by URL (replaces previous registration for same URL)
+                connectionManager.registerZipSkills(
+                  ws.data.connectionId,
+                  url,
+                  newSkills,
+                  extractDir,
+                );
+
+                const skillMeta = newSkills.map((s) => ({
                   name: s.name,
                   description: s.description,
                   path: s.path,
@@ -148,7 +155,7 @@ const server = Bun.serve<{ connectionId: string }>({
                   }),
                 );
                 console.log(
-                  `[WS] Zip skill(s) registered: ${added.map((s) => s.name).join(", ") || "(none new)"}`,
+                  `[WS] Zip skill(s) registered for ${ws.data.connectionId}: ${newSkills.map((s) => s.name).join(", ") || "(none)"}`,
                 );
               })
               .catch((err) => {

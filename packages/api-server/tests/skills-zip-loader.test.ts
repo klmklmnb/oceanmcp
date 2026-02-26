@@ -1,5 +1,5 @@
 import { describe, test, expect, beforeAll, afterAll } from "bun:test";
-import { mkdtemp, writeFile, mkdir, rm, realpath } from "fs/promises";
+import { mkdtemp, writeFile, mkdir, rm, realpath, access } from "fs/promises";
 import { join } from "path";
 import { tmpdir } from "os";
 import { createNodeSandbox } from "../src/ai/skills/sandbox";
@@ -31,9 +31,6 @@ afterAll(async () => {
 /**
  * Helper: create a directory structure and zip it.
  * Returns the absolute path to the created .zip file.
- *
- * @param name - Unique name for this test's zip
- * @param files - Map of relative paths to file contents (within the zip)
  */
 async function createTestZip(
   name: string,
@@ -42,7 +39,6 @@ async function createTestZip(
   const sourceDir = join(tempDir, `${name}-src`);
   const zipPath = join(tempDir, `${name}.zip`);
 
-  // Create all files in the source directory
   for (const [relativePath, content] of Object.entries(files)) {
     const fullPath = join(sourceDir, relativePath);
     const dir = fullPath.slice(0, fullPath.lastIndexOf("/"));
@@ -50,7 +46,6 @@ async function createTestZip(
     await writeFile(fullPath, content);
   }
 
-  // Zip the source directory contents (not the directory itself)
   const proc = Bun.spawn(
     ["sh", "-c", `cd "${sourceDir}" && zip -r "${zipPath}" .`],
     { stdout: "pipe", stderr: "pipe" },
@@ -62,11 +57,10 @@ async function createTestZip(
 
 /**
  * Helper: start a tiny HTTP server that serves a specific file.
- * Returns the URL and a cleanup function.
  */
 function serveFile(filePath: string): { url: string; stop: () => void } {
   const server = Bun.serve({
-    port: 0, // random available port
+    port: 0,
     async fetch() {
       const file = Bun.file(filePath);
       return new Response(file);
@@ -77,6 +71,76 @@ function serveFile(filePath: string): { url: string; stop: () => void } {
     stop: () => server.stop(true),
   };
 }
+
+// ═════════════════════════════════════════════════════════════════════════════
+// Return shape
+// ═════════════════════════════════════════════════════════════════════════════
+
+describe("loadSkillsFromZip — return shape", () => {
+  test("returns { skills, extractDir } object", async () => {
+    const zipPath = await createTestZip("return-shape", {
+      "SKILL.md": `---
+name: shape-test
+description: Test return shape.
+---
+`,
+    });
+
+    const { url, stop } = serveFile(zipPath);
+    try {
+      const result = await loadSkillsFromZip(sandbox, url);
+
+      expect(result).toHaveProperty("skills");
+      expect(result).toHaveProperty("extractDir");
+      expect(Array.isArray(result.skills)).toBe(true);
+      expect(typeof result.extractDir).toBe("string");
+    } finally {
+      stop();
+    }
+  });
+
+  test("extractDir is a real directory on disk", async () => {
+    const zipPath = await createTestZip("extract-dir-check", {
+      "SKILL.md": `---
+name: dir-check
+description: Verify extract dir exists.
+---
+`,
+    });
+
+    const { url, stop } = serveFile(zipPath);
+    try {
+      const { extractDir } = await loadSkillsFromZip(sandbox, url);
+
+      // extractDir should exist and be readable
+      const entries = await sandbox.readdir(extractDir, { withFileTypes: true });
+      expect(entries.length).toBeGreaterThan(0);
+    } finally {
+      stop();
+    }
+  });
+
+  test("__skill.zip is deleted after extraction", async () => {
+    const zipPath = await createTestZip("zip-cleanup", {
+      "SKILL.md": `---
+name: cleanup-test
+description: Verify zip file removed.
+---
+`,
+    });
+
+    const { url, stop } = serveFile(zipPath);
+    try {
+      const { extractDir } = await loadSkillsFromZip(sandbox, url);
+
+      // __skill.zip should have been deleted after extraction
+      const zipFilePath = join(extractDir, "__skill.zip");
+      await expect(access(zipFilePath)).rejects.toThrow();
+    } finally {
+      stop();
+    }
+  });
+});
 
 // ═════════════════════════════════════════════════════════════════════════════
 // Case 1: Root-level SKILL.md (single skill)
@@ -98,7 +162,7 @@ Follow these steps.
 
     const { url, stop } = serveFile(zipPath);
     try {
-      const skills = await loadSkillsFromZip(sandbox, url);
+      const { skills } = await loadSkillsFromZip(sandbox, url);
 
       expect(skills).toHaveLength(1);
       expect(skills[0].name).toBe("root-skill");
@@ -129,9 +193,8 @@ description: Should be ignored.
 
     const { url, stop } = serveFile(zipPath);
     try {
-      const skills = await loadSkillsFromZip(sandbox, url);
+      const { skills } = await loadSkillsFromZip(sandbox, url);
 
-      // Only the root skill should be found — subdirectories are ignored
       expect(skills).toHaveLength(1);
       expect(skills[0].name).toBe("root-skill");
     } finally {
@@ -155,13 +218,12 @@ description: Skill with references.
 
     const { url, stop } = serveFile(zipPath);
     try {
-      const skills = await loadSkillsFromZip(sandbox, url);
+      const { skills, extractDir } = await loadSkillsFromZip(sandbox, url);
 
       expect(skills).toHaveLength(1);
       expect(skills[0].name).toBe("ref-skill");
-      // The path should be the extraction root directory
-      expect(skills[0].path).toBeDefined();
-      expect(typeof skills[0].path).toBe("string");
+      // For root-level skill, path = extractDir
+      expect(skills[0].path).toBe(extractDir);
     } finally {
       stop();
     }
@@ -186,7 +248,7 @@ description: A subdirectory skill.
 
     const { url, stop } = serveFile(zipPath);
     try {
-      const skills = await loadSkillsFromZip(sandbox, url);
+      const { skills } = await loadSkillsFromZip(sandbox, url);
 
       expect(skills).toHaveLength(1);
       expect(skills[0].name).toBe("my-skill");
@@ -223,7 +285,7 @@ description: Third skill.
 
     const { url, stop } = serveFile(zipPath);
     try {
-      const skills = await loadSkillsFromZip(sandbox, url);
+      const { skills } = await loadSkillsFromZip(sandbox, url);
 
       expect(skills).toHaveLength(3);
       const names = skills.map((s) => s.name).sort();
@@ -248,7 +310,7 @@ description: Valid skill.
 
     const { url, stop } = serveFile(zipPath);
     try {
-      const skills = await loadSkillsFromZip(sandbox, url);
+      const { skills } = await loadSkillsFromZip(sandbox, url);
 
       expect(skills).toHaveLength(1);
       expect(skills[0].name).toBe("valid");
@@ -269,10 +331,9 @@ description: Test paths.
 
     const { url, stop } = serveFile(zipPath);
     try {
-      const skills = await loadSkillsFromZip(sandbox, url);
+      const { skills } = await loadSkillsFromZip(sandbox, url);
 
       expect(skills).toHaveLength(1);
-      // Path should end with the skill subdirectory name
       expect(skills[0].path).toMatch(/my-skill$/);
     } finally {
       stop();
@@ -344,8 +405,6 @@ describe("loadSkillsFromZip — error handling", () => {
 
     const { url, stop } = serveFile(zipPath);
     try {
-      // The root SKILL.md exists but has no valid frontmatter.
-      // parseFrontmatter throws, which should propagate.
       await expect(loadSkillsFromZip(sandbox, url)).rejects.toThrow();
     } finally {
       stop();
@@ -377,7 +436,7 @@ These are the instructions for the E2E zip skill.
 
     const { url, stop } = serveFile(zipPath);
     try {
-      const skills = await loadSkillsFromZip(sandbox, url);
+      const { skills } = await loadSkillsFromZip(sandbox, url);
       expect(skills).toHaveLength(1);
 
       // Now use the discovered skill with createLoadSkillTool
@@ -401,7 +460,6 @@ These are the instructions for the E2E zip skill.
       expect(resources).toContain("references/guide.md");
       expect(resources).toContain("assets/");
       expect(resources).toContain("assets/config.yaml");
-      // SKILL.md should be excluded
       expect(resources).not.toContain("SKILL.md");
     } finally {
       stop();
