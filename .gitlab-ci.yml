@@ -56,11 +56,6 @@ build-frontend-sdk-prod:
   only:
     refs:
       - tags
-      - main
-    changes:
-      - 'packages/frontend-sdk/**/*'
-      - 'packages/shared/**/*'
-      - '.gitlab-ci.yml'
 
 .build-api-template:
   stage: 构建
@@ -90,6 +85,7 @@ ci_test_api:
     changes:
       - 'packages/api-server/**/*'
       - 'packages/shared/**/*'
+      - '.gitlab-ci.yml'
 
 ci_prod_api:
   extends: .build-api-template
