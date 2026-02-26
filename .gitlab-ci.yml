@@ -20,7 +20,7 @@ test-api-server:
       - 'packages/shared/**/*'
       - '.gitlab-ci.yml'
 
-build-frontend-sdk-test:
+ci-frontend-test:
   stage: 构建
   variables:
     LANGUAGE: vue
@@ -40,7 +40,7 @@ build-frontend-sdk-test:
       - 'packages/shared/**/*'
       - '.gitlab-ci.yml'
 
-build-frontend-sdk-prod:
+ci-frontend-prod:
   stage: 构建
   variables:
     LANGUAGE: vue
