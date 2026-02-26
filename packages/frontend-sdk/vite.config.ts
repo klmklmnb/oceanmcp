@@ -11,6 +11,8 @@ export default defineConfig({
       fileName: "sdk",
       formats: ["es"],
     },
+    cssCodeSplit: false,
+    cssMinify: true,
     rollupOptions: {
       // Don't externalize React — bundle it for injection into host apps
     },
