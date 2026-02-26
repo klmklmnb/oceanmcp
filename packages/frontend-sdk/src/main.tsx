@@ -5,6 +5,7 @@ import { functionRegistry, skillRegistry } from "./registry";
 import type { SkillDefinition } from "./registry";
 import { mockFunctions } from "./registry/mock/mockFunctions";
 import { devopsSkill } from "./registry/devops";
+import { miCoffeeSkill } from "./registry/mi-coffee";
 import { wsClient } from "./runtime/ws-client";
 import {
   FUNCTION_TYPE,
@@ -22,7 +23,7 @@ for (const fn of mockFunctions) {
 // Skills bundle both instructions (for the LLM) and tools (for browser-side
 // execution). The skill registry sends metadata to the server, while tools
 // are also added to the function registry for local execution.
-const preregisteredSkills: SkillDefinition[] = [devopsSkill];
+const preregisteredSkills: SkillDefinition[] = [devopsSkill, miCoffeeSkill];
 
 for (const skill of preregisteredSkills) {
   skillRegistry.register(skill);
