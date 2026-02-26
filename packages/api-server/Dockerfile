@@ -1,4 +1,4 @@
-FROM infosys-harbor.mihoyo.com/base-image/node:v1.1.5-beta.5
+FROM infosys-harbor.mihoyo.com/base-image/node:v1.1.5-beta.4
 RUN n 22.18.0
 RUN npm i -g bun
 COPY ../../ /app
