@@ -69,7 +69,7 @@ ci-frontend-prod:
     - export CI_PROJECT_NAME="ocean-mcp-api-server"
     - export APP_NAME_EE="ocean-mcp-api-server"
     - export APP_NAME="ocean-mcp-api-server"
-    - config_build
+    # - config_build
     - cd packages/api-server
     - bun run build
     - printenv
