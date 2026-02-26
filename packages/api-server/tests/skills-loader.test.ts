@@ -1,15 +1,16 @@
 import { describe, test, expect } from "bun:test";
 import { buildSkillsPrompt, createLoadSkillTool } from "../src/ai/skills/loader";
 import type { DiscoveredSkill } from "../src/ai/skills/discover";
-import type { Sandbox } from "@ocean-mcp/shared";
+import type { Sandbox, SandboxDirEntry } from "@ocean-mcp/shared";
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Mock Sandbox Helper (simplified for loader tests)
+// Mock Sandbox Helper
 // ─────────────────────────────────────────────────────────────────────────────
 
 /**
- * Create a mock Sandbox backed by a simple file map.
- * Only readFile is needed for loader tests (the loadSkill tool reads SKILL.md).
+ * Create an in-memory mock Sandbox backed by a simple file map.
+ * Supports both readFile and readdir (needed for resource listing).
+ * Directory structure is inferred from the file paths.
  */
 function createMockSandbox(files: Record<string, string>): Sandbox {
   return {
@@ -19,11 +20,37 @@ function createMockSandbox(files: Record<string, string>): Sandbox {
       }
       return files[path];
     },
-    async readdir() {
-      throw new Error("readdir not needed in loader tests");
+
+    async readdir(path: string) {
+      const prefix = path.endsWith("/") ? path : path + "/";
+      const entries = new Map<string, boolean>();
+
+      for (const filePath of Object.keys(files)) {
+        if (!filePath.startsWith(prefix)) continue;
+        const rest = filePath.slice(prefix.length);
+        const segment = rest.split("/")[0];
+        if (!segment) continue;
+
+        const isDir = rest.includes("/");
+        if (!entries.has(segment) || isDir) {
+          entries.set(segment, isDir);
+        }
+      }
+
+      if (entries.size === 0 && !Object.keys(files).some((f) => f.startsWith(prefix))) {
+        throw new Error(`ENOENT: no such directory: ${path}`);
+      }
+
+      return Array.from(entries.entries()).map(
+        ([name, isDir]): SandboxDirEntry => ({
+          name,
+          isDirectory: () => isDir,
+        }),
+      );
     },
+
     async exec() {
-      throw new Error("exec not needed in loader tests");
+      throw new Error("exec not supported in mock sandbox");
     },
   };
 }
@@ -180,6 +207,20 @@ Then do this.
     expect((result as any).skillDirectory).toBe("/skills/my-skill");
   });
 
+  test("returns resources listing alongside content", async () => {
+    const sandbox = createMockSandbox({
+      "/skills/my-skill/SKILL.md": validSkillContent,
+    });
+    const tool = createLoadSkillTool(sandbox, skills, []);
+    const result = await tool.execute!({ name: "my-skill" }, {
+      toolCallId: "test",
+      messages: [],
+    } as any);
+
+    expect(result).toHaveProperty("resources");
+    expect(Array.isArray((result as any).resources)).toBe(true);
+  });
+
   test("performs case-insensitive name matching", async () => {
     const sandbox = createMockSandbox({
       "/skills/my-skill/SKILL.md": validSkillContent,
@@ -290,5 +331,208 @@ description: Does something.
     const tool = createLoadSkillTool(sandbox, skills, []);
     // The tool should accept a 'name' parameter
     expect(tool.inputSchema).toBeDefined();
+  });
+});
+
+// ═════════════════════════════════════════════════════════════════════════════
+// loadSkill — resource listing
+// ═════════════════════════════════════════════════════════════════════════════
+
+describe("loadSkill resource listing", () => {
+  const skillContent = `---
+name: rich-skill
+description: A skill with many resources.
+---
+
+# Rich Skill Instructions
+`;
+
+  const skills: DiscoveredSkill[] = [
+    {
+      name: "rich-skill",
+      description: "A skill with many resources.",
+      path: "/skills/rich-skill",
+    },
+  ];
+
+  test("lists reference files in the resources array", async () => {
+    const sandbox = createMockSandbox({
+      "/skills/rich-skill/SKILL.md": skillContent,
+      "/skills/rich-skill/references/api-guide.md": "# API Guide",
+      "/skills/rich-skill/references/schema.json": '{"type": "object"}',
+    });
+    const tool = createLoadSkillTool(sandbox, skills, []);
+    const result = await tool.execute!({ name: "rich-skill" }, {
+      toolCallId: "test",
+      messages: [],
+    } as any);
+
+    const resources: string[] = (result as any).resources;
+    expect(resources).toContain("references/");
+    expect(resources).toContain("references/api-guide.md");
+    expect(resources).toContain("references/schema.json");
+  });
+
+  test("lists scripts and assets directories", async () => {
+    const sandbox = createMockSandbox({
+      "/skills/rich-skill/SKILL.md": skillContent,
+      "/skills/rich-skill/scripts/deploy.sh": "#!/bin/bash",
+      "/skills/rich-skill/assets/template.yaml": "kind: template",
+    });
+    const tool = createLoadSkillTool(sandbox, skills, []);
+    const result = await tool.execute!({ name: "rich-skill" }, {
+      toolCallId: "test",
+      messages: [],
+    } as any);
+
+    const resources: string[] = (result as any).resources;
+    expect(resources).toContain("scripts/");
+    expect(resources).toContain("scripts/deploy.sh");
+    expect(resources).toContain("assets/");
+    expect(resources).toContain("assets/template.yaml");
+  });
+
+  test("excludes SKILL.md from the resource listing", async () => {
+    const sandbox = createMockSandbox({
+      "/skills/rich-skill/SKILL.md": skillContent,
+      "/skills/rich-skill/references/doc.md": "# Doc",
+    });
+    const tool = createLoadSkillTool(sandbox, skills, []);
+    const result = await tool.execute!({ name: "rich-skill" }, {
+      toolCallId: "test",
+      messages: [],
+    } as any);
+
+    const resources: string[] = (result as any).resources;
+    expect(resources).not.toContain("SKILL.md");
+  });
+
+  test("excludes tools.ts from the resource listing", async () => {
+    const sandbox = createMockSandbox({
+      "/skills/rich-skill/SKILL.md": skillContent,
+      "/skills/rich-skill/tools.ts": "export default {}",
+    });
+    const tool = createLoadSkillTool(sandbox, skills, []);
+    const result = await tool.execute!({ name: "rich-skill" }, {
+      toolCallId: "test",
+      messages: [],
+    } as any);
+
+    const resources: string[] = (result as any).resources;
+    expect(resources).not.toContain("tools.ts");
+  });
+
+  test("excludes __MACOSX and __skill.zip from the resource listing", async () => {
+    const sandbox = createMockSandbox({
+      "/skills/rich-skill/SKILL.md": skillContent,
+      "/skills/rich-skill/__MACOSX/._stuff": "binary junk",
+      "/skills/rich-skill/__skill.zip": "binary zip",
+    });
+    const tool = createLoadSkillTool(sandbox, skills, []);
+    const result = await tool.execute!({ name: "rich-skill" }, {
+      toolCallId: "test",
+      messages: [],
+    } as any);
+
+    const resources: string[] = (result as any).resources;
+    expect(resources).not.toContain("__MACOSX/");
+    expect(resources).not.toContain("__skill.zip");
+  });
+
+  test("excludes dotfiles from the resource listing", async () => {
+    const sandbox = createMockSandbox({
+      "/skills/rich-skill/SKILL.md": skillContent,
+      "/skills/rich-skill/.DS_Store": "",
+      "/skills/rich-skill/.hidden-dir/secret.txt": "hidden",
+    });
+    const tool = createLoadSkillTool(sandbox, skills, []);
+    const result = await tool.execute!({ name: "rich-skill" }, {
+      toolCallId: "test",
+      messages: [],
+    } as any);
+
+    const resources: string[] = (result as any).resources;
+    expect(resources).not.toContain(".DS_Store");
+    expect(resources).not.toContain(".hidden-dir/");
+  });
+
+  test("returns empty resources for skill with only SKILL.md", async () => {
+    const sandbox = createMockSandbox({
+      "/skills/rich-skill/SKILL.md": skillContent,
+    });
+    const tool = createLoadSkillTool(sandbox, skills, []);
+    const result = await tool.execute!({ name: "rich-skill" }, {
+      toolCallId: "test",
+      messages: [],
+    } as any);
+
+    const resources: string[] = (result as any).resources;
+    expect(resources).toEqual([]);
+  });
+
+  test("lists nested resources recursively", async () => {
+    const sandbox = createMockSandbox({
+      "/skills/rich-skill/SKILL.md": skillContent,
+      "/skills/rich-skill/references/guides/getting-started.md": "# Getting Started",
+      "/skills/rich-skill/references/guides/advanced.md": "# Advanced",
+    });
+    const tool = createLoadSkillTool(sandbox, skills, []);
+    const result = await tool.execute!({ name: "rich-skill" }, {
+      toolCallId: "test",
+      messages: [],
+    } as any);
+
+    const resources: string[] = (result as any).resources;
+    expect(resources).toContain("references/");
+    expect(resources).toContain("references/guides/");
+    expect(resources).toContain("references/guides/getting-started.md");
+    expect(resources).toContain("references/guides/advanced.md");
+  });
+
+  test("directories are suffixed with /", async () => {
+    const sandbox = createMockSandbox({
+      "/skills/rich-skill/SKILL.md": skillContent,
+      "/skills/rich-skill/scripts/deploy.sh": "#!/bin/bash",
+    });
+    const tool = createLoadSkillTool(sandbox, skills, []);
+    const result = await tool.execute!({ name: "rich-skill" }, {
+      toolCallId: "test",
+      messages: [],
+    } as any);
+
+    const resources: string[] = (result as any).resources;
+    const dirs = resources.filter((r) => r.endsWith("/"));
+    const files = resources.filter((r) => !r.endsWith("/"));
+
+    expect(dirs.length).toBeGreaterThan(0);
+    expect(files.length).toBeGreaterThan(0);
+    // Every directory entry should end with /
+    for (const dir of dirs) {
+      expect(dir.endsWith("/")).toBe(true);
+    }
+    // No file entry should end with /
+    for (const file of files) {
+      expect(file.endsWith("/")).toBe(false);
+    }
+  });
+
+  test("frontend-registered skills do not have resources", async () => {
+    const sandbox = createMockSandbox({});
+    const frontendSkills = [
+      {
+        name: "frontend-skill",
+        description: "From frontend.",
+        instructions: "# Frontend skill instructions",
+      },
+    ];
+    const tool = createLoadSkillTool(sandbox, [], frontendSkills);
+    const result = await tool.execute!({ name: "frontend-skill" }, {
+      toolCallId: "test",
+      messages: [],
+    } as any);
+
+    expect(result).toHaveProperty("content");
+    expect(result).not.toHaveProperty("resources");
+    expect(result).not.toHaveProperty("skillDirectory");
   });
 });

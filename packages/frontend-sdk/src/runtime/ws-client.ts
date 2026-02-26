@@ -3,10 +3,19 @@ import {
   createWSMessage,
   parseWSMessage,
   type ExecuteToolRequest,
+  type SkillMetadata,
 } from "@ocean-mcp/shared";
 import { functionRegistry, skillRegistry } from "../registry";
 import { executeFunction } from "./executor";
 import { API_URL } from "../config";
+
+// ─── Pending Zip Request ─────────────────────────────────────────────────────
+
+type PendingZipRequest = {
+  resolve: (skills: SkillMetadata[]) => void;
+  reject: (error: Error) => void;
+  timer: ReturnType<typeof setTimeout>;
+};
 
 /**
  * WebSocket client — connects to the api-server's /connect endpoint.
@@ -18,6 +27,7 @@ class WSClient {
   private connectionId: string | null = null;
   private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
   private pingTimer: ReturnType<typeof setInterval> | null = null;
+  private pendingZipRequests = new Map<string, PendingZipRequest>();
   private serverUrl: string;
   private maxReconnectDelay = 30_000;
   private reconnectDelay = 1_000;
@@ -57,6 +67,14 @@ class WSClient {
 
             case WSMessageType.EXECUTE_TOOL:
               await this.handleExecuteTool(msg.payload);
+              break;
+
+            case WSMessageType.SKILL_ZIP_REGISTERED:
+              this.resolveZipRequest(msg.payload.requestId, msg.payload.skills);
+              break;
+
+            case WSMessageType.SKILL_ZIP_ERROR:
+              this.rejectZipRequest(msg.payload.requestId, msg.payload.error);
               break;
 
             case WSMessageType.PONG:
@@ -115,6 +133,82 @@ class WSClient {
         },
       }),
     );
+  }
+
+  /**
+   * Register skill(s) from a remote .zip file hosted on a CDN.
+   *
+   * Sends the URL to the server, which downloads, extracts, and discovers
+   * skills from the zip. Returns the metadata of all registered skills.
+   *
+   * The zip can contain:
+   *   - A root-level SKILL.md → single skill (subdirs ignored)
+   *   - Subdirectories with SKILL.md files → multiple skills
+   *
+   * @param url - CDN URL pointing to the .zip file
+   * @param timeoutMs - How long to wait for the server response (default: 60s)
+   * @returns Array of skill metadata for all skills discovered from the zip
+   * @throws If the download, extraction, or discovery fails
+   *
+   * @example
+   * ```ts
+   * const skills = await wsClient.registerSkillFromZip(
+   *   'https://cdn.example.com/skills/my-skill-pack.zip',
+   * );
+   * console.log('Registered:', skills.map(s => s.name));
+   * ```
+   */
+  registerSkillFromZip(
+    url: string,
+    timeoutMs = 60_000,
+  ): Promise<SkillMetadata[]> {
+    if (!this.ws || this.ws.readyState !== WebSocket.OPEN) {
+      return Promise.reject(
+        new Error("[OceanMCP] Cannot register zip skill: WebSocket not connected"),
+      );
+    }
+
+    const requestId = crypto.randomUUID();
+
+    return new Promise<SkillMetadata[]>((resolve, reject) => {
+      const timer = setTimeout(() => {
+        this.pendingZipRequests.delete(requestId);
+        reject(
+          new Error(
+            `[OceanMCP] Zip skill registration timed out after ${timeoutMs}ms: ${url}`,
+          ),
+        );
+      }, timeoutMs);
+
+      this.pendingZipRequests.set(requestId, { resolve, reject, timer });
+
+      this.ws!.send(
+        createWSMessage({
+          type: WSMessageType.REGISTER_SKILL_ZIP,
+          payload: { requestId, url },
+        }),
+      );
+    });
+  }
+
+  /** Resolve a pending zip skill registration request */
+  private resolveZipRequest(requestId: string, skills: SkillMetadata[]): void {
+    const pending = this.pendingZipRequests.get(requestId);
+    if (!pending) return;
+
+    clearTimeout(pending.timer);
+    this.pendingZipRequests.delete(requestId);
+    pending.resolve(skills);
+  }
+
+  /** Reject a pending zip skill registration request */
+  private rejectZipRequest(requestId: string, error: string): void {
+    const pending = this.pendingZipRequests.get(requestId);
+    if (!pending) return;
+
+    clearTimeout(pending.timer);
+    this.pendingZipRequests.delete(requestId);
+    pending.reject(new Error(error));
   }
 
   private async handleExecuteTool(request: ExecuteToolRequest): Promise<void> {

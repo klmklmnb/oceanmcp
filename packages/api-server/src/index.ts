@@ -9,7 +9,8 @@ import {
 } from "@ocean-mcp/shared";
 import { handleChatRequest } from "./routes/chat";
 import { connectionManager } from "./ws/connection-manager";
-import { initSkills } from "./ai/prompts";
+import { initSkills, addDiscoveredSkills, getSkillsContext } from "./ai/prompts";
+import { loadSkillsFromZip } from "./ai/skills";
 
 const PORT = Number(process.env.PORT) || 4000;
 
@@ -119,6 +120,52 @@ const server = Bun.serve<{ connectionId: string }>({
           case WSMessageType.PING:
             ws.send(createWSMessage({ type: WSMessageType.PONG }));
             break;
+
+          case WSMessageType.REGISTER_SKILL_ZIP: {
+            const { requestId, url } = msg.payload as {
+              requestId: string;
+              url: string;
+            };
+            console.log(
+              `[WS] Zip skill registration requested: ${url} (${requestId})`,
+            );
+
+            // Async: download, extract, discover, and register — then respond
+            const { sandbox } = getSkillsContext();
+            loadSkillsFromZip(sandbox, url)
+              .then((newSkills) => {
+                const added = addDiscoveredSkills(newSkills);
+                const skillMeta = added.map((s) => ({
+                  name: s.name,
+                  description: s.description,
+                  path: s.path,
+                }));
+
+                ws.send(
+                  createWSMessage({
+                    type: WSMessageType.SKILL_ZIP_REGISTERED,
+                    payload: { requestId, skills: skillMeta },
+                  }),
+                );
+                console.log(
+                  `[WS] Zip skill(s) registered: ${added.map((s) => s.name).join(", ") || "(none new)"}`,
+                );
+              })
+              .catch((err) => {
+                const error =
+                  err instanceof Error ? err.message : String(err);
+                ws.send(
+                  createWSMessage({
+                    type: WSMessageType.SKILL_ZIP_ERROR,
+                    payload: { requestId, error },
+                  }),
+                );
+                console.error(
+                  `[WS] Zip skill registration failed: ${error}`,
+                );
+              });
+            break;
+          }
         }
       } catch (err) {
         console.error("[WS] Failed to parse message:", err);

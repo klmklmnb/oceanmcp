@@ -229,4 +229,134 @@ These are the instructions.
     expect((result as any).content).not.toContain("---");
     expect((result as any).skillDirectory).toBe(join(skillDir, "e2e-skill"));
   });
+
+  test("loadSkill returns empty resources for skill without reference files", async () => {
+    const { discoverSkills } = await import("../src/ai/skills/discover");
+    const { createLoadSkillTool } = await import("../src/ai/skills/loader");
+
+    const skills = await discoverSkills(sandbox, [skillDir]);
+    const tool = createLoadSkillTool(sandbox, skills, []);
+    const result = await tool.execute!({ name: "e2e-skill" }, {
+      toolCallId: "test",
+      messages: [],
+    } as any);
+
+    expect((result as any).resources).toBeDefined();
+    expect(Array.isArray((result as any).resources)).toBe(true);
+    // e2e-skill only has SKILL.md, which is excluded from resources
+    expect((result as any).resources).toEqual([]);
+  });
+});
+
+// ═════════════════════════════════════════════════════════════════════════════
+// End-to-end: NodeSandbox with skill resources
+// ═════════════════════════════════════════════════════════════════════════════
+
+describe("NodeSandbox end-to-end with skill resources", () => {
+  let skillDir: string;
+
+  beforeAll(async () => {
+    // Set up a real skill directory with resource files:
+    //   tempDir/skills-with-refs/
+    //   └── rich-skill/
+    //       ├── SKILL.md
+    //       ├── references/
+    //       │   ├── api-guide.md
+    //       │   └── schema.json
+    //       ├── scripts/
+    //       │   └── deploy.sh
+    //       └── assets/
+    //           └── config.yaml
+    skillDir = join(tempDir, "skills-with-refs");
+    const skillRoot = join(skillDir, "rich-skill");
+
+    await mkdir(join(skillRoot, "references"), { recursive: true });
+    await mkdir(join(skillRoot, "scripts"), { recursive: true });
+    await mkdir(join(skillRoot, "assets"), { recursive: true });
+
+    await writeFile(
+      join(skillRoot, "SKILL.md"),
+      `---
+name: rich-skill
+description: A skill with bundled resources.
+---
+
+# Rich Skill
+
+Use the resources in references/ and scripts/ to complete tasks.
+`,
+    );
+    await writeFile(
+      join(skillRoot, "references", "api-guide.md"),
+      "# API Guide\n\nEndpoints and usage.",
+    );
+    await writeFile(
+      join(skillRoot, "references", "schema.json"),
+      '{"type": "object", "properties": {}}',
+    );
+    await writeFile(
+      join(skillRoot, "scripts", "deploy.sh"),
+      "#!/bin/bash\necho deploying",
+    );
+    await writeFile(
+      join(skillRoot, "assets", "config.yaml"),
+      "key: value\nenv: prod",
+    );
+  });
+
+  test("loadSkill returns resource listing for skill with reference files", async () => {
+    const { discoverSkills } = await import("../src/ai/skills/discover");
+    const { createLoadSkillTool } = await import("../src/ai/skills/loader");
+
+    const skills = await discoverSkills(sandbox, [skillDir]);
+    expect(skills).toHaveLength(1);
+    expect(skills[0].name).toBe("rich-skill");
+
+    const tool = createLoadSkillTool(sandbox, skills, []);
+    const result = await tool.execute!({ name: "rich-skill" }, {
+      toolCallId: "test",
+      messages: [],
+    } as any);
+
+    const resources: string[] = (result as any).resources;
+    expect(resources).toBeDefined();
+
+    // Directories should be listed with trailing /
+    expect(resources).toContain("references/");
+    expect(resources).toContain("scripts/");
+    expect(resources).toContain("assets/");
+
+    // Files should be listed with their relative paths
+    expect(resources).toContain("references/api-guide.md");
+    expect(resources).toContain("references/schema.json");
+    expect(resources).toContain("scripts/deploy.sh");
+    expect(resources).toContain("assets/config.yaml");
+
+    // SKILL.md itself should NOT be in resources
+    expect(resources).not.toContain("SKILL.md");
+  });
+
+  test("resource files are actually readable via sandbox using skillDirectory + resource path", async () => {
+    const { discoverSkills } = await import("../src/ai/skills/discover");
+    const { createLoadSkillTool } = await import("../src/ai/skills/loader");
+
+    const skills = await discoverSkills(sandbox, [skillDir]);
+    const tool = createLoadSkillTool(sandbox, skills, []);
+    const result = await tool.execute!({ name: "rich-skill" }, {
+      toolCallId: "test",
+      messages: [],
+    } as any);
+
+    const skillDirectory: string = (result as any).skillDirectory;
+    const resources: string[] = (result as any).resources;
+
+    // Pick a resource file and verify it can be read
+    expect(resources).toContain("references/api-guide.md");
+    const content = await sandbox.readFile(
+      `${skillDirectory}/references/api-guide.md`,
+      "utf-8",
+    );
+    expect(content).toContain("# API Guide");
+    expect(content).toContain("Endpoints and usage.");
+  });
 });

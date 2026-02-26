@@ -37,6 +37,34 @@ for (const skill of preregisteredSkills) {
 // ─── Connect WebSocket to server ─────────────────────────────────────────────
 wsClient.connect();
 
+// ─── Mock: register a zip skill from CDN (dev mode only) ─────────────────────
+// Demonstrates the registerSkillFromZip flow by loading a skill pack from a
+// CDN-hosted .zip file. The server downloads, extracts, and discovers skills
+// from the zip, then makes them available in the system prompt and loadSkill.
+if (import.meta.env.DEV) {
+  const ZIP_SKILL_URL =
+    "https://fastcdn.mihoyo.com/static-resource-v2/2026/02/26/058beb1461340237f7a317cce3bc92c8_9174939835677374533.zip";
+
+  // Wait for WebSocket to connect before sending the zip registration request
+  const waitForConnection = () => {
+    if (wsClient.isConnected) {
+      wsClient
+        .registerSkillFromZip(ZIP_SKILL_URL)
+        .then((skills) => {
+          console.log(
+            `[OceanMCP][Mock] Zip skill(s) registered: ${skills.map((s) => s.name).join(", ")}`,
+          );
+        })
+        .catch((err) => {
+          console.error("[OceanMCP][Mock] Failed to register zip skill:", err);
+        });
+    } else {
+      setTimeout(waitForConnection, 500);
+    }
+  };
+  waitForConnection();
+}
+
 // ─── Mount the Chat Widget ──────────────────────────────────────────────────
 type MountTarget = string | HTMLElement;
 
@@ -142,6 +170,45 @@ const OceanMCPSDK = {
     }
 
     console.log(`[OceanMCP] Skill unregistered: ${name}`);
+  },
+
+  /**
+   * Register skill(s) from a remote .zip file hosted on a CDN.
+   *
+   * The zip is downloaded and extracted on the server. Skills are discovered
+   * using the same directory convention as server-side file-based skills:
+   *
+   *   - If the zip root contains `SKILL.md`, it's treated as a single skill.
+   *     Subdirectories are NOT scanned (they're treated as resources).
+   *   - Otherwise, each subdirectory containing a `SKILL.md` is registered
+   *     as a separate skill.
+   *
+   * Registered skills are added to the server's discovered skills pool and
+   * become available in the system prompt catalog and via `loadSkill`.
+   *
+   * @param url - CDN URL pointing to a .zip file
+   * @returns Promise resolving to the metadata of all discovered skills
+   *
+   * @example
+   * ```ts
+   * // Single skill zip
+   * const skills = await OceanMCPSDK.registerSkillFromZip(
+   *   'https://cdn.example.com/skills/pdf-processing.zip',
+   * );
+   *
+   * // Multi-skill zip
+   * const skills = await OceanMCPSDK.registerSkillFromZip(
+   *   'https://cdn.example.com/skills/devops-pack.zip',
+   * );
+   * console.log('Registered:', skills.map(s => s.name));
+   * ```
+   */
+  async registerSkillFromZip(url: string) {
+    const skills = await wsClient.registerSkillFromZip(url);
+    console.log(
+      `[OceanMCP] Zip skill(s) registered: ${skills.map((s) => s.name).join(", ")}`,
+    );
+    return skills;
   },
 
   /**

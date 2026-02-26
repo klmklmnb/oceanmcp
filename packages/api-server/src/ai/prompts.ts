@@ -21,7 +21,6 @@
  *      both discovered and frontend-registered skills
  */
 
-import { readFileSync } from "fs";
 import { join, dirname } from "path";
 import { fileURLToPath } from "url";
 import {
@@ -31,14 +30,10 @@ import {
   type DiscoveredSkill,
 } from "./skills";
 import { connectionManager } from "../ws/connection-manager";
+import basePrompt from "./prompt.md" with { type: "text" };
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
-
-// ─── Base Prompt ─────────────────────────────────────────────────────────────
-
-/** Base system prompt loaded from prompt.md (sync, available immediately) */
-const basePrompt = readFileSync(join(__dirname, "prompt.md"), "utf-8");
 
 // ─── Skills System ───────────────────────────────────────────────────────────
 
@@ -88,6 +83,48 @@ export async function initSkills(): Promise<void> {
   } else {
     console.log("[Skills] No skills discovered.");
   }
+}
+
+/**
+ * Dynamically add skills discovered from a zip file (or other runtime source).
+ *
+ * Appends the given skills to the in-memory `discoveredSkills` array with
+ * deduplication: if a skill with the same name (case-insensitive) already
+ * exists, the existing one is kept and the duplicate is skipped.
+ *
+ * This allows zip-loaded skills to be treated identically to startup-time
+ * file-based skills — they get a `skillDirectory` path, appear in the
+ * system prompt catalog, and are loadable via the `loadSkill` tool.
+ *
+ * @param skills - Skills to add (typically from `loadSkillsFromZip`)
+ * @returns The skills that were actually added (after deduplication)
+ */
+export function addDiscoveredSkills(skills: DiscoveredSkill[]): DiscoveredSkill[] {
+  const existingNames = new Set(
+    discoveredSkills.map((s) => s.name.toLowerCase()),
+  );
+
+  const added: DiscoveredSkill[] = [];
+
+  for (const skill of skills) {
+    if (existingNames.has(skill.name.toLowerCase())) {
+      console.log(
+        `[Skills] Skipping duplicate zip skill "${skill.name}" — already discovered`,
+      );
+      continue;
+    }
+    existingNames.add(skill.name.toLowerCase());
+    discoveredSkills.push(skill);
+    added.push(skill);
+  }
+
+  if (added.length > 0) {
+    console.log(
+      `[Skills] Added ${added.length} zip skill(s): ${added.map((s) => s.name).join(", ")}`,
+    );
+  }
+
+  return added;
 }
 
 // ─── Public API ──────────────────────────────────────────────────────────────

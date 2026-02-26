@@ -30,6 +30,81 @@ import { z } from "zod";
 import type { Sandbox, SkillSchema } from "@ocean-mcp/shared";
 import { stripFrontmatter, type DiscoveredSkill } from "./discover";
 
+// ─── Resource Discovery ──────────────────────────────────────────────────────
+
+/** Files to exclude from the resource listing (not useful to the LLM) */
+const EXCLUDED_NAMES = new Set([
+  "SKILL.md",
+  "tools.ts",
+  "tools.js",
+  "__skill.zip",
+  "__MACOSX",
+  ".DS_Store",
+  "node_modules",
+]);
+
+/**
+ * Recursively scan a skill directory and return a flat list of relative
+ * paths representing available resources. Directories are suffixed with `/`.
+ *
+ * This gives the LLM a lightweight "table of contents" for the skill's
+ * bundled resources without loading any file contents. The LLM can then
+ * read specific files on-demand using the `skillDirectory` path.
+ *
+ * @param sandbox - Filesystem abstraction
+ * @param basePath - Absolute path to the skill directory root
+ * @param relativePath - Current subdirectory relative to basePath (for recursion)
+ * @param maxDepth - Maximum directory depth to recurse (default: 4)
+ * @returns Flat list of relative paths, e.g. ["references/", "references/api-guide.md"]
+ */
+async function listSkillResources(
+  sandbox: Sandbox,
+  basePath: string,
+  relativePath = "",
+  maxDepth = 4,
+): Promise<string[]> {
+  if (maxDepth <= 0) return [];
+
+  const dirPath = relativePath
+    ? `${basePath}/${relativePath}`
+    : basePath;
+
+  let entries;
+  try {
+    entries = await sandbox.readdir(dirPath, { withFileTypes: true });
+  } catch {
+    return [];
+  }
+
+  const resources: string[] = [];
+
+  for (const entry of entries) {
+    if (EXCLUDED_NAMES.has(entry.name)) continue;
+    // Skip hidden files/dirs (dotfiles)
+    if (entry.name.startsWith(".")) continue;
+
+    const entryRelative = relativePath
+      ? `${relativePath}/${entry.name}`
+      : entry.name;
+
+    if (entry.isDirectory()) {
+      resources.push(`${entryRelative}/`);
+      // Recurse into subdirectory
+      const children = await listSkillResources(
+        sandbox,
+        basePath,
+        entryRelative,
+        maxDepth - 1,
+      );
+      resources.push(...children);
+    } else {
+      resources.push(entryRelative);
+    }
+  }
+
+  return resources;
+}
+
 // ─── System Prompt Builder ───────────────────────────────────────────────────
 
 /**
@@ -104,7 +179,8 @@ export function createLoadSkillTool(
   return tool({
     description:
       "Load a skill to get specialized instructions and workflows for a task. " +
-      "Returns the full skill instructions and the skill directory path for accessing bundled resources.",
+      "Returns the full skill instructions, the skill directory path for accessing bundled resources, " +
+      "and a listing of available resource files (references, scripts, assets) in the skill directory.",
     inputSchema: z.object({
       name: z
         .string()
@@ -124,11 +200,24 @@ export function createLoadSkillTool(
           );
           const body = stripFrontmatter(content);
 
+          // Scan the skill directory for available resources so the LLM
+          // knows what files exist without loading their contents. This
+          // enables progressive disclosure: the LLM sees "references/api.md"
+          // and can read it on-demand using the skillDirectory path.
+          const resources = await listSkillResources(sandbox, fileSkill.path);
+
           return {
             /** Absolute path to the skill directory for resource access */
             skillDirectory: fileSkill.path,
             /** Full skill instructions (SKILL.md body without frontmatter) */
             content: body,
+            /**
+             * Flat listing of available resource files in the skill directory.
+             * Directories are suffixed with `/`. Use `skillDirectory` + a
+             * resource path to read any file on-demand.
+             * Example: ["references/", "references/api-guide.md", "assets/template.yaml"]
+             */
+            resources,
           };
         } catch (err) {
           return {
