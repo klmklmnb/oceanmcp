@@ -1,5 +1,5 @@
 import { describe, test, expect, beforeAll, afterAll } from "bun:test";
-import { mkdtemp, writeFile, mkdir, rm, realpath, access } from "fs/promises";
+import { mkdtemp, rm, realpath, access } from "fs/promises";
 import { join } from "path";
 import { tmpdir } from "os";
 import { createNodeSandbox } from "../src/ai/skills/sandbox";
@@ -28,30 +28,185 @@ afterAll(async () => {
   await rm(tempDir, { recursive: true, force: true });
 });
 
+// ─── Programmatic ZIP builder (no system `zip` binary needed) ────────────────
+
+/** Pure-JS CRC-32 implementation (IEEE polynomial). */
+const crc32Table = (() => {
+  const table = new Uint32Array(256);
+  for (let i = 0; i < 256; i++) {
+    let c = i;
+    for (let j = 0; j < 8; j++) {
+      c = c & 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1;
+    }
+    table[i] = c >>> 0;
+  }
+  return table;
+})();
+
+function crc32(data: Uint8Array): number {
+  let crc = 0xffffffff;
+  for (let i = 0; i < data.length; i++) {
+    crc = crc32Table[(crc ^ data[i]!) & 0xff]! ^ (crc >>> 8);
+  }
+  return (crc ^ 0xffffffff) >>> 0;
+}
+
 /**
- * Helper: create a directory structure and zip it.
+ * Build a ZIP file in memory from a map of { relativePath → content }.
+ *
+ * Uses the STORE method (no compression) which is sufficient for small test
+ * fixtures and avoids any dependency on system binaries or npm packages.
+ *
+ * Returns the complete ZIP as a Uint8Array.
+ */
+function buildZipBuffer(files: Record<string, string>): Uint8Array {
+  const encoder = new TextEncoder();
+  const entries: {
+    name: Uint8Array;
+    data: Uint8Array;
+    offset: number;
+  }[] = [];
+
+  const chunks: Uint8Array[] = [];
+  let offset = 0;
+
+  // Collect all paths that need directory entries (including intermediate dirs)
+  const dirPaths = new Set<string>();
+  for (const relativePath of Object.keys(files)) {
+    const parts = relativePath.split("/");
+    for (let i = 1; i < parts.length; i++) {
+      dirPaths.add(parts.slice(0, i).join("/") + "/");
+    }
+  }
+
+  // Write directory entries first
+  for (const dirPath of [...dirPaths].sort()) {
+    const nameBytes = encoder.encode(dirPath);
+
+    // Local file header for directory
+    const header = new ArrayBuffer(30 + nameBytes.length);
+    const hView = new DataView(header);
+    hView.setUint32(0, 0x04034b50, true);   // local file header signature
+    hView.setUint16(4, 20, true);            // version needed (2.0)
+    hView.setUint16(6, 0, true);             // general purpose bit flag
+    hView.setUint16(8, 0, true);             // compression method: STORE
+    hView.setUint16(10, 0, true);            // last mod file time
+    hView.setUint16(12, 0, true);            // last mod file date
+    hView.setUint32(14, 0, true);            // crc-32
+    hView.setUint32(18, 0, true);            // compressed size
+    hView.setUint32(22, 0, true);            // uncompressed size
+    hView.setUint16(26, nameBytes.length, true); // file name length
+    hView.setUint16(28, 0, true);            // extra field length
+    new Uint8Array(header).set(nameBytes, 30);
+
+    const headerBytes = new Uint8Array(header);
+    entries.push({ name: nameBytes, data: new Uint8Array(0), offset });
+    chunks.push(headerBytes);
+    offset += headerBytes.length;
+  }
+
+  // Write file entries
+  for (const [relativePath, content] of Object.entries(files)) {
+    const nameBytes = encoder.encode(relativePath);
+    const dataBytes = encoder.encode(content);
+
+    // CRC-32
+    const crcValue = crc32(dataBytes);
+
+    // Local file header
+    const header = new ArrayBuffer(30 + nameBytes.length);
+    const hView = new DataView(header);
+    hView.setUint32(0, 0x04034b50, true);   // local file header signature
+    hView.setUint16(4, 20, true);            // version needed (2.0)
+    hView.setUint16(6, 0, true);             // general purpose bit flag
+    hView.setUint16(8, 0, true);             // compression method: STORE
+    hView.setUint16(10, 0, true);            // last mod file time
+    hView.setUint16(12, 0, true);            // last mod file date
+    hView.setUint32(14, crcValue, true);     // crc-32
+    hView.setUint32(18, dataBytes.length, true); // compressed size
+    hView.setUint32(22, dataBytes.length, true); // uncompressed size
+    hView.setUint16(26, nameBytes.length, true); // file name length
+    hView.setUint16(28, 0, true);            // extra field length
+    new Uint8Array(header).set(nameBytes, 30);
+
+    const headerBytes = new Uint8Array(header);
+    entries.push({ name: nameBytes, data: dataBytes, offset });
+    chunks.push(headerBytes, dataBytes);
+    offset += headerBytes.length + dataBytes.length;
+  }
+
+  // Central directory
+  const cdStart = offset;
+  for (const entry of entries) {
+    const isDir = entry.data.length === 0 && entry.name[entry.name.length - 1] === 0x2f;
+    const cd = new ArrayBuffer(46 + entry.name.length);
+    const cdView = new DataView(cd);
+    cdView.setUint32(0, 0x02014b50, true);   // central directory signature
+    cdView.setUint16(4, 20, true);            // version made by
+    cdView.setUint16(6, 20, true);            // version needed
+    cdView.setUint16(8, 0, true);             // flags
+    cdView.setUint16(10, 0, true);            // compression: STORE
+    cdView.setUint16(12, 0, true);            // mod time
+    cdView.setUint16(14, 0, true);            // mod date
+
+    if (!isDir) {
+      const crcValue = crc32(entry.data);
+      cdView.setUint32(16, crcValue, true);
+      cdView.setUint32(20, entry.data.length, true);
+      cdView.setUint32(24, entry.data.length, true);
+    }
+
+    cdView.setUint16(28, entry.name.length, true); // file name length
+    cdView.setUint16(30, 0, true);            // extra field length
+    cdView.setUint16(32, 0, true);            // file comment length
+    cdView.setUint16(34, 0, true);            // disk number start
+    cdView.setUint16(36, 0, true);            // internal file attributes
+    cdView.setUint32(38, isDir ? 0x10 : 0, true); // external file attributes
+    cdView.setUint32(42, entry.offset, true); // relative offset of local header
+    new Uint8Array(cd).set(entry.name, 46);
+
+    const cdBytes = new Uint8Array(cd);
+    chunks.push(cdBytes);
+    offset += cdBytes.length;
+  }
+
+  // End of central directory record
+  const cdSize = offset - cdStart;
+  const eocd = new ArrayBuffer(22);
+  const eocdView = new DataView(eocd);
+  eocdView.setUint32(0, 0x06054b50, true);   // EOCD signature
+  eocdView.setUint16(4, 0, true);            // disk number
+  eocdView.setUint16(6, 0, true);            // disk with central directory
+  eocdView.setUint16(8, entries.length, true);  // entries on this disk
+  eocdView.setUint16(10, entries.length, true); // total entries
+  eocdView.setUint32(12, cdSize, true);       // size of central directory
+  eocdView.setUint32(16, cdStart, true);      // offset of central directory
+  eocdView.setUint16(20, 0, true);            // comment length
+  chunks.push(new Uint8Array(eocd));
+
+  // Concatenate all chunks
+  const totalSize = chunks.reduce((sum, c) => sum + c.length, 0);
+  const result = new Uint8Array(totalSize);
+  let pos = 0;
+  for (const chunk of chunks) {
+    result.set(chunk, pos);
+    pos += chunk.length;
+  }
+  return result;
+}
+
+/**
+ * Helper: create a zip file on disk from a map of { relativePath → content }.
+ * Uses a pure-JS zip builder — no system `zip` binary required.
  * Returns the absolute path to the created .zip file.
  */
 async function createTestZip(
   name: string,
   files: Record<string, string>,
 ): Promise<string> {
-  const sourceDir = join(tempDir, `${name}-src`);
   const zipPath = join(tempDir, `${name}.zip`);
-
-  for (const [relativePath, content] of Object.entries(files)) {
-    const fullPath = join(sourceDir, relativePath);
-    const dir = fullPath.slice(0, fullPath.lastIndexOf("/"));
-    await mkdir(dir, { recursive: true });
-    await writeFile(fullPath, content);
-  }
-
-  const proc = Bun.spawn(
-    ["sh", "-c", `cd "${sourceDir}" && zip -r "${zipPath}" .`],
-    { stdout: "pipe", stderr: "pipe" },
-  );
-  await proc.exited;
-
+  const zipData = buildZipBuffer(files);
+  await Bun.write(zipPath, zipData);
   return zipPath;
 }
 
@@ -63,6 +218,9 @@ function serveFile(filePath: string): { url: string; stop: () => void } {
     port: 0,
     async fetch() {
       const file = Bun.file(filePath);
+      if (!(await file.exists())) {
+        return new Response("Not Found", { status: 404 });
+      }
       return new Response(file);
     },
   });
