@@ -1,21 +1,8 @@
 {
-  "name": "hacker-agent",
-  "version": "1.0.0",
+  "name": "ocean-mcp",
   "private": true,
-  "type": "module",
-  "scripts": {
-    "dev:server": "bun run --elide-lines=0 --filter '@hacker-agent/mcp-server' dev",
-    "dev:agent": "bun run --elide-lines=0 --filter '@hacker-agent/agent' dev",
-    "dev:sdk": "bun run --elide-lines=0 --filter '@hacker-agent/frontend-sdk' dev",
-    "dev": "concurrently \"bun run dev:server\" \"bun run --elide-lines=0 dev:agent\" \"bun run --elide-lines=0 dev:sdk\"",
-    "build": "bun run --filter '*' build"
-  },
-  "devDependencies": {
-    "@types/bun": "latest",
-    "concurrently": "^8.2.2",
-    "typescript": "^5.3.3"
-  },
   "workspaces": [
     "packages/*"
-  ]
+  ],
+  "scripts": {}
 }

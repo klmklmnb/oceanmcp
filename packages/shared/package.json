@@ -1,10 +1,18 @@
 {
-  "name": "@hacker-agent/shared",
-  "version": "1.0.0",
+  "name": "@ocean-mcp/shared",
+  "version": "0.1.0",
+  "private": true,
   "type": "module",
   "main": "./src/index.ts",
   "types": "./src/index.ts",
   "exports": {
     ".": "./src/index.ts"
+  },
+  "scripts": {
+    "build": "bun build ./src/index.ts --outdir ./dist --target node",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "typescript": "^5.7.0"
   }
 }

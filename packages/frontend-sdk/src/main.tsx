@@ -1,165 +1,196 @@
-import React, { useState, useEffect } from "react";
-import ReactDOM from "react-dom/client";
-import { SplitPane } from "./components/SplitPane";
-import { initRegistry } from "./registry";
-import "./index.css";
+import React from "react";
+import { createRoot } from "react-dom/client";
+import { ChatWidget } from "./components/ChatWidget";
+import { functionRegistry, skillRegistry } from "./registry";
+import type { SkillDefinition } from "./registry";
+import { mockFunctions } from "./registry/mock/mockFunctions";
+import { devopsSkill } from "./registry/devops";
+import { miCoffeeSkill } from "./registry/mi-coffee";
+import { wsClient } from "./runtime/ws-client";
+import {
+  FUNCTION_TYPE,
+  OPERATION_TYPE,
+  type FunctionDefinition,
+} from "@ocean-mcp/shared";
+import "./styles/index.css";
 
-// Configuration
-const DEFAULT_SERVER_URL = "http://localhost:4000";
-const DEFAULT_WS_URL = "ws://localhost:4000/connect";
-
-type SDKConfig = {
-  serverUrl?: string;
-  wsUrl?: string;
-  triggerKey?: string; // Keyboard shortcut to toggle SDK
-};
-
-type HackerAgentSDKProps = {
-  config?: SDKConfig;
-};
-
-function HackerAgentSDK({ config = {} }: HackerAgentSDKProps) {
-  const [isOpen, setIsOpen] = useState(false);
-
-  const serverUrl = config.serverUrl || DEFAULT_SERVER_URL;
-  const wsUrl = config.wsUrl || DEFAULT_WS_URL;
-  const triggerKey = config.triggerKey || "k"; // Ctrl/Cmd + K
-
-  // Initialize registry on mount
-  useEffect(() => {
-    initRegistry();
-  }, []);
-
-  // Keyboard shortcut handler
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === triggerKey) {
-        e.preventDefault();
-        setIsOpen((prev) => !prev);
-      }
-
-      // Escape to close
-      if (e.key === "Escape" && isOpen) {
-        setIsOpen(false);
-      }
-    };
-
-    window.addEventListener("keydown", handleKeyDown);
-    return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [triggerKey, isOpen]);
-
-  if (!isOpen) {
-    return (
-      <button
-        onClick={() => setIsOpen(true)}
-        style={{
-          position: "fixed",
-          bottom: "20px",
-          right: "20px",
-          width: "56px",
-          height: "56px",
-          borderRadius: "50%",
-          background: "linear-gradient(135deg, #22c55e 0%, #16a34a 100%)",
-          border: "none",
-          boxShadow: "0 4px 14px rgba(34, 197, 94, 0.4)",
-          cursor: "pointer",
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
-          fontSize: "24px",
-          transition: "transform 0.2s, box-shadow 0.2s",
-          zIndex: 9998,
-        }}
-        onMouseOver={(e) => {
-          e.currentTarget.style.transform = "scale(1.1)";
-          e.currentTarget.style.boxShadow = "0 6px 20px rgba(34, 197, 94, 0.5)";
-        }}
-        onMouseOut={(e) => {
-          e.currentTarget.style.transform = "scale(1)";
-          e.currentTarget.style.boxShadow = "0 4px 14px rgba(34, 197, 94, 0.4)";
-        }}
-        title="Open HackerAgent (Ctrl+K)"
-      >
-        ⚡
-      </button>
-    );
-  }
-
-  return (
-    <div className="hacker-agent-overlay" onClick={() => setIsOpen(false)}>
-      <div onClick={(e) => e.stopPropagation()}>
-        <SplitPane
-          serverUrl={serverUrl}
-          wsUrl={wsUrl}
-          onClose={() => setIsOpen(false)}
-        />
-      </div>
-    </div>
-  );
+// ─── Register pre-bundled mock functions ─────────────────────────────────────
+for (const fn of mockFunctions) {
+    functionRegistry.register(fn);
 }
 
-// Export the SDK component
-export { HackerAgentSDK };
+// ─── Register pre-bundled skills ─────────────────────────────────────────────
+// Skills bundle both instructions (for the LLM) and tools (for browser-side
+// execution). The skill registry sends metadata to the server, while tools
+// are also added to the function registry for local execution.
+const preregisteredSkills: SkillDefinition[] = [devopsSkill, miCoffeeSkill];
 
-// Export registry functions for external use
-export * from "./registry";
+for (const skill of preregisteredSkills) {
+  skillRegistry.register(skill);
+  if (skill.tools) {
+    for (const tool of skill.tools) {
+      functionRegistry.register(tool);
+    }
+  }
+}
 
-// Export types
-export type * from "./types";
+// ─── Connect WebSocket to server ─────────────────────────────────────────────
+wsClient.connect();
 
-// Auto-mount function for script injection
-export function mount(container?: HTMLElement, config?: SDKConfig): () => void {
-  const targetContainer = container || document.createElement("div");
-
+// ─── Mount the Chat Widget ──────────────────────────────────────────────────
+function mountOceanMCP() {
+  let container = document.getElementById("ocean-mcp-root");
   if (!container) {
-    targetContainer.id = "hacker-agent-root";
-    document.body.appendChild(targetContainer);
+    container = document.createElement("div");
+    container.id = "ocean-mcp-root";
+    // Float overlay style for injection into existing apps
+    Object.assign(container.style, {
+      position: "fixed",
+      bottom: "0",
+      right: "0",
+      width: "420px",
+      height: "600px",
+      zIndex: "99999",
+      borderRadius: "16px 16px 0 0",
+      overflow: "hidden",
+      boxShadow: "0 -4px 32px rgba(0,0,0,0.12)",
+    });
+    document.body.appendChild(container);
+  } else {
+    // Dev mode: full height
+    container.style.height = "100vh";
   }
 
-  const root = ReactDOM.createRoot(targetContainer);
+  const root = createRoot(container);
   root.render(
     <React.StrictMode>
-      <HackerAgentSDK config={config} />
-    </React.StrictMode>
+      <ChatWidget />
+    </React.StrictMode>,
   );
-
-  return () => {
-    root.unmount();
-    if (!container && targetContainer.parentNode) {
-      targetContainer.parentNode.removeChild(targetContainer);
-    }
-  };
 }
 
-// For development: render to #root if it exists
-if (import.meta.env.DEV) {
-  // Initialize registry for development
-  initRegistry();
-  setTimeout(() => {
-    const root = document.getElementById('itr-platform-deployment') as HTMLElement
-    if (root) {
-      ReactDOM.createRoot(root).render(
-        <React.StrictMode>
-          <SplitPane
-            serverUrl={DEFAULT_SERVER_URL}
-            wsUrl={DEFAULT_WS_URL}
-            onClose={() => { }}
-          />
-        </React.StrictMode>
-      );
-    }
-  }, 2000);
-} else if (typeof window !== "undefined") {
-  // Auto-mount when loaded as a script (production only, not in dev mode)
-  const scriptTag = document.currentScript as HTMLScriptElement | null;
-  const shouldAutoMount = scriptTag?.getAttribute("data-auto-mount") !== "false";
+// ─── Expose Global SDK API ───────────────────────────────────────────────────
+const OceanMCPSDK = {
+  /**
+   * Register a skill with bundled tools from the host application.
+   *
+   * The skill's metadata (name, description) is added to the system prompt
+   * catalog. Its full instructions are loaded on-demand via the `loadSkill`
+   * tool. Bundled tools are registered in both the tool registry (for
+   * browser-side execution) and sent to the server (for LLM access).
+   *
+   * @example
+   * ```ts
+   * OceanMCPSDK.registerSkill({
+   *   name: 'inventory-ops',
+   *   description: 'Manage product inventory.',
+   *   instructions: '# Inventory Ops\n\n...',
+   *   tools: [
+   *     { id: 'getStock', type: 'executor', operationType: 'read',
+   *       executor: async (args) => fetch(`/api/stock/${args.id}`).then(r => r.json()),
+   *       parameters: [{ name: 'id', type: 'string', required: true }] },
+   *   ],
+   * });
+   * ```
+   */
+  registerSkill(definition: SkillDefinition) {
+    skillRegistry.register(definition);
 
-  if (shouldAutoMount) {
-    // Wait for DOM to be ready
-    if (document.readyState === "loading") {
-      document.addEventListener("DOMContentLoaded", () => mount());
-    } else {
-      mount();
+    // Also register bundled tools into the function registry for browser-side execution
+    if (definition.tools) {
+      for (const tool of definition.tools) {
+        functionRegistry.register(tool);
+      }
     }
+
+    // Sync capabilities to server
+    if (wsClient.isConnected) {
+      wsClient.registerCapabilities();
+    }
+
+    console.log(`[OceanMCP] Skill registered: ${definition.name}`);
+  },
+
+  /** Unregister a skill and its bundled tools by name */
+  unregisterSkill(name: string) {
+    const skill = skillRegistry.get(name);
+    if (skill?.tools) {
+      for (const tool of skill.tools) {
+        functionRegistry.unregister(tool.id);
+      }
+    }
+    skillRegistry.unregister(name);
+
+    if (wsClient.isConnected) {
+      wsClient.registerCapabilities();
+    }
+
+    console.log(`[OceanMCP] Skill unregistered: ${name}`);
+  },
+
+  /**
+   * Register a standalone tool dynamically from the host application.
+   * Supports both 'code' and 'executor' type definitions.
+   */
+  registerTool(definition: Partial<FunctionDefinition> & { id: string }) {
+    const fn: FunctionDefinition = {
+      type: FUNCTION_TYPE.EXECUTOR,
+      operationType: OPERATION_TYPE.READ,
+      parameters: [],
+      name: definition.id,
+      description: "",
+      ...definition,
+    } as FunctionDefinition;
+
+  functionRegistry.register(fn);
+
+    // Re-register capabilities with the server so it knows about the new tool
+    if (wsClient.isConnected) {
+      wsClient.registerCapabilities();
+    }
+
+    console.log(`[OceanMCP] Tool registered: ${fn.id}`);
+  },
+
+  /** Unregister a tool by ID */
+  unregisterTool(id: string) {
+    functionRegistry.unregister(id);
+    if (wsClient.isConnected) {
+      wsClient.registerCapabilities();
+    }
+  },
+
+  /** Get all registered tools */
+  getTools() {
+    return functionRegistry.getAll();
+  },
+
+  /** Get all registered skills */
+  getSkills() {
+    return skillRegistry.getAll();
+  },
+
+  /** Mount the chat widget (called automatically, can be re-called) */
+  mount: mountOceanMCP,
+
+  /** Registry and WebSocket client refs for advanced usage */
+  functionRegistry: functionRegistry as any,
+  skillRegistry: skillRegistry as any,
+  wsClient: wsClient as any,
+};
+
+// Attach to window
+if (typeof window !== "undefined") {
+  (window as any).OceanMCPSDK = OceanMCPSDK;
+}
+
+// Auto-mount when script loads (dev mode only)
+if (typeof document !== "undefined" && import.meta.env.DEV) {
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", mountOceanMCP);
+  } else {
+    mountOceanMCP();
   }
 }
+
+export default OceanMCPSDK;

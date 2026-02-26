@@ -1,36 +1,22 @@
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
-import dts from "vite-plugin-dts";
-import { resolve } from "path";
+import tailwindcss from "@tailwindcss/vite";
 
 export default defineConfig({
-  base:  "/hacker-agent-sdk/",
-  plugins: [
-    react(),
-    dts({
-      insertTypesEntry: true,
-    }),
-  ],
+  plugins: [react(), tailwindcss()],
   build: {
     lib: {
-      entry: resolve(__dirname, "src/main.tsx"),
-      name: "HackerAgentSDK",
+      entry: "src/main.tsx",
+      name: "OceanMCPSDK",
       fileName: "sdk",
-      formats: ["es", "umd"],
+      formats: ["es"],
     },
     rollupOptions: {
-      external: [],
-      output: {
-        globals: {},
-      },
+      // Don't externalize React — bundle it for injection into host apps
     },
-    cssCodeSplit: false,
   },
   server: {
     port: 3000,
     cors: true,
-    hmr: {
-      port: 3000,
-    },
   },
 });

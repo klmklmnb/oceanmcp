@@ -3,15 +3,15 @@
     "target": "ES2022",
     "module": "ESNext",
     "moduleResolution": "bundler",
-    "esModuleInterop": true,
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
     "strict": true,
+    "esModuleInterop": true,
     "skipLibCheck": true,
-    "declaration": true,
-    "declarationMap": true,
-    "sourceMap": true,
+    "forceConsistentCasingInFileNames": true,
     "resolveJsonModule": true,
     "isolatedModules": true,
-    "noEmit": false,
-    "lib": ["ES2022", "DOM", "DOM.Iterable"]
+    "declaration": true,
+    "declarationMap": true,
+    "sourceMap": true
   }
 }
