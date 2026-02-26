@@ -38,27 +38,43 @@ for (const skill of preregisteredSkills) {
 wsClient.connect();
 
 // ─── Mount the Chat Widget ──────────────────────────────────────────────────
-function mountOceanMCP() {
-  let container = document.getElementById("ocean-mcp-root");
-  if (!container) {
-    container = document.createElement("div");
-    container.id = "ocean-mcp-root";
-    // Float overlay style for injection into existing apps
-    Object.assign(container.style, {
-      position: "fixed",
-      bottom: "0",
-      right: "0",
-      width: "420px",
-      height: "600px",
-      zIndex: "99999",
-      borderRadius: "16px 16px 0 0",
-      overflow: "hidden",
-      boxShadow: "0 -4px 32px rgba(0,0,0,0.12)",
-    });
-    document.body.appendChild(container);
+type MountTarget = string | HTMLElement;
+
+function mountOceanMCP(target?: MountTarget) {
+  let container: HTMLElement | null = null;
+
+  if (typeof target === "string") {
+    container = document.getElementById(target);
+  } else if (target instanceof HTMLElement) {
+    container = target;
   } else {
-    // Dev mode: full height
-    container.style.height = "100vh";
+    // Fallback: try to find existing container or create one
+    container = document.getElementById("ocean-mcp-root");
+    if (!container) {
+      container = document.createElement("div");
+      container.id = "ocean-mcp-root";
+      // Float overlay style for injection into existing apps
+      Object.assign(container.style, {
+        position: "fixed",
+        bottom: "0",
+        right: "0",
+        width: "420px",
+        height: "600px",
+        zIndex: "99999",
+        borderRadius: "16px 16px 0 0",
+        overflow: "hidden",
+        boxShadow: "0 -4px 32px rgba(0,0,0,0.12)",
+      });
+      document.body.appendChild(container);
+    } else {
+      // Existing container: full height
+      container.style.height = "100vh";
+    }
+  }
+
+  if (!container) {
+    console.error("[OceanMCP] Mount target not found:", target);
+    return;
   }
 
   const root = createRoot(container);
@@ -170,8 +186,26 @@ const OceanMCPSDK = {
     return skillRegistry.getAll();
   },
 
-  /** Mount the chat widget (called automatically, can be re-called) */
-  mount: mountOceanMCP,
+  /**
+   * Mount the chat widget to a specific target.
+   *
+   * @param target - CSS selector string (e.g., "#my-container") or HTMLElement.
+   *                 If not provided, creates a floating overlay or uses existing #ocean-mcp-root.
+   * @example
+   * ```ts
+   * // Mount to a specific element
+   * OceanMCPSDK.mount(document.getElementById("chat-container"));
+   *
+   * // Mount to an element by ID
+   * OceanMCPSDK.mount("#my-chat");
+   *
+   * // Auto-create floating overlay (default behavior)
+   * OceanMCPSDK.mount();
+   * ```
+   */
+  mount(target?: MountTarget) {
+    mountOceanMCP(target);
+  },
 
   /** Registry and WebSocket client refs for advanced usage */
   functionRegistry: functionRegistry as any,
@@ -187,7 +221,7 @@ if (typeof window !== "undefined") {
 // Auto-mount when script loads (dev mode only)
 if (typeof document !== "undefined" && import.meta.env.DEV) {
   if (document.readyState === "loading") {
-    document.addEventListener("DOMContentLoaded", mountOceanMCP);
+    document.addEventListener("DOMContentLoaded", () => mountOceanMCP());
   } else {
     mountOceanMCP();
   }
