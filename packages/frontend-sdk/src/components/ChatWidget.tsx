@@ -10,10 +10,7 @@ import {
 import { MessageRenderer } from "./MessageRenderer";
 import { wsClient } from "../runtime/ws-client";
 import { CHAT_STATUS } from "../constants/chat";
-
-const API_URL =
-  (typeof window !== "undefined" && (window as any).__OCEAN_MCP_SERVER_URL__) ||
-  "http://localhost:4000";
+import { API_URL } from "../config";
 
 const AUTO_DENY_REASON =
   "User sent a new message instead of responding to approval";

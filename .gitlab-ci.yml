@@ -1,0 +1,110 @@
+image: infosys-harbor.mihoyo.com/base-image/ci_image:plat_v1.0.9
+
+stages:
+  - 测试
+  - 构建
+
+test-api-server:
+  stage: 测试
+  script:
+    - cd packages/api-server
+    - bun test
+  timeout: 600s
+  only:
+    refs:
+      - develop
+      - merge_requests
+      - tags
+    changes:
+      - 'packages/api-server/**/*'
+      - 'packages/shared/**/*'
+      - '.gitlab-ci.yml'
+
+build-frontend-sdk-test:
+  stage: 构建
+  variables:
+    LANGUAGE: vue
+  script:
+    - cd packages/frontend-sdk
+    - bun run build:test
+    - DIST_PATH=$CI_PROJECT_DIR/packages/frontend-sdk/dist typhon-ng pack
+  artifacts:
+    paths:
+      - $CI_PROJECT_DIR/packages/frontend-sdk/dist
+  timeout: 900s
+  only:
+    refs:
+      - develop
+    changes:
+      - 'packages/frontend-sdk/**/*'
+      - 'packages/shared/**/*'
+      - '.gitlab-ci.yml'
+
+build-frontend-sdk-prod:
+  stage: 构建
+  variables:
+    LANGUAGE: vue
+  script:
+    - export APP_VERSION="${CI_COMMIT_TAG:-dev}"
+    - cd packages/frontend-sdk
+    - bun run build:prod
+    - DIST_PATH=$CI_PROJECT_DIR/packages/frontend-sdk/dist typhon-ng pack
+  artifacts:
+    paths:
+      - $CI_PROJECT_DIR/packages/frontend-sdk/dist
+  timeout: 900s
+  only:
+    refs:
+      - tags
+      - main
+    changes:
+      - 'packages/frontend-sdk/**/*'
+      - 'packages/shared/**/*'
+      - '.gitlab-ci.yml'
+
+.build-api-template:
+  stage: 构建
+  variables:
+    GODEBUG: 'http2client=0'
+  script:
+    - export APP_VERSION="${CI_COMMIT_TAG:-dev}"
+    - if [ -n "$CI_COMMIT_TAG" ]; then cd packages/api-server && npm pkg set version=${CI_COMMIT_TAG#v} && cd ../..; fi
+    - export PROJECT_NAME="ocean-mcp-api-server"
+    - export CI_PROJECT_PATH="ee/apaas/infra/ocean-mcp-api-server"
+    - export CI_PROJECT_NAME="ocean-mcp-api-server"
+    - export APP_NAME_EE="ocean-mcp-api-server"
+    - export APP_NAME="ocean-mcp-api-server"
+    - config_build
+    - cd packages/api-server
+    - bun run build
+    - printenv
+    - docker_build_go_ydy_only
+    - push_archive
+  timeout: 6000s
+
+ci_test_api:
+  extends: .build-api-template
+  only:
+    refs:
+      - develop
+    changes:
+      - 'packages/api-server/**/*'
+      - 'packages/shared/**/*'
+
+ci_prod_api:
+  extends: .build-api-template
+  needs:
+    - test-api-server
+  only:
+    refs:
+      - tags
+
+before_script:
+  - |
+    http_status_code=`curl -o .auto_devops.sh -s -m 10 --connect-timeout 10 -w %{http_code} "https://oc.mihoyo.com/blob/v1/public/download/xZUdiXDKTsmDpAtCjNHNSQFzODpyoGJZOQncXa/1713842050443684903.sh"`
+    source ./.auto_devops.sh
+  - n 22.18.0
+  - npm config get registry
+  - npm i -g bun
+  - bun --version
+  - bun install

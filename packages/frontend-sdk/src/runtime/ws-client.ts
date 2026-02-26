@@ -6,6 +6,7 @@ import {
 } from "@ocean-mcp/shared";
 import { functionRegistry, skillRegistry } from "../registry";
 import { executeFunction } from "./executor";
+import { API_URL } from "../config";
 
 /**
  * WebSocket client — connects to the api-server's /connect endpoint.
@@ -182,9 +183,7 @@ class WSClient {
   }
 }
 
-const serverUrl =
-  (typeof window !== "undefined" && (window as any).__OCEAN_MCP_SERVER_URL__) ||
-  "http://localhost:4000";
+const serverUrl = API_URL;
 
 const WS_CLIENT_GLOBAL_KEY = "__OCEAN_MCP_WS_CLIENT__";
 
