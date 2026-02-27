@@ -9,16 +9,14 @@ export default defineConfig({
       entry: "src/main.tsx",
       name: "OceanMCPSDK",
       fileName: "sdk",
-      formats: ["es"],
+      formats: ["es"]
     },
     cssCodeSplit: false,
     cssMinify: true,
-    rollupOptions: {
-      // Don't externalize React — bundle it for injection into host apps
-    },
+    rollupOptions: {}
   },
   server: {
     port: 3000,
-    cors: true,
-  },
+    cors: true
+  }
 });
