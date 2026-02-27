@@ -3,9 +3,6 @@ import { createRoot } from "react-dom/client";
 import { ChatWidget } from "./components/ChatWidget";
 import { functionRegistry, skillRegistry } from "./registry";
 import type { SkillDefinition } from "./registry";
-import { mockFunctions } from "./registry/mock/mockFunctions";
-import { devopsSkill } from "./registry/devops";
-import { miCoffeeSkill } from "./registry/mi-coffee";
 import { wsClient } from "./runtime/ws-client";
 import {
   FUNCTION_TYPE,
@@ -14,56 +11,10 @@ import {
 } from "@ocean-mcp/shared";
 import "./styles/index.css";
 
-// ─── Register pre-bundled mock functions ─────────────────────────────────────
-for (const fn of mockFunctions) {
-    functionRegistry.register(fn);
-}
-
-// ─── Register pre-bundled skills ─────────────────────────────────────────────
-// Skills bundle both instructions (for the LLM) and tools (for browser-side
-// execution). The skill registry sends metadata to the server, while tools
-// are also added to the function registry for local execution.
-const preregisteredSkills: SkillDefinition[] = [devopsSkill, miCoffeeSkill];
-
-for (const skill of preregisteredSkills) {
-  skillRegistry.register(skill);
-  if (skill.tools) {
-    for (const tool of skill.tools) {
-      functionRegistry.register(tool);
-    }
-  }
-}
-
 // ─── Connect WebSocket to server ─────────────────────────────────────────────
+// SDK connects to the backend so it can send registered capabilities (skills/tools)
+// and receive function execution requests.
 wsClient.connect();
-
-// ─── Mock: register a zip skill from CDN (dev mode only) ─────────────────────
-// Demonstrates the registerSkillFromZip flow by loading a skill pack from a
-// CDN-hosted .zip file. The server downloads, extracts, and discovers skills
-// from the zip, then makes them available in the system prompt and loadSkill.
-if (import.meta.env.DEV) {
-  const ZIP_SKILL_URL =
-    "https://fastcdn.mihoyo.com/static-resource-v2/2026/02/26/058beb1461340237f7a317cce3bc92c8_9174939835677374533.zip";
-
-  // Wait for WebSocket to connect before sending the zip registration request
-  const waitForConnection = () => {
-    if (wsClient.isConnected) {
-      wsClient
-        .registerSkillFromZip(ZIP_SKILL_URL)
-        .then((skills) => {
-          console.log(
-            `[OceanMCP][Mock] Zip skill(s) registered: ${skills.map((s) => s.name).join(", ")}`,
-          );
-        })
-        .catch((err) => {
-          console.error("[OceanMCP][Mock] Failed to register zip skill:", err);
-        });
-    } else {
-      setTimeout(waitForConnection, 500);
-    }
-  };
-  waitForConnection();
-}
 
 // ─── Mount the Chat Widget ──────────────────────────────────────────────────
 type MountTarget = string | HTMLElement;
