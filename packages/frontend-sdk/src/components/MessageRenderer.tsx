@@ -10,6 +10,7 @@ import {
 import { FlowNodeCard } from "./FlowNodeCard";
 import { ApprovalButtons } from "./ApprovalButtons";
 import { UserSelectCard } from "./UserSelectCard";
+import { MarkdownRenderer } from "./MarkdownRenderer";
 import { functionRegistry } from "../registry";
 
 type MessageRendererProps = {
@@ -375,16 +376,16 @@ export function MessageRenderer({
           const content = text.substring(lastIndex, match.index);
           if (content.trim()) {
             parts.push(
-              <div
-                key={`text-${lastIndex}`}
-                className={
-                  isUser
-                    ? "inline-block px-4 py-2.5 rounded-2xl bg-ocean-600 text-white text-sm leading-relaxed"
-                    : "text-sm text-text-primary leading-relaxed whitespace-pre-wrap"
-                }
-              >
-                {content}
-              </div>,
+              isUser ? (
+                <div
+                  key={`text-${lastIndex}`}
+                  className="inline-block px-4 py-2.5 rounded-2xl bg-ocean-600 text-white text-sm leading-relaxed"
+                >
+                  {content}
+                </div>
+              ) : (
+                <MarkdownRenderer key={`text-${lastIndex}`} content={content} />
+              ),
             );
           }
         }
@@ -410,16 +411,16 @@ export function MessageRenderer({
       if (lastIndex < text.length) {
         const content = text.substring(lastIndex);
         parts.push(
-          <div
-            key={`text-${lastIndex}`}
-            className={
-              isUser
-                ? "inline-block px-4 py-2.5 rounded-2xl bg-ocean-600 text-white text-sm leading-relaxed"
-                : "text-sm text-text-primary leading-relaxed whitespace-pre-wrap"
-            }
-          >
-            {content}
-          </div>,
+          isUser ? (
+            <div
+              key={`text-${lastIndex}`}
+              className="inline-block px-4 py-2.5 rounded-2xl bg-ocean-600 text-white text-sm leading-relaxed"
+            >
+              {content}
+            </div>
+          ) : (
+            <MarkdownRenderer key={`text-${lastIndex}`} content={content} />
+          ),
         );
       }
 

@@ -117,3 +117,32 @@
 .ocean-typing-dot:nth-child(3) {
   animation-delay: 0.4s;
 }
+
+/* ─── Markdown ────────────────────────────────────────────────────────────── */
+.ocean-markdown > :first-child {
+  margin-top: 0;
+}
+.ocean-markdown > :last-child {
+  margin-bottom: 0;
+}
+
+/* Strikethrough */
+.ocean-markdown del {
+  text-decoration: line-through;
+  opacity: 0.7;
+}
+
+/* Task list checkboxes (GFM) */
+.ocean-markdown input[type="checkbox"] {
+  margin-right: 0.5rem;
+  accent-color: var(--color-ocean-600);
+}
+
+/* Nested list spacing */
+.ocean-markdown ul ul,
+.ocean-markdown ol ol,
+.ocean-markdown ul ol,
+.ocean-markdown ol ul {
+  margin-top: 0.25rem;
+  margin-bottom: 0.25rem;
+}
