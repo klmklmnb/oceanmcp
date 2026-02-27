@@ -28,6 +28,10 @@ class WSClient {
   private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
   private pingTimer: ReturnType<typeof setInterval> | null = null;
   private pendingZipRequests = new Map<string, PendingZipRequest>();
+  private pendingConnection: Array<{
+    resolve: () => void;
+    reject: (err: Error) => void;
+  }> = [];
   private serverUrl: string;
   private maxReconnectDelay = 30_000;
   private reconnectDelay = 1_000;
@@ -52,6 +56,8 @@ class WSClient {
         console.log("[OceanMCP] WebSocket connected");
         this.reconnectDelay = 1_000; // Reset on successful connection
         this.startPing();
+        // Resolve any callers waiting for the connection
+        this.flushPendingConnection(true);
         // Register all current tool schemas and skill schemas with the server
         this.registerCapabilities();
       };
@@ -109,10 +115,62 @@ class WSClient {
     }
     this.stopPing();
     this.connectionId = null;
+    this.flushPendingConnection(false);
     if (this.ws) {
       this.ws.onclose = null; // Prevent reconnect
       this.ws.close();
       this.ws = null;
+    }
+  }
+
+  /**
+   * Wait for the WebSocket connection to be open.
+   * Resolves immediately if already connected.
+   */
+  waitForConnection(timeoutMs = 30_000): Promise<void> {
+    if (this.ws?.readyState === WebSocket.OPEN) {
+      return Promise.resolve();
+    }
+
+    return new Promise<void>((resolve, reject) => {
+      const timer = setTimeout(() => {
+        // Remove from pending list on timeout
+        this.pendingConnection = this.pendingConnection.filter(
+          (p) => p.resolve !== resolve,
+        );
+        reject(
+          new Error(
+            `[OceanMCP] WebSocket connection timed out after ${timeoutMs}ms`,
+          ),
+        );
+      }, timeoutMs);
+
+      this.pendingConnection.push({
+        resolve: () => {
+          clearTimeout(timer);
+          resolve();
+        },
+        reject: (err: Error) => {
+          clearTimeout(timer);
+          reject(err);
+        },
+      });
+
+      // Ensure a connection attempt is in progress
+      this.connect();
+    });
+  }
+
+  /** Flush all pending connection waiters */
+  private flushPendingConnection(success: boolean): void {
+    const waiters = this.pendingConnection;
+    this.pendingConnection = [];
+    for (const w of waiters) {
+      if (success) {
+        w.resolve();
+      } else {
+        w.reject(new Error("[OceanMCP] WebSocket connection failed"));
+      }
     }
   }
 
@@ -158,15 +216,12 @@ class WSClient {
    * console.log('Registered:', skills.map(s => s.name));
    * ```
    */
-  registerSkillFromZip(
+  async registerSkillFromZip(
     url: string,
     timeoutMs = 60_000,
   ): Promise<SkillMetadata[]> {
-    if (!this.ws || this.ws.readyState !== WebSocket.OPEN) {
-      return Promise.reject(
-        new Error("[OceanMCP] Cannot register zip skill: WebSocket not connected"),
-      );
-    }
+    // Wait for WebSocket to be connected before sending the request
+    await this.waitForConnection(timeoutMs);
 
     const requestId = crypto.randomUUID();
 
