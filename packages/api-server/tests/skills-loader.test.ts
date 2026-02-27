@@ -536,3 +536,216 @@ description: A skill with many resources.
     expect(result).not.toHaveProperty("skillDirectory");
   });
 });
+
+// ═════════════════════════════════════════════════════════════════════════════
+// loadSkill — resourcePath (reading individual resource files)
+// ═════════════════════════════════════════════════════════════════════════════
+
+describe("loadSkill with resourcePath", () => {
+  const skillContent = `---
+name: my-skill
+description: A skill with resource files.
+---
+
+# Skill Instructions
+
+Refer to _node-lib/INDEX.md for the node library index.
+`;
+
+  const skills: DiscoveredSkill[] = [
+    {
+      name: "my-skill",
+      description: "A skill with resource files.",
+      path: "/skills/my-skill",
+    },
+  ];
+
+  test("reads a specific resource file by relative path", async () => {
+    const sandbox = createMockSandbox({
+      "/skills/my-skill/SKILL.md": skillContent,
+      "/skills/my-skill/_node-lib/INDEX.md": "# Node Library Index\n\n- item-a\n- item-b",
+      "/skills/my-skill/_node-lib/event-fixed_llm.md": "# LLM Node\n\nDefault properties for LLM.",
+    });
+    const tool = createLoadSkillTool(sandbox, skills, []);
+    const result = await tool.execute!(
+      { name: "my-skill", resourcePath: "_node-lib/event-fixed_llm.md" },
+      { toolCallId: "test", messages: [] } as any,
+    );
+
+    expect(result).not.toHaveProperty("error");
+    expect((result as any).content).toContain("# LLM Node");
+    expect((result as any).content).toContain("Default properties for LLM.");
+    expect((result as any).skillDirectory).toBe("/skills/my-skill");
+    expect((result as any).resourcePath).toBe("_node-lib/event-fixed_llm.md");
+  });
+
+  test("reads a top-level resource file", async () => {
+    const sandbox = createMockSandbox({
+      "/skills/my-skill/SKILL.md": skillContent,
+      "/skills/my-skill/config.yaml": "key: value\nfoo: bar",
+    });
+    const tool = createLoadSkillTool(sandbox, skills, []);
+    const result = await tool.execute!(
+      { name: "my-skill", resourcePath: "config.yaml" },
+      { toolCallId: "test", messages: [] } as any,
+    );
+
+    expect(result).not.toHaveProperty("error");
+    expect((result as any).content).toBe("key: value\nfoo: bar");
+  });
+
+  test("returns skillDirectory and resourcePath in response", async () => {
+    const sandbox = createMockSandbox({
+      "/skills/my-skill/SKILL.md": skillContent,
+      "/skills/my-skill/_node-lib/INDEX.md": "# Index",
+    });
+    const tool = createLoadSkillTool(sandbox, skills, []);
+    const result = await tool.execute!(
+      { name: "my-skill", resourcePath: "_node-lib/INDEX.md" },
+      { toolCallId: "test", messages: [] } as any,
+    );
+
+    expect((result as any).skillDirectory).toBe("/skills/my-skill");
+    expect((result as any).resourcePath).toBe("_node-lib/INDEX.md");
+  });
+
+  test("does not return resources listing when reading a specific file", async () => {
+    const sandbox = createMockSandbox({
+      "/skills/my-skill/SKILL.md": skillContent,
+      "/skills/my-skill/_node-lib/INDEX.md": "# Index",
+      "/skills/my-skill/_node-lib/other.md": "# Other",
+    });
+    const tool = createLoadSkillTool(sandbox, skills, []);
+    const result = await tool.execute!(
+      { name: "my-skill", resourcePath: "_node-lib/INDEX.md" },
+      { toolCallId: "test", messages: [] } as any,
+    );
+
+    // When reading a specific resource, should NOT include the full resources listing
+    expect(result).not.toHaveProperty("resources");
+  });
+
+  test("returns error for nonexistent resource file", async () => {
+    const sandbox = createMockSandbox({
+      "/skills/my-skill/SKILL.md": skillContent,
+    });
+    const tool = createLoadSkillTool(sandbox, skills, []);
+    const result = await tool.execute!(
+      { name: "my-skill", resourcePath: "_node-lib/nonexistent.md" },
+      { toolCallId: "test", messages: [] } as any,
+    );
+
+    expect(result).toHaveProperty("error");
+    expect((result as any).error).toContain("Failed to read resource");
+    expect((result as any).error).toContain("_node-lib/nonexistent.md");
+  });
+
+  test("rejects path traversal with '..' segments", async () => {
+    const sandbox = createMockSandbox({
+      "/skills/my-skill/SKILL.md": skillContent,
+      "/etc/passwd": "root:x:0:0",
+    });
+    const tool = createLoadSkillTool(sandbox, skills, []);
+    const result = await tool.execute!(
+      { name: "my-skill", resourcePath: "../../etc/passwd" },
+      { toolCallId: "test", messages: [] } as any,
+    );
+
+    expect(result).toHaveProperty("error");
+    expect((result as any).error).toContain("absolute paths and '..' segments are not allowed");
+  });
+
+  test("rejects absolute paths", async () => {
+    const sandbox = createMockSandbox({
+      "/skills/my-skill/SKILL.md": skillContent,
+      "/etc/passwd": "root:x:0:0",
+    });
+    const tool = createLoadSkillTool(sandbox, skills, []);
+    const result = await tool.execute!(
+      { name: "my-skill", resourcePath: "/etc/passwd" },
+      { toolCallId: "test", messages: [] } as any,
+    );
+
+    expect(result).toHaveProperty("error");
+    expect((result as any).error).toContain("absolute paths and '..' segments are not allowed");
+  });
+
+  test("rejects sneaky path traversal with mixed segments", async () => {
+    const sandbox = createMockSandbox({
+      "/skills/my-skill/SKILL.md": skillContent,
+    });
+    const tool = createLoadSkillTool(sandbox, skills, []);
+    const result = await tool.execute!(
+      { name: "my-skill", resourcePath: "_node-lib/../../../etc/passwd" },
+      { toolCallId: "test", messages: [] } as any,
+    );
+
+    expect(result).toHaveProperty("error");
+    expect((result as any).error).toContain("not allowed");
+  });
+
+  test("performs case-insensitive skill name matching with resourcePath", async () => {
+    const sandbox = createMockSandbox({
+      "/skills/my-skill/SKILL.md": skillContent,
+      "/skills/my-skill/_node-lib/INDEX.md": "# Index content",
+    });
+    const tool = createLoadSkillTool(sandbox, skills, []);
+    const result = await tool.execute!(
+      { name: "MY-SKILL", resourcePath: "_node-lib/INDEX.md" },
+      { toolCallId: "test", messages: [] } as any,
+    );
+
+    expect(result).not.toHaveProperty("error");
+    expect((result as any).content).toContain("# Index content");
+  });
+
+  test("returns error when using resourcePath on unknown skill", async () => {
+    const sandbox = createMockSandbox({});
+    const tool = createLoadSkillTool(sandbox, skills, []);
+    const result = await tool.execute!(
+      { name: "nonexistent", resourcePath: "some-file.md" },
+      { toolCallId: "test", messages: [] } as any,
+    );
+
+    expect(result).toHaveProperty("error");
+    expect((result as any).error).toContain("not found");
+  });
+
+  test("returns error when using resourcePath on frontend-registered skill", async () => {
+    const sandbox = createMockSandbox({});
+    const frontendSkills = [
+      {
+        name: "frontend-skill",
+        description: "From frontend.",
+        instructions: "# Frontend skill",
+      },
+    ];
+    const tool = createLoadSkillTool(sandbox, [], frontendSkills);
+    const result = await tool.execute!(
+      { name: "frontend-skill", resourcePath: "some-file.md" },
+      { toolCallId: "test", messages: [] } as any,
+    );
+
+    expect(result).toHaveProperty("error");
+    expect((result as any).error).toContain("Cannot read resource files from frontend-registered skill");
+  });
+
+  test("without resourcePath, behaves exactly as before (returns full skill)", async () => {
+    const sandbox = createMockSandbox({
+      "/skills/my-skill/SKILL.md": skillContent,
+      "/skills/my-skill/_node-lib/INDEX.md": "# Index",
+    });
+    const tool = createLoadSkillTool(sandbox, skills, []);
+    const result = await tool.execute!(
+      { name: "my-skill" },
+      { toolCallId: "test", messages: [] } as any,
+    );
+
+    expect(result).not.toHaveProperty("error");
+    expect((result as any).content).toContain("# Skill Instructions");
+    expect((result as any).skillDirectory).toBe("/skills/my-skill");
+    expect(result).toHaveProperty("resources");
+    expect((result as any).resources).toContain("_node-lib/");
+    expect((result as any).resources).toContain("_node-lib/INDEX.md");
+  });
+});

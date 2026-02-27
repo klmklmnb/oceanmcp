@@ -623,4 +623,61 @@ These are the instructions for the E2E zip skill.
       stop();
     }
   });
+
+  test("zip-extracted skill resource files are readable via resourcePath", async () => {
+    const { createLoadSkillTool } = await import("../src/ai/skills/loader");
+
+    const zipPath = await createTestZip("e2e-resource-read", {
+      "my-skill/SKILL.md": `---
+name: e2e-resource-skill
+description: Skill with nested resource files.
+---
+
+# Instructions
+
+Read _node-lib/INDEX.md for the index.
+`,
+      "my-skill/_node-lib/INDEX.md": "# Node Index\n\n- llm -> event-fixed_llm.md",
+      "my-skill/_node-lib/event-fixed_llm.md": "# LLM Node\n\nDefault LLM properties here.",
+    });
+
+    const { url, stop } = serveFile(zipPath);
+    try {
+      const { skills } = await loadSkillsFromZip(sandbox, url);
+      expect(skills).toHaveLength(1);
+
+      const tool = createLoadSkillTool(sandbox, skills, []);
+
+      // First: load the skill normally to get the resources listing
+      const loadResult = await tool.execute!(
+        { name: "e2e-resource-skill" },
+        { toolCallId: "test", messages: [] } as any,
+      );
+      const resources: string[] = (loadResult as any).resources;
+      expect(resources).toContain("_node-lib/");
+      expect(resources).toContain("_node-lib/INDEX.md");
+      expect(resources).toContain("_node-lib/event-fixed_llm.md");
+
+      // Second: read a specific resource file using resourcePath
+      const indexResult = await tool.execute!(
+        { name: "e2e-resource-skill", resourcePath: "_node-lib/INDEX.md" },
+        { toolCallId: "test", messages: [] } as any,
+      );
+      expect(indexResult).not.toHaveProperty("error");
+      expect((indexResult as any).content).toContain("# Node Index");
+      expect((indexResult as any).content).toContain("event-fixed_llm.md");
+      expect((indexResult as any).resourcePath).toBe("_node-lib/INDEX.md");
+
+      // Third: read another resource file
+      const llmResult = await tool.execute!(
+        { name: "e2e-resource-skill", resourcePath: "_node-lib/event-fixed_llm.md" },
+        { toolCallId: "test", messages: [] } as any,
+      );
+      expect(llmResult).not.toHaveProperty("error");
+      expect((llmResult as any).content).toContain("# LLM Node");
+      expect((llmResult as any).content).toContain("Default LLM properties here.");
+    } finally {
+      stop();
+    }
+  });
 });

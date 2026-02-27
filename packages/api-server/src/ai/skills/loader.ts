@@ -27,6 +27,7 @@
 
 import { tool } from "ai";
 import { z } from "zod";
+import { resolve, relative } from "path";
 import type { Sandbox, SkillSchema } from "@ocean-mcp/shared";
 import { stripFrontmatter, type DiscoveredSkill } from "./discover";
 
@@ -143,6 +144,8 @@ export function buildSkillsPrompt(skills: SkillCatalogEntry[]): string {
 
 Use the \`loadSkill\` tool to load a skill when the user's task would benefit from specialized instructions. Only load a skill when the task clearly matches its description.
 
+When a loaded skill references resource files (listed in the \`resources\` array of the response), read them by calling \`loadSkill\` again with the same skill name and the \`resourcePath\` parameter set to the relative path of the resource file.
+
 ${skillsList}
 `;
 }
@@ -180,19 +183,68 @@ export function createLoadSkillTool(
     description:
       "Load a skill to get specialized instructions and workflows for a task. " +
       "Returns the full skill instructions, the skill directory path for accessing bundled resources, " +
-      "and a listing of available resource files (references, scripts, assets) in the skill directory.",
+      "and a listing of available resource files (references, scripts, assets) in the skill directory. " +
+      "To read a specific resource file within a skill, call this tool again with the same skill name " +
+      "and the `resourcePath` parameter set to the relative path from the `resources` listing.",
     inputSchema: z.object({
       name: z
         .string()
         .describe("The name of the skill to load (case-insensitive match)"),
+      resourcePath: z
+        .string()
+        .optional()
+        .describe(
+          "Optional relative path to a specific resource file within the skill directory " +
+            "(e.g. '_node-lib/event-fixed_llm.md'). When provided, returns that file's content " +
+            "instead of the full skill instructions. Use paths from the 'resources' listing " +
+            "returned by a previous loadSkill call.",
+        ),
     }),
-    execute: async ({ name }) => {
+    execute: async ({ name, resourcePath }) => {
       // ── 1. Look up file-based skill (highest priority) ───────────────
       const fileSkill = fileSkills.find(
         (s) => s.name.toLowerCase() === name.toLowerCase(),
       );
 
       if (fileSkill) {
+        // ── 1a. Resource file reading mode ─────────────────────────────
+        if (resourcePath) {
+          // Path traversal protection: reject absolute paths and ".." segments
+          if (
+            resourcePath.startsWith("/") ||
+            resourcePath.split("/").some((seg) => seg === "..")
+          ) {
+            return {
+              error: `Invalid resource path '${resourcePath}': absolute paths and '..' segments are not allowed.`,
+            };
+          }
+
+          // Resolve and verify the path stays within the skill directory
+          const fullPath = resolve(fileSkill.path, resourcePath);
+          const rel = relative(fileSkill.path, fullPath);
+          if (rel.startsWith("..")) {
+            return {
+              error: `Invalid resource path '${resourcePath}': path escapes the skill directory.`,
+            };
+          }
+
+          try {
+            const content = await sandbox.readFile(fullPath, "utf-8");
+            return {
+              skillDirectory: fileSkill.path,
+              resourcePath,
+              content,
+            };
+          } catch (err) {
+            return {
+              error: `Failed to read resource '${resourcePath}' in skill '${name}': ${
+                err instanceof Error ? err.message : String(err)
+              }`,
+            };
+          }
+        }
+
+        // ── 1b. Full skill loading mode (default) ─────────────────────
         try {
           const content = await sandbox.readFile(
             `${fileSkill.path}/SKILL.md`,
@@ -234,6 +286,13 @@ export function createLoadSkillTool(
       );
 
       if (frontendSkill) {
+        if (resourcePath) {
+          return {
+            error: `Cannot read resource files from frontend-registered skill '${name}'. ` +
+              `Frontend skills do not have a filesystem directory. ` +
+              `Resource files are only available for file-based or zip-loaded skills.`,
+          };
+        }
         return {
           /** Full skill instructions from the frontend registration */
           content: frontendSkill.instructions,
