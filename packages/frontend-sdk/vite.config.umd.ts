@@ -2,13 +2,17 @@ import { resolve } from "path";
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 import tailwindcss from "@tailwindcss/vite";
-import cssInjectedByJsPlugin from "vite-plugin-css-injected-by-js";
 
 /**
  * Separate build config for the UMD bundle.
  *
- * Produces a single self-contained `sdk.umd.js` that can be loaded via
- * a <script> tag — no module bundler required on the consumer side.
+ * Produces `sdk.umd.js` + `sdk.css`.
+ * CSS is output as a standalone file (not injected by JS) so it works
+ * correctly inside qiankun / micro-frontend sandboxes.
+ *
+ * Usage:
+ *   <link rel="stylesheet" href="sdk.css" />
+ *   <script src="sdk.umd.js"></script>
  *
  * Run after the main build so it doesn't clear the dist folder.
  */
@@ -16,7 +20,7 @@ export default defineConfig({
   define: {
     "process.env.NODE_ENV": JSON.stringify("production"),
   },
-  plugins: [react(), tailwindcss(), cssInjectedByJsPlugin()],
+  plugins: [react(), tailwindcss()],
   build: {
     cssCodeSplit: false,
     cssMinify: true,
@@ -26,6 +30,11 @@ export default defineConfig({
       name: "OceanMCPSDK",
       formats: ["umd"],
       fileName: () => "sdk.umd.js",
+    },
+    rollupOptions: {
+      output: {
+        assetFileNames: "sdk.[ext]",
+      },
     },
   },
 });
