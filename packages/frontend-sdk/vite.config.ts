@@ -1,22 +1,28 @@
+import { resolve } from "path";
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 import tailwindcss from "@tailwindcss/vite";
+import cssInjectedByJsPlugin from "vite-plugin-css-injected-by-js";
 
 export default defineConfig({
-  plugins: [react(), tailwindcss()],
+  plugins: [react(), tailwindcss(), cssInjectedByJsPlugin()],
   build: {
-    lib: {
-      entry: "src/main.tsx",
-      name: "OceanMCPSDK",
-      fileName: "sdk",
-      formats: ["es"]
-    },
     cssCodeSplit: false,
     cssMinify: true,
-    rollupOptions: {}
+    rollupOptions: {
+      input: {
+        sdk: resolve(__dirname, "src/main.tsx"),
+        demo: resolve(__dirname, "index.html"),
+      },
+      output: {
+        entryFileNames: "[name].js",
+        chunkFileNames: "[name]-[hash].js",
+        assetFileNames: "[name].[ext]",
+      },
+    },
   },
   server: {
     port: 3000,
-    cors: true
-  }
+    cors: true,
+  },
 });

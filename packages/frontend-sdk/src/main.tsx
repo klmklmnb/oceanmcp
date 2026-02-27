@@ -286,7 +286,7 @@ if (typeof window !== "undefined") {
 }
 
 // Auto-mount when script loads (dev mode only)
-if (typeof document !== "undefined" && import.meta.env.DEV) {
+if (typeof document !== "undefined") {
   if (document.readyState === "loading") {
     document.addEventListener("DOMContentLoaded", () => mountOceanMCP());
   } else {
