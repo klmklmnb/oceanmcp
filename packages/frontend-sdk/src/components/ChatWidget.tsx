@@ -9,6 +9,7 @@ import {
 } from "@ocean-mcp/shared";
 import { MessageRenderer } from "./MessageRenderer";
 import { wsClient } from "../runtime/ws-client";
+import { chatBridge } from "../runtime/chat-bridge";
 import { CHAT_STATUS } from "../constants/chat";
 import { API_URL } from "../config";
 
@@ -243,6 +244,31 @@ export function ChatWidget() {
   // Focus input on mount
   useEffect(() => {
     inputRef.current?.focus();
+  }, []);
+
+  // Bridge: expose widget capabilities to OceanMCPSDK.*() methods
+  const sendUserTextRef = useRef(sendUserText);
+  sendUserTextRef.current = sendUserText;
+
+  useEffect(() => {
+    chatBridge.register("chat", async (text: string) => {
+      setInput(text);
+      await new Promise((r) => setTimeout(r, 80));
+      setInput("");
+      await sendUserTextRef.current(text);
+    });
+
+    chatBridge.register("setInput", (text: string) => {
+      setInput(text);
+    });
+
+    chatBridge.register("getMessages", () => messages);
+
+    chatBridge.register("clearMessages", () => {
+      setMessages([]);
+    });
+
+    return () => chatBridge.unregisterAll();
   }, []);
 
   /**

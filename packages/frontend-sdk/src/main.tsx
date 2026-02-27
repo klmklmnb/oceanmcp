@@ -10,6 +10,7 @@ import {
   type FunctionDefinition,
 } from "@ocean-mcp/shared";
 import { baseFunctions } from "./registry/base/baseFunctions";
+import { chatBridge } from "./runtime/chat-bridge";
 import "./styles/index.css";
 
 // ─── Register base functions ─────────────────────────────────────────────────
@@ -209,6 +210,50 @@ const OceanMCPSDK = {
   /** Get all registered skills */
   getSkills() {
     return skillRegistry.getAll();
+  },
+
+  /**
+   * Programmatically send a chat message.
+   *
+   * The text is briefly shown in the input box for visual feedback,
+   * then automatically submitted as a user message.
+   *
+   * @param text - The message text to send
+   * @returns Promise that resolves when the message has been sent
+   *
+   * @example
+   * ```ts
+   * await OceanMCPSDK.chat("What's on this page?");
+   * ```
+   */
+  async chat(text: string) {
+    return chatBridge.call("chat", text);
+  },
+
+  /**
+   * Set the input box text without sending.
+   *
+   * @example
+   * ```ts
+   * OceanMCPSDK.setInput("draft message...");
+   * ```
+   */
+  async setInput(text: string) {
+    return chatBridge.call("setInput", text);
+  },
+
+  /**
+   * Get the current chat messages.
+   */
+  async getMessages() {
+    return chatBridge.call<any[]>("getMessages");
+  },
+
+  /**
+   * Clear all chat messages.
+   */
+  async clearMessages() {
+    return chatBridge.call("clearMessages");
   },
 
   /**
