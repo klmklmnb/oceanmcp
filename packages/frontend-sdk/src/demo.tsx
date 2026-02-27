@@ -11,14 +11,6 @@
 
 import OceanMCPSDK from "./main";
 
-// ─── Register functions ─────────────────────────────────────
-// These are example tools that come bundled with the SDK for demonstration.
-// In production, register your own tools via OceanMCPSDK.registerTool()
-import { mockFunctions } from "./registry/mock/mockFunctions";
-for (const fn of mockFunctions) {
-  OceanMCPSDK.registerTool(fn);
-}
-
 // ─── Register skills ─────────────────────────────────────────────
 // Skills bundle instructions (for the LLM) and tools (for browser execution).
 // In production, use OceanMCPSDK.registerSkill() or registerSkillFromZip()

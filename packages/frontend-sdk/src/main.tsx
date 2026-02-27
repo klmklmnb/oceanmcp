@@ -9,7 +9,14 @@ import {
   OPERATION_TYPE,
   type FunctionDefinition,
 } from "@ocean-mcp/shared";
+import { baseFunctions } from "./registry/base/baseFunctions";
 import "./styles/index.css";
+
+// ─── Register base functions ─────────────────────────────────────────────────
+// These are built-in tools that ship with the SDK and are always available.
+for (const fn of baseFunctions) {
+  functionRegistry.register(fn);
+}
 
 // ─── Connect WebSocket to server ─────────────────────────────────────────────
 // SDK connects to the backend so it can send registered capabilities (skills/tools)
