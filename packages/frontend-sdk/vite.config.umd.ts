@@ -13,6 +13,9 @@ import cssInjectedByJsPlugin from "vite-plugin-css-injected-by-js";
  * Run after the main build so it doesn't clear the dist folder.
  */
 export default defineConfig({
+  define: {
+    "process.env.NODE_ENV": JSON.stringify("production"),
+  },
   plugins: [react(), tailwindcss(), cssInjectedByJsPlugin()],
   build: {
     cssCodeSplit: false,
