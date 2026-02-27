@@ -109,4 +109,30 @@ export const mockFunctions: CodeFunctionDefinition[] = [
       },
     ],
   },
+  {
+    id: "getCurrentDate",
+    name: "Get Current Date",
+    description:
+      "Returns the current date and time from the user's browser, including locale, timezone, and various formatted representations",
+    type: FUNCTION_TYPE.CODE,
+    operationType: OPERATION_TYPE.READ,
+    code: `const now = new Date();
+    const locale = navigator.language || 'en-US';
+    const timeZone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+    return {
+      iso: now.toISOString(),
+      locale: locale,
+      timeZone: timeZone,
+      localeString: now.toLocaleString(locale, { timeZone }),
+      date: now.toLocaleDateString(locale, { timeZone }),
+      time: now.toLocaleTimeString(locale, { timeZone }),
+      year: now.getFullYear(),
+      month: now.getMonth() + 1,
+      day: now.getDate(),
+      dayOfWeek: now.toLocaleDateString(locale, { weekday: 'long', timeZone }),
+      timestamp: now.getTime(),
+      timezoneOffset: now.getTimezoneOffset(),
+    }`,
+    parameters: [],
+  },
 ];
