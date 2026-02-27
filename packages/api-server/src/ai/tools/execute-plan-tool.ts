@@ -4,6 +4,7 @@ import { FLOW_STEP_STATUS } from "@ocean-mcp/shared";
 import { connectionManager } from "../../ws/connection-manager";
 import { createZodSchema } from "./index";
 import { containsVariableRef, resolveVariableRefs } from "./variable-ref";
+import { isServerSideTool } from "./browser-proxy-tool";
 
 type Step = {
   functionId: string;
@@ -23,6 +24,11 @@ function validateSteps(steps: Step[], connectionId?: string): string | null {
 
   for (let i = 0; i < steps.length; i++) {
     const step = steps[i];
+
+    // Block server-side tools — they cannot be used as executePlan steps
+    if (isServerSideTool(step.functionId, connectionId)) {
+      return `Step ${i} ("${step.functionId}"): "${step.functionId}" is a server-side tool and cannot be used in an executePlan step. Call it directly instead.`;
+    }
 
     // Skip validation for steps that contain variable references —
     // their argument values depend on previous step results and can't

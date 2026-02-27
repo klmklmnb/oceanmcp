@@ -25,7 +25,7 @@ for (const skill of preregisteredSkills) {
 
 // ─── Register skill from zip ────────────────────────────────────────────────
 OceanMCPSDK.registerSkillFromZip(
-  "https://fastcdn.mihoyo.com/static-resource-v2/2026/02/26/058beb1461340237f7a317cce3bc92c8_9174939835677374533.zip",
+  "https://fastcdn.mihoyo.com/static-resource-v2/2026/02/27/7cc1ae17ed278759a3ba318dafcecf27_7974366858840692508.zip",
 );
 
 // ─── Mount the chat widget ──────────────────────────────────────────────────
