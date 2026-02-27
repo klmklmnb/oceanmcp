@@ -285,13 +285,6 @@ if (typeof window !== "undefined") {
   (window as any).OceanMCPSDK = OceanMCPSDK;
 }
 
-// Auto-mount when script loads (dev mode only)
-if (typeof document !== "undefined") {
-  if (document.readyState === "loading") {
-    document.addEventListener("DOMContentLoaded", () => mountOceanMCP());
-  } else {
-    mountOceanMCP();
-  }
-}
+// In production/SDK usage, call OceanMCPSDK.mount() explicitly
 
 export default OceanMCPSDK;
