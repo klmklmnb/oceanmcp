@@ -11,6 +11,10 @@ import {
 } from "@ocean-mcp/shared";
 import { baseFunctions } from "./registry/base/baseFunctions";
 import { chatBridge } from "./runtime/chat-bridge";
+import {
+  uploadRegistry,
+  type UploadHandler,
+} from "./runtime/upload-registry";
 import "./styles/index.css";
 
 // ─── Register base functions ─────────────────────────────────────────────────
@@ -254,6 +258,40 @@ const OceanMCPSDK = {
    */
   async clearMessages() {
     return chatBridge.call("clearMessages");
+  },
+
+  /**
+   * Register a file upload handler.
+   *
+   * When registered, a paperclip button appears in the input area.
+   * Clicking it opens a file picker. The selected `File` is passed to
+   * your handler, which should upload it and return the result.
+   * The result is then sent as a user message in the chat.
+   *
+   * @param handler - Async function that receives a File and returns an UploadResult
+   * @returns A function to unregister the handler
+   *
+   * @example
+   * ```ts
+   * OceanMCPSDK.registerUploader(async (file) => {
+   *   const form = new FormData();
+   *   form.append('file', file);
+   *   const res = await fetch('/api/upload', { method: 'POST', body: form });
+   *   const data = await res.json();
+   *   return { url: data.url, name: file.name, size: file.size, type: file.type };
+   * });
+   * ```
+   */
+  registerUploader(handler: UploadHandler) {
+    uploadRegistry.register(handler);
+    console.log("[OceanMCP] Upload handler registered");
+    return () => this.unregisterUploader();
+  },
+
+  /** Remove the registered upload handler. The upload button will be hidden. */
+  unregisterUploader() {
+    uploadRegistry.unregister();
+    console.log("[OceanMCP] Upload handler unregistered");
   },
 
   /**
