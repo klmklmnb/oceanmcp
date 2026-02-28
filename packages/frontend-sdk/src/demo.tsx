@@ -28,6 +28,17 @@ OceanMCPSDK.registerSkillFromZip(
   "https://fastcdn.mihoyo.com/static-resource-v2/2026/02/27/7cc1ae17ed278759a3ba318dafcecf27_7974366858840692508.zip",
 );
 
+// ─── Register upload handler (demo mock) ────────────────────────────────────
+OceanMCPSDK.registerUploader(async (file: File) => {
+  await new Promise((r) => setTimeout(r, 1000));
+  return {
+    url: URL.createObjectURL(file),
+    name: file.name,
+    size: file.size,
+    type: file.type,
+  };
+});
+
 // ─── Mount the chat widget ──────────────────────────────────────────────────
 OceanMCPSDK.mount();
 

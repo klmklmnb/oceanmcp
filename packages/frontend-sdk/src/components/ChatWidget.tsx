@@ -10,6 +10,7 @@ import {
 import { MessageRenderer } from "./MessageRenderer";
 import { wsClient } from "../runtime/ws-client";
 import { chatBridge } from "../runtime/chat-bridge";
+import { uploadRegistry } from "../runtime/upload-registry";
 import { CHAT_STATUS } from "../constants/chat";
 import { API_URL } from "../config";
 
@@ -95,6 +96,24 @@ function SendIcon() {
     >
       <line x1="12" y1="19" x2="12" y2="5" />
       <polyline points="5 12 12 5 19 12" />
+    </svg>
+  );
+}
+
+/** Paperclip icon for upload */
+function AttachIcon() {
+  return (
+    <svg
+      width="16"
+      height="16"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <path d="M21.44 11.05l-9.19 9.19a6 6 0 01-8.49-8.49l9.19-9.19a4 4 0 015.66 5.66l-9.2 9.19a2 2 0 01-2.83-2.83l8.49-8.48" />
     </svg>
   );
 }
@@ -245,6 +264,32 @@ export function ChatWidget() {
   useEffect(() => {
     inputRef.current?.focus();
   }, []);
+
+  // ─── Upload ──────────────────────────────────────────────────────────────
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [uploading, setUploading] = useState(false);
+
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(e.target.files || []);
+    if (files.length === 0) return;
+    e.target.value = "";
+
+    setUploading(true);
+    try {
+      const results = await Promise.all(
+        files.map((file) => uploadRegistry.upload(file)),
+      );
+      const descriptions = results.map(
+        (r) =>
+          `[File: ${r.name}](${r.url})${r.size ? ` (${(r.size / 1024).toFixed(1)} KB)` : ""}`,
+      );
+      await sendUserText(descriptions.join("\n"));
+    } catch (err: any) {
+      console.error("[OceanMCP] Upload failed:", err);
+    } finally {
+      setUploading(false);
+    }
+  };
 
   // Bridge: expose widget capabilities to OceanMCPSDK.*() methods
   const sendUserTextRef = useRef(sendUserText);
@@ -447,21 +492,31 @@ export function ChatWidget() {
               style={{ minHeight: "56px", maxHeight: "200px" }}
               disabled={isStreaming || isLoading}
             />
+            <input
+              ref={fileInputRef}
+              type="file"
+              multiple
+              accept="image/*"
+              className="hidden"
+              onChange={handleFileChange}
+            />
             <div className="absolute bottom-2 left-2 right-2 flex items-center justify-between px-2">
               <div className="flex items-center gap-2 text-text-tertiary">
-                {/* <span className="text-xs flex items-center gap-1">
-                  <svg
-                    width="12"
-                    height="12"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="2"
+                {uploadRegistry.isRegistered && (
+                  <button
+                    type="button"
+                    onClick={() => fileInputRef.current?.click()}
+                    disabled={uploading || isStreaming || isLoading}
+                    className={`w-8 h-8 rounded-lg flex items-center justify-center transition-all cursor-pointer ${
+                      uploading
+                        ? "text-ocean-500 animate-pulse"
+                        : "text-text-tertiary hover:text-text-secondary hover:bg-surface-tertiary"
+                    }`}
+                    title="Upload file"
                   >
-                    <path d="M12 2L14.09 8.26L20 9.27L15.5 13.14L16.82 19.02L12 16.09L7.18 19.02L8.5 13.14L4 9.27L9.91 8.26L12 2Z" />
-                  </svg>
-                  OceanMCP
-                </span> */}
+                    <AttachIcon />
+                  </button>
+                )}
               </div>
               <button
                 type="submit"
