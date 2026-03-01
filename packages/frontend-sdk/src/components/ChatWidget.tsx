@@ -492,7 +492,7 @@ export function ChatWidget() {
       {/* Error display */}
       {error && (
         <div className="px-4 py-2 mx-auto max-w-3xl mb-2 bg-red-50 border border-red-200 rounded-xl text-sm text-red-600 ocean-fade-in">
-          <strong>Error:</strong> {error.message}
+          <strong>Error:</strong> {typeof error.message === "string" ? error.message : JSON.stringify(error.message ?? error)}
         </div>
       )}
 
