@@ -147,26 +147,36 @@ function FileAttachmentCard({ file }: { file: FileAttachment }) {
       href={file.url}
       target="_blank"
       rel="noopener noreferrer"
-      className="flex items-center gap-3 px-4 py-3 rounded-xl border border-ocean-500/30 bg-ocean-600 hover:bg-ocean-700 transition-colors max-w-xs"
+      className="flex items-center gap-3 px-3 py-2.5 rounded-lg bg-white/10 hover:bg-white/20 transition-colors"
     >
       {isImage ? (
         <img
           src={file.url}
           alt={file.name}
-          className="w-10 h-10 rounded-lg object-cover flex-shrink-0"
+          className="w-9 h-9 rounded-md object-cover flex-shrink-0"
         />
       ) : (
-        <div className="w-10 h-10 rounded-lg bg-white/20 flex items-center justify-center flex-shrink-0 text-white">
+        <div className="w-9 h-9 rounded-md bg-white/15 flex items-center justify-center flex-shrink-0 text-white/80">
           <FileIcon mimeType={file.mimeType} />
         </div>
       )}
       <div className="min-w-0 flex-1">
         <p className="text-sm font-medium text-white truncate">{file.name}</p>
-        <p className="text-xs text-white/70">
+        <p className="text-xs text-white/60">
           {formatFileSize(file.size)}
         </p>
       </div>
     </a>
+  );
+}
+
+function FileAttachmentGroup({ files }: { files: FileAttachment[] }) {
+  return (
+    <div className="inline-flex flex-col gap-1 px-3 py-2.5 rounded-2xl bg-ocean-600 max-w-xs">
+      {files.map((file, i) => (
+        <FileAttachmentCard key={`${file.url}-${i}`} file={file} />
+      ))}
+    </div>
   );
 }
 
@@ -432,10 +442,11 @@ export function MessageRenderer({
 
     // 4. File Attachment Parts
     if (part.type === MESSAGE_PART_TYPE.FILE_ATTACHMENT && part.data) {
+      const files: FileAttachment[] = Array.isArray(part.data)
+        ? part.data
+        : [part.data];
       return (
-        <div key={`file-${index}`} className="inline-block">
-          <FileAttachmentCard file={part.data as FileAttachment} />
-        </div>
+        <FileAttachmentGroup key={`file-${index}`} files={files} />
       );
     }
 

@@ -97,19 +97,25 @@ function materialiseFileAttachments(messages: any[]): any[] {
     }
 
     let changed = false;
-    const parts = message.parts.map((part: any) => {
-      if (part.type !== MESSAGE_PART_TYPE.FILE_ATTACHMENT) return part;
+    const parts = message.parts.flatMap((part: any) => {
+      if (part.type !== MESSAGE_PART_TYPE.FILE_ATTACHMENT) return [part];
 
       changed = true;
-      const f: FileAttachment = part.data;
-      const lines = [
-        `[Uploaded file]`,
-        `- Name: ${f.name}`,
-        `- Type: ${f.mimeType}`,
-        `- Size: ${formatFileSize(f.size)}`,
-        `- URL: ${f.url}`,
-      ];
-      return { type: MESSAGE_PART_TYPE.TEXT, text: lines.join("\n") };
+      const files: FileAttachment[] = Array.isArray(part.data)
+        ? part.data
+        : [part.data];
+      const text = files
+        .map((f) =>
+          [
+            `[Uploaded file]`,
+            `- Name: ${f.name}`,
+            `- Type: ${f.mimeType}`,
+            `- Size: ${formatFileSize(f.size)}`,
+            `- URL: ${f.url}`,
+          ].join("\n"),
+        )
+        .join("\n\n");
+      return [{ type: MESSAGE_PART_TYPE.TEXT, text }];
     });
 
     return changed ? { ...message, parts } : message;
