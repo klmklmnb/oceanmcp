@@ -156,18 +156,24 @@ export function FlowNodeCard({
 
                 <div className="flex-1 min-w-0">
                   <p className="text-sm font-medium text-text-primary">
-                    {step.title}
+                    {typeof step.title === "string" ? step.title : JSON.stringify(step.title)}
                   </p>
                   {(() => {
                     const fnDef = functionRegistry.get(step.functionId);
                     if (fnDef?.showRender) {
-                      return fnDef.showRender({
-                        id: step.functionId,
-                        functionId: step.functionId,
-                        title: step.title,
-                        arguments: step.arguments || {},
-                        status: status as any,
-                      });
+                      try {
+                        const rendered = fnDef.showRender({
+                          id: step.functionId,
+                          functionId: step.functionId,
+                          title: step.title,
+                          arguments: step.arguments || {},
+                          status: status as any,
+                        });
+                        if (React.isValidElement(rendered)) return rendered;
+                        return null;
+                      } catch {
+                        return null;
+                      }
                     }
 
                     // Build maps from param definitions for display overrides
@@ -183,7 +189,9 @@ export function FlowNodeCard({
                     const renderValue = (key: string, value: any) => {
                       const em = enumMaps.get(key);
                       if (em && typeof value === "string" && value in em) {
-                        return em[value];
+                        const mapped = em[value];
+                        if (React.isValidElement(mapped)) return mapped;
+                        return typeof mapped === "string" ? mapped : String(mapped);
                       }
                       return typeof value === "string"
                         ? `"${value}"`
@@ -230,7 +238,7 @@ export function FlowNodeCard({
                   {stepResult?.status === FLOW_STEP_STATUS.FAILED &&
                     stepResult.error && (
                       <p className="mt-1 text-xs text-red-500">
-                        {stepResult.error}
+                        {typeof stepResult.error === "string" ? stepResult.error : JSON.stringify(stepResult.error)}
                       </p>
                     )}
                 </div>

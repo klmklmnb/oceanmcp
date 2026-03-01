@@ -14,6 +14,41 @@ import { UserSelectCard } from "./UserSelectCard";
 import { MarkdownRenderer } from "./MarkdownRenderer";
 import { functionRegistry } from "../registry";
 
+class PartErrorBoundary extends React.Component<
+  { children: React.ReactNode; partIndex: number; partData?: any },
+  { hasError: boolean; error?: Error }
+> {
+  constructor(props: { children: React.ReactNode; partIndex: number; partData?: any }) {
+    super(props);
+    this.state = { hasError: false };
+  }
+
+  static getDerivedStateFromError(error: Error) {
+    return { hasError: true, error };
+  }
+
+  componentDidCatch(error: Error, info: React.ErrorInfo) {
+    console.error(
+      `[OceanMCP] Render error in message part ${this.props.partIndex}:`,
+      "\n  Error:", error.message,
+      "\n  Stack:", error.stack,
+      "\n  Component Stack:", info.componentStack,
+      "\n  Part data:", JSON.stringify(this.props.partData, null, 2),
+    );
+  }
+
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div className="my-1 px-3 py-2 bg-red-50 border border-red-200 rounded-lg text-xs text-red-500">
+          Render error: {this.state.error?.message ?? "Unknown error"}
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
+
 type MessageRendererProps = {
   message: UIMessage;
   onApprove: (
@@ -530,8 +565,15 @@ export function MessageRenderer({
     }
 
     return null;
-    } catch (err) {
-      console.error("[OceanMCP] renderPart error for part:", part, err);
+    } catch (err: any) {
+      console.error(
+        "[OceanMCP] renderPart error:",
+        "\n  Part index:", index,
+        "\n  Part type:", part?.type,
+        "\n  Part data:", JSON.stringify(part, null, 2),
+        "\n  Error:", err?.message,
+        "\n  Stack:", err?.stack,
+      );
       return null;
     }
   };
@@ -549,7 +591,15 @@ export function MessageRenderer({
 
       <div className={`max-w-[80%] ${isUser ? "" : "flex-1"}`}>
         {/* Render all parts */}
-        {message.parts?.map((part, index) => renderPart(part, index))}
+        {message.parts?.map((part, index) => {
+          const node = renderPart(part, index);
+          if (node === null) return null;
+          return (
+            <PartErrorBoundary key={`eb-${index}`} partIndex={index} partData={part}>
+              {node}
+            </PartErrorBoundary>
+          );
+        })}
 
         {/* Action buttons for AI messages */}
         {!isUser && hasTextContent && (
