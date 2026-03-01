@@ -450,9 +450,14 @@ export function MessageRenderer({
       );
     }
 
-    // 5. Text Parts (with potential <think> tags)
+    // 5. Skip any other data-* parts to prevent rendering objects as React children
+    if (typeof part.type === "string" && part.type.startsWith("data-")) {
+      return null;
+    }
+
+    // 6. Text Parts (with potential <think> tags)
     if (part.type === MESSAGE_PART_TYPE.TEXT) {
-      const text = part.text || "";
+      const text = typeof part.text === "string" ? part.text : "";
 
       // Regex to process <think> tags
       const parts: React.ReactNode[] = [];
