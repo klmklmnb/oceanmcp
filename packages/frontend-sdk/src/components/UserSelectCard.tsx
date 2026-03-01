@@ -145,8 +145,8 @@ export function UserSelectCard({
       return input.options.map((option, index) => ({
         id: String(index),
         value: option.value,
-        label: option.label ?? formatValue(option.value),
-        description: option.description,
+        label: typeof option.label === "string" ? option.label : formatValue(option.value),
+        description: typeof option.description === "string" ? option.description : undefined,
       }));
     }
 
@@ -200,7 +200,9 @@ export function UserSelectCard({
     isSameValue(option.value, outputData.selectedValue),
   );
   const chosenLabel =
-    outputData.selectedLabel || matchedOption?.label || selectedValueText;
+    (typeof outputData.selectedLabel === "string" ? outputData.selectedLabel : null)
+    || matchedOption?.label
+    || selectedValueText;
 
   const submitOption = (option: SelectOption) => {
     onSubmit(toolCallId, {
@@ -243,13 +245,13 @@ export function UserSelectCard({
         </div>
       ) : state === TOOL_PART_STATE.OUTPUT_ERROR ? (
         <div className="p-4 text-sm text-red-500">
-          {errorText || "Selection failed."}
+          {typeof errorText === "string" ? errorText : "Selection failed."}
         </div>
       ) : (
         <>
           <div className="p-4">
             <p className="text-sm text-text-primary">
-              {input?.message || "Please choose an option:"}
+              {typeof input?.message === "string" ? input.message : "Please choose an option:"}
             </p>
 
             {isBinaryOptions ? (
