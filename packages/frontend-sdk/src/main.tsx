@@ -264,21 +264,23 @@ const OceanMCPSDK = {
    * Register a file upload handler.
    *
    * When registered, a paperclip button appears in the input area.
-   * Clicking it opens a file picker. The selected `File` is passed to
-   * your handler, which should upload it and return the result.
-   * The result is then sent as a user message in the chat.
+   * Clicking it opens a file picker. All selected files are passed to
+   * your handler as an array, which should upload them and return the results.
+   * The results are then sent as a user message in the chat.
    *
-   * @param handler - Async function that receives a File and returns an UploadResult
+   * @param handler - Async function that receives a File[] and returns UploadResult[]
    * @returns A function to unregister the handler
    *
    * @example
    * ```ts
-   * OceanMCPSDK.registerUploader(async (file) => {
+   * OceanMCPSDK.registerUploader(async (files) => {
    *   const form = new FormData();
-   *   form.append('file', file);
+   *   files.forEach((file) => form.append('files', file));
    *   const res = await fetch('/api/upload', { method: 'POST', body: form });
    *   const data = await res.json();
-   *   return { url: data.url, name: file.name, size: file.size, type: file.type };
+   *   return data.map((d, i) => ({
+   *     url: d.url, name: files[i].name, size: files[i].size, type: files[i].type,
+   *   }));
    * });
    * ```
    */

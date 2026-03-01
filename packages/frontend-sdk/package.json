@@ -8,6 +8,9 @@
     "build": "vite build",
     "build:test": "vite build --mode test",
     "build:prod": "vite build",
+    "build:watch": "vite build --watch",
+    "serve:local": "bun run build:watch & bun run serve:dist",
+    "serve:dist": "bunx serve dist -l 3001 --cors --no-clipboard",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {

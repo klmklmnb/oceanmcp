@@ -6,6 +6,7 @@ import {
   MESSAGE_ROLE,
   TOOL_PART_STATE,
   TOOL_PART_TYPE_PREFIX,
+  type FileAttachment,
 } from "@ocean-mcp/shared";
 import { FlowNodeCard } from "./FlowNodeCard";
 import { ApprovalButtons } from "./ApprovalButtons";
@@ -98,6 +99,76 @@ function CopyButton({ text }: { text: string }) {
 }
 
 import { MessageReasoning } from "./MessageReasoning";
+
+function formatFileSize(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+function FileIcon({ mimeType }: { mimeType: string }) {
+  const isImage = mimeType.startsWith("image/");
+  const isPdf = mimeType === "application/pdf";
+
+  if (isImage) {
+    return (
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+        <rect x="3" y="3" width="18" height="18" rx="2" ry="2" />
+        <circle cx="8.5" cy="8.5" r="1.5" />
+        <polyline points="21 15 16 10 5 21" />
+      </svg>
+    );
+  }
+
+  if (isPdf) {
+    return (
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+        <polyline points="14 2 14 8 20 8" />
+        <line x1="16" y1="13" x2="8" y2="13" />
+        <line x1="16" y1="17" x2="8" y2="17" />
+      </svg>
+    );
+  }
+
+  return (
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M13 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z" />
+      <polyline points="13 2 13 9 20 9" />
+    </svg>
+  );
+}
+
+function FileAttachmentCard({ file }: { file: FileAttachment }) {
+  const isImage = file.mimeType.startsWith("image/");
+
+  return (
+    <a
+      href={file.url}
+      target="_blank"
+      rel="noopener noreferrer"
+      className="flex items-center gap-3 px-4 py-3 rounded-xl border border-white/20 bg-white/10 hover:bg-white/20 transition-colors max-w-xs"
+    >
+      {isImage ? (
+        <img
+          src={file.url}
+          alt={file.name}
+          className="w-10 h-10 rounded-lg object-cover flex-shrink-0"
+        />
+      ) : (
+        <div className="w-10 h-10 rounded-lg bg-white/20 flex items-center justify-center flex-shrink-0 text-white">
+          <FileIcon mimeType={file.mimeType} />
+        </div>
+      )}
+      <div className="min-w-0 flex-1">
+        <p className="text-sm font-medium text-white truncate">{file.name}</p>
+        <p className="text-xs text-white/70">
+          {formatFileSize(file.size)}
+        </p>
+      </div>
+    </a>
+  );
+}
 
 /**
  * Helper: Check if a part is a tool part (AI SDK v6 uses `tool-${toolName}` pattern)
@@ -359,7 +430,16 @@ export function MessageRenderer({
       );
     }
 
-    // 4. Text Parts (with potential <think> tags)
+    // 4. File Attachment Parts
+    if (part.type === MESSAGE_PART_TYPE.FILE_ATTACHMENT && part.data) {
+      return (
+        <div key={`file-${index}`} className="inline-block">
+          <FileAttachmentCard file={part.data as FileAttachment} />
+        </div>
+      );
+    }
+
+    // 5. Text Parts (with potential <think> tags)
     if (part.type === MESSAGE_PART_TYPE.TEXT) {
       const text = part.text || "";
 

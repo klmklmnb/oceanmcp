@@ -6,7 +6,7 @@ export interface UploadResult {
   [key: string]: any;
 }
 
-export type UploadHandler = (file: File) => Promise<UploadResult>;
+export type UploadHandler = (files: File[]) => Promise<UploadResult[]>;
 
 let handler: UploadHandler | null = null;
 
@@ -23,12 +23,12 @@ export const uploadRegistry = {
     return handler !== null;
   },
 
-  async upload(file: File): Promise<UploadResult> {
+  async upload(files: File[]): Promise<UploadResult[]> {
     if (!handler) {
       throw new Error(
         "[OceanMCP] No upload handler registered. Call OceanMCPSDK.registerUploader() first.",
       );
     }
-    return handler(file);
+    return handler(files);
   },
 };

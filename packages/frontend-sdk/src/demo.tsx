@@ -29,14 +29,14 @@ OceanMCPSDK.registerSkillFromZip(
 );
 
 // ─── Register upload handler (demo mock) ────────────────────────────────────
-OceanMCPSDK.registerUploader(async (file: File) => {
+OceanMCPSDK.registerUploader(async (files: File[]) => {
   await new Promise((r) => setTimeout(r, 1000));
-  return {
+  return files.map((file) => ({
     url: URL.createObjectURL(file),
     name: file.name,
     size: file.size,
     type: file.type,
-  };
+  }));
 });
 
 // ─── Mount the chat widget ──────────────────────────────────────────────────

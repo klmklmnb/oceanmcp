@@ -39,6 +39,7 @@ export const MESSAGE_PART_TYPE = {
   TEXT: "text",
   REASONING: "reasoning",
   STEP_START: "step-start",
+  FILE_ATTACHMENT: "data-file-attachment",
 } as const;
 export type MessagePartType = ValueOf<typeof MESSAGE_PART_TYPE>;
 

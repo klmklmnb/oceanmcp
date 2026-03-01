@@ -6,6 +6,15 @@ import type {
   ParameterType,
 } from "./constants";
 
+// ─── File Attachment ─────────────────────────────────────────────────────────
+
+export interface FileAttachment {
+  url: string;
+  name: string;
+  size: number;
+  mimeType: string;
+}
+
 // ─── Parameter Definition ────────────────────────────────────────────────────
 
 export interface ParameterDefinition {
