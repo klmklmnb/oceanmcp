@@ -279,17 +279,17 @@ export function ChatWidget() {
     try {
       const results = await uploadRegistry.upload(files);
 
-      const attachments: FileAttachment[] = results.map((r) => ({
+      const attachments: FileAttachment[] = results.map((r, i) => ({
         url: r.url,
-        name: r.name,
-        size: r.size ?? 0,
-        mimeType: r.type ?? "application/octet-stream",
+        name: r.name ?? files[i].name,
+        size: r.size ?? files[i].size,
+        mimeType: r.type ?? (files[i].type || "application/octet-stream"),
       }));
 
-      const fileParts = attachments.map((file) => ({
+      const fileParts = [{
         type: MESSAGE_PART_TYPE.FILE_ATTACHMENT,
-        data: file,
-      }));
+        data: attachments,
+      }];
 
       const normalized = denyPendingApprovalParts(messages as any[]);
       if (normalized.changed) {
