@@ -279,12 +279,19 @@ export function ChatWidget() {
     try {
       const results = await uploadRegistry.upload(files);
 
-      const attachments: FileAttachment[] = results.map((r, i) => ({
-        url: r.url,
-        name: r.name ?? files[i].name,
-        size: r.size ?? files[i].size,
-        mimeType: r.type ?? (files[i].type || "application/octet-stream"),
-      }));
+      const attachments: FileAttachment[] = results.map((r, i) => {
+        const { url, name, size, type, ...rest } = r;
+        const attachment: FileAttachment = {
+          url,
+          name: name ?? files[i].name,
+          size: size ?? files[i].size,
+          mimeType: type ?? (files[i].type || "application/octet-stream"),
+        };
+        if (Object.keys(rest).length > 0) {
+          attachment.metadata = rest;
+        }
+        return attachment;
+      });
 
       const fileParts = [{
         type: MESSAGE_PART_TYPE.FILE_ATTACHMENT,
