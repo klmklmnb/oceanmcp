@@ -228,6 +228,7 @@ export function MessageRenderer({
   const isUser = message.role === MESSAGE_ROLE.USER;
 
   const renderPart = (part: any, index: number) => {
+    try {
     // 1. Tool Parts (AI SDK v6: type is "tool-${toolName}")
     if (isToolPart(part)) {
       const toolName = getToolName(part);
@@ -260,7 +261,7 @@ export function MessageRenderer({
                 />
                 {state === TOOL_PART_STATE.OUTPUT_ERROR && errorText && (
                   <div className="my-2 px-4 py-2 bg-red-50 border border-red-200 rounded-xl text-sm text-red-600">
-                    <strong>Error:</strong> {errorText}
+                    <strong>Error:</strong> {typeof errorText === "string" ? errorText : JSON.stringify(errorText)}
                   </div>
                 )}
               </>
@@ -415,7 +416,7 @@ export function MessageRenderer({
               )}
               {state === TOOL_PART_STATE.OUTPUT_ERROR && errorText && (
                 <div className="p-4">
-                  <p className="text-xs text-red-500">{errorText}</p>
+                  <p className="text-xs text-red-500">{typeof errorText === "string" ? errorText : JSON.stringify(errorText)}</p>
                 </div>
               )}
             </div>
@@ -431,10 +432,15 @@ export function MessageRenderer({
 
     // 3. Reasoning Parts (Native AI SDK)
     if (part.type === MESSAGE_PART_TYPE.REASONING) {
+      const reasoningText = typeof part.text === "string"
+        ? part.text
+        : typeof part.details?.text === "string"
+          ? part.details.text
+          : "";
       return (
         <MessageReasoning
           key={`reasoning-${index}`}
-          reasoning={part.details?.text || part.text || ""}
+          reasoning={reasoningText}
           isLoading={part.state === MESSAGE_PART_STATE.STREAMING}
         />
       );
@@ -524,6 +530,10 @@ export function MessageRenderer({
     }
 
     return null;
+    } catch (err) {
+      console.error("[OceanMCP] renderPart error for part:", part, err);
+      return null;
+    }
   };
 
   const hasTextContent = message.parts?.some(
