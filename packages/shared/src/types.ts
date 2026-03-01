@@ -13,6 +13,8 @@ export interface FileAttachment {
   name: string;
   size: number;
   mimeType: string;
+  /** Extra fields from the upload handler (e.g. id, file_id) */
+  metadata?: Record<string, unknown>;
 }
 
 // ─── Parameter Definition ────────────────────────────────────────────────────

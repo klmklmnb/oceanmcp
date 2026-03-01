@@ -105,15 +105,21 @@ function materialiseFileAttachments(messages: any[]): any[] {
         ? part.data
         : [part.data];
       const text = files
-        .map((f) =>
-          [
+        .map((f) => {
+          const lines = [
             `[Uploaded file]`,
             `- Name: ${f.name}`,
             `- Type: ${f.mimeType}`,
             `- Size: ${formatFileSize(f.size)}`,
             `- URL: ${f.url}`,
-          ].join("\n"),
-        )
+          ];
+          if (f.metadata) {
+            for (const [key, value] of Object.entries(f.metadata)) {
+              lines.push(`- ${key}: ${String(value)}`);
+            }
+          }
+          return lines.join("\n");
+        })
         .join("\n\n");
       return [{ type: MESSAGE_PART_TYPE.TEXT, text }];
     });
