@@ -6,6 +6,7 @@ import {
   MESSAGE_ROLE,
   TOOL_PART_STATE,
   TOOL_PART_TYPE_PREFIX,
+  type FileAttachment,
 } from "@ocean-mcp/shared";
 import { MessageRenderer } from "./MessageRenderer";
 import { wsClient } from "../runtime/ws-client";
@@ -276,14 +277,29 @@ export function ChatWidget() {
 
     setUploading(true);
     try {
-      const results = await Promise.all(
-        files.map((file) => uploadRegistry.upload(file)),
-      );
-      const descriptions = results.map(
-        (r) =>
-          `[File: ${r.name}](${r.url})${r.size ? ` (${(r.size / 1024).toFixed(1)} KB)` : ""}`,
-      );
-      await sendUserText(descriptions.join("\n"));
+      const results = await uploadRegistry.upload(files);
+
+      const attachments: FileAttachment[] = results.map((r) => ({
+        url: r.url,
+        name: r.name,
+        size: r.size ?? 0,
+        mimeType: r.type ?? "application/octet-stream",
+      }));
+
+      const fileParts = attachments.map((file) => ({
+        type: MESSAGE_PART_TYPE.FILE_ATTACHMENT,
+        data: file,
+      }));
+
+      const normalized = denyPendingApprovalParts(messages as any[]);
+      if (normalized.changed) {
+        setMessages(normalized.messages as any);
+      }
+
+      await sendMessage({
+        role: MESSAGE_ROLE.USER,
+        parts: fileParts,
+      });
     } catch (err: any) {
       console.error("[OceanMCP] Upload failed:", err);
     } finally {
@@ -496,7 +512,6 @@ export function ChatWidget() {
               ref={fileInputRef}
               type="file"
               multiple
-              accept="image/*"
               className="hidden"
               onChange={handleFileChange}
             />

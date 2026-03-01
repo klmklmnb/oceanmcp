@@ -4,9 +4,11 @@ import {
   stepCountIs,
 } from "ai";
 import {
+  MESSAGE_PART_TYPE,
   MESSAGE_ROLE,
   TOOL_PART_STATE,
   TOOL_PART_TYPE_PREFIX,
+  type FileAttachment,
 } from "@ocean-mcp/shared";
 import { getLanguageModel } from "../ai/providers";
 import { getSystemPrompt } from "../ai/prompts";
@@ -77,6 +79,43 @@ function normalizeStaleApprovals(messages: any[]): any[] {
   });
 }
 
+function formatFileSize(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+/**
+ * Convert custom `file-attachment` parts into `text` parts that
+ * `convertToModelMessages` understands, so the LLM receives a readable
+ * description of each uploaded file.
+ */
+function materialiseFileAttachments(messages: any[]): any[] {
+  return messages.map((message) => {
+    if (message.role !== MESSAGE_ROLE.USER || !Array.isArray(message.parts)) {
+      return message;
+    }
+
+    let changed = false;
+    const parts = message.parts.map((part: any) => {
+      if (part.type !== MESSAGE_PART_TYPE.FILE_ATTACHMENT) return part;
+
+      changed = true;
+      const f: FileAttachment = part.data;
+      const lines = [
+        `[Uploaded file]`,
+        `- Name: ${f.name}`,
+        `- Type: ${f.mimeType}`,
+        `- Size: ${formatFileSize(f.size)}`,
+        `- URL: ${f.url}`,
+      ];
+      return { type: MESSAGE_PART_TYPE.TEXT, text: lines.join("\n") };
+    });
+
+    return changed ? { ...message, parts } : message;
+  });
+}
+
 /**
  * POST /api/chat handler
  *
@@ -126,8 +165,8 @@ export async function handleChatRequest(req: Request): Promise<Response> {
     const dynamicSchemas = connectionManager.getToolSchemas(connectionId);
     const mergedTools = getMergedTools(dynamicSchemas, connectionId);
 
-    const normalizedMessages = deduplicateAssistantParts(
-      normalizeStaleApprovals(messages),
+    const normalizedMessages = materialiseFileAttachments(
+      deduplicateAssistantParts(normalizeStaleApprovals(messages)),
     );
     const modelMessages = await convertToModelMessages(normalizedMessages);
 

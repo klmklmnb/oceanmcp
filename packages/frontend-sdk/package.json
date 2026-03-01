@@ -8,6 +8,9 @@
     "build": "vite build && vite build --config vite.config.umd.ts",
     "build:test": "vite build --mode test && vite build --config vite.config.umd.ts --mode test",
     "build:prod": "vite build && vite build --config vite.config.umd.ts",
+    "build:watch": "vite build --watch",
+    "serve:local": "bun run build:watch & bun run serve:dist",
+    "serve:dist": "bunx serve dist -l 3001 --cors --no-clipboard",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
