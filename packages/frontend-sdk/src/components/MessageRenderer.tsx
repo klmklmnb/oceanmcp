@@ -147,7 +147,7 @@ function FileAttachmentCard({ file }: { file: FileAttachment }) {
       href={file.url}
       target="_blank"
       rel="noopener noreferrer"
-      className="flex items-center gap-3 px-4 py-3 rounded-xl border border-white/20 bg-white/10 hover:bg-white/20 transition-colors max-w-xs"
+      className="flex items-center gap-3 px-4 py-3 rounded-xl border border-ocean-500/30 bg-ocean-600 hover:bg-ocean-700 transition-colors max-w-xs"
     >
       {isImage ? (
         <img
