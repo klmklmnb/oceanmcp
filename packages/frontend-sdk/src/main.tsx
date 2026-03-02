@@ -15,6 +15,7 @@ import {
   uploadRegistry,
   type UploadHandler,
 } from "./runtime/upload-registry";
+import { sdkConfig, type SupportedLocale } from "./runtime/sdk-config";
 import "./styles/index.css";
 
 // ─── Register base functions ─────────────────────────────────────────────────
@@ -31,8 +32,22 @@ wsClient.connect();
 // ─── Mount the Chat Widget ──────────────────────────────────────────────────
 type MountTarget = string | HTMLElement;
 
-function mountOceanMCP(target?: MountTarget) {
+type MountOptions = {
+  root?: MountTarget;
+  locale?: SupportedLocale;
+};
+
+function mountOceanMCP(target?: MountTarget | MountOptions) {
   let container: HTMLElement | null = null;
+  
+  // Handle options object
+  if (target && typeof target === "object" && !("nodeType" in target)) {
+    const options = target as MountOptions;
+    if (options.locale) {
+      sdkConfig.locale = options.locale;
+    }
+    target = options.root;
+  }
 
   if (typeof target === "string") {
     container = document.getElementById(target);
@@ -299,7 +314,7 @@ const OceanMCPSDK = {
   /**
    * Mount the chat widget to a specific target.
    *
-   * @param target - CSS selector string (e.g., "#my-container") or HTMLElement.
+   * @param target - CSS selector string, HTMLElement, or options object with root and locale.
    *                 If not provided, creates a floating overlay or uses existing #ocean-mcp-root.
    * @example
    * ```ts
@@ -309,11 +324,15 @@ const OceanMCPSDK = {
    * // Mount to an element by ID
    * OceanMCPSDK.mount("#my-chat");
    *
+   * // Mount with locale configuration
+   * OceanMCPSDK.mount({ locale: "zh-CN" });
+   * OceanMCPSDK.mount({ root: "#my-chat", locale: "zh-CN" });
+   *
    * // Auto-create floating overlay (default behavior)
    * OceanMCPSDK.mount();
    * ```
    */
-  mount(target?: MountTarget) {
+  mount(target?: MountTarget | MountOptions) {
     mountOceanMCP(target);
   },
 
