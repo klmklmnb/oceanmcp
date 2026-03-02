@@ -19,6 +19,14 @@ export interface FileAttachment {
 
 // ─── Parameter Definition ────────────────────────────────────────────────────
 
+/** Per-column configuration for array parameters rendered as tables */
+export interface ColumnConfig {
+  /** Display label for the column header (defaults to field name) */
+  label?: string;
+  /** Custom cell renderer; receives the cell value and the full row object */
+  render?: (value: any, row: Record<string, any>) => any;
+}
+
 export interface ParameterDefinition {
   name: string;
   type: ParameterType;
@@ -28,6 +36,8 @@ export interface ParameterDefinition {
   showName?: string;
   /** Maps raw param values to custom render nodes; overrides the default value display in FlowNodeCard */
   enumMap?: Record<string, any>;
+  /** Column config for array/object params; presence triggers table rendering */
+  columns?: Record<string, ColumnConfig>;
 }
 
 // ─── Function Definitions ────────────────────────────────────────────────────

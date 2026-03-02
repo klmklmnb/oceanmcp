@@ -1,8 +1,12 @@
 import React from "react";
 import { FLOW_STEP_STATUS, TOOL_PART_STATE } from "@ocean-mcp/shared";
+import type { ColumnConfig } from "@ocean-mcp/shared";
 import { functionRegistry } from "../registry";
 import { sdkConfig } from "../runtime/sdk-config";
 import { t } from "../locale";
+import { ArrayTable, RawDataBlock, tryParseArray, isObjectArray } from "./ArrayTable";
+
+// ─── FlowNodeCard ───────────────────────────────────────────────────────────
 
 type FlowNodeCardProps = {
   steps: Array<{
@@ -181,53 +185,88 @@ export function FlowNodeCard({
                     // Build maps from param definitions for display overrides
                     const showNameMap = new Map<string, string>();
                     const enumMaps = new Map<string, Record<string, any>>();
+                    const columnsMap = new Map<string, Record<string, ColumnConfig>>();
                     if (fnDef?.parameters) {
                       for (const p of fnDef.parameters) {
                         if (p.showName) showNameMap.set(p.name, p.showName);
                         if (p.enumMap) enumMaps.set(p.name, p.enumMap);
+                        if (p.columns) columnsMap.set(p.name, p.columns);
                       }
                     }
 
-                    const renderValue = (key: string, value: any) => {
+                    const renderValue = (key: string, value: any): React.ReactNode => {
                       const em = enumMaps.get(key);
                       if (em && typeof value === "string" && value in em) {
                         const mapped = em[value];
                         if (React.isValidElement(mapped)) return mapped;
                         return typeof mapped === "string" ? mapped : String(mapped);
                       }
+
+                      // columns-driven: only parse as table when param has columns config
+                      if (columnsMap.has(key)) return null;
+
                       return typeof value === "string"
                         ? `"${value}"`
                         : JSON.stringify(value);
+                    };
+
+                    const renderArrayBlock = (key: string, value: any): React.ReactNode | null => {
+                      const colConfig = columnsMap.get(key);
+                      if (!colConfig) return null;
+                      const arr = tryParseArray(value);
+                      if (!arr || !isObjectArray(arr)) return null;
+                      return (
+                        <div key={`${key}-table`} className="mt-0.5">
+                          <span className="text-ocean-600">{showNameMap.get(key) ?? key}</span>
+                          <span className="text-text-quaternary ml-1">
+                            {t("flow.itemCount", { count: arr.length })}
+                          </span>
+                          <ArrayTable data={arr} columns={colConfig} />
+                        </div>
+                      );
                     };
 
                     const fnLabel = fnDef
                       ? sdkConfig.resolveDisplayName(fnDef.name, fnDef.cnName)
                       : step.functionId;
 
+                    const entries = Object.entries(step.arguments || {});
+                    const inlineEntries = entries.filter(([key]) => !columnsMap.has(key));
+                    const arrayEntries = entries.filter(([key]) => columnsMap.has(key));
+
+                    const rawArgs = step.arguments && Object.keys(step.arguments).length > 0
+                      ? JSON.stringify(step.arguments, null, 2)
+                      : null;
+
                     return (
                       <div className="text-xs text-text-tertiary mt-0.5 font-mono">
-                        <span>{fnLabel}(</span>
-                        {Object.entries(step.arguments || {}).length > 0 && (
-                          <div className="pl-4 overflow-x-auto">
-                            {Object.entries(step.arguments || {}).map(
-                              ([key, value], idx, arr) => (
-                                <div key={key}>
-                                  <span className="text-ocean-600">
-                                    {showNameMap.get(key) ?? key}
-                                  </span>
-                                  <span className="text-text-quaternary">
-                                    {" = "}
-                                  </span>
-                                  <span className="text-text-secondary">
-                                    {renderValue(key, value)}
-                                  </span>
-                                  {idx < arr.length - 1 && ","}
-                                </div>
-                              ),
-                            )}
-                          </div>
+                        <span>{fnLabel}</span>
+                        {inlineEntries.length > 0 && (
+                          <>
+                            <span>(</span>
+                            <div className="pl-4 overflow-x-auto">
+                              {inlineEntries.map(
+                                ([key, value], idx, arr) => (
+                                  <div key={key}>
+                                    <span className="text-ocean-600">
+                                      {showNameMap.get(key) ?? key}
+                                    </span>
+                                    <span className="text-text-quaternary">
+                                      {" = "}
+                                    </span>
+                                    <span className="text-text-secondary">
+                                      {renderValue(key, value)}
+                                    </span>
+                                    {idx < arr.length - 1 && ","}
+                                  </div>
+                                ),
+                              )}
+                            </div>
+                            <span>)</span>
+                          </>
                         )}
-                        <span>)</span>
+                        {arrayEntries.map(([key, value]) => renderArrayBlock(key, value))}
+                        {rawArgs && <RawDataBlock data={rawArgs} />}
                       </div>
                     );
                   })()}

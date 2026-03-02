@@ -77,7 +77,14 @@ class SkillRegistry {
           description: fn.description,
           type: fn.type,
           operationType: fn.operationType,
-          parameters: fn.parameters,
+          parameters: fn.parameters.map((p) => {
+            if (!p.columns) return p;
+            const stripped = { ...p, columns: {} as typeof p.columns };
+            for (const [key, cfg] of Object.entries(p.columns)) {
+              stripped.columns![key] = { label: cfg.label };
+            }
+            return stripped;
+          }),
         }),
       ),
     }));

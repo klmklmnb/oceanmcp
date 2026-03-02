@@ -333,9 +333,19 @@ function makeAddMealsToShoppingCart(): CodeFunctionDefinition {
       {
         name: "cartList",
         type: PARAMETER_TYPE.STRING,
+        showName: "购物车菜品",
         description:
           'JSON string of the full cart array. Each element should contain: date, mealSegmentId, mealSegmentName, mealName, mealId, menuId, imageUrlKey, menuRelateMealId, floorId, buildingId, fullFloorName, shopId, shopImageUrlKey, shopName, menuKind, createTime, description. Must include all existing cart items plus newly added items.',
         required: true,
+        columns: {
+          mealName: { label: "菜品名称" },
+          shopName: { label: "店铺" },
+          date: { label: "日期" },
+          mealSegmentName: { label: "餐段" },
+          description: { label: "描述" },
+          menuKind: { label: "类别" },
+          fullFloorName: { label: "楼层" },
+        },
       },
       {
         name: "buildingId",

@@ -1,3 +1,4 @@
+import React from "react";
 import {
   FUNCTION_TYPE,
   OPERATION_TYPE,
@@ -160,9 +161,31 @@ function makeUpdateShoppingCart(): CodeFunctionDefinition {
       {
         name: "items",
         type: PARAMETER_TYPE.STRING,
+        showName: "购物车商品",
         description:
           'JSON string of the full cart array. Each element: { "no": string, "name": string, "imageUrl": string, "categoryId": string, "num": number, "specialCardVoucher": null, "attributes": [{ "id": string, "name": string, "itemId": string, "itemName": string }] }. Must include all existing cart items plus the newly added item.',
         required: true,
+        columns: {
+          no: { label: "商品编号" },
+          name: { label: "商品名称" },
+          num: { label: "数量" },
+          categoryId: { label: "分类" },
+          attributes: {
+            label: "属性选项",
+            render: (value: any) => {
+              if (!Array.isArray(value) || value.length === 0) return "-";
+              return React.createElement("span", { className: "flex flex-wrap gap-1" },
+                value.map((attr: any, i: number) =>
+                  React.createElement("span", {
+                    key: i,
+                    className: "inline-block px-1.5 py-0.5 rounded bg-ocean-50 text-ocean-700 text-xs",
+                  }, attr.itemName ?? attr.name ?? JSON.stringify(attr))
+                )
+              );
+            },
+          },
+          specialCardVoucher: { label: "优惠券" },
+        },
       },
     ],
   };

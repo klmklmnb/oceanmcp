@@ -27,6 +27,10 @@ const zhCN = {
   "flow.stepCount": "{count} 个步骤",
   "flow.approve": "允许",
   "flow.deny": "拒绝",
+  "flow.showMore": "展开剩余 {count} 行",
+  "flow.collapse": "收起",
+  "flow.itemCount": "{count} 项",
+  "flow.rawData": "原始数据",
 
   // ApprovalButtons
   "approval.status": "待确认",

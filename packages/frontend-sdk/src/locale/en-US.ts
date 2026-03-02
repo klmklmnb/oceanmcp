@@ -27,6 +27,10 @@ const enUS = {
   "flow.stepCount": "{count} step(s)",
   "flow.approve": "Allow",
   "flow.deny": "Deny",
+  "flow.showMore": "Show {count} more rows",
+  "flow.collapse": "Collapse",
+  "flow.itemCount": "{count} item(s)",
+  "flow.rawData": "Raw Data",
 
   // ApprovalButtons
   "approval.status": "Pending",

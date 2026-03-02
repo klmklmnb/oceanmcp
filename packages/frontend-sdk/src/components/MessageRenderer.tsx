@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useState } from "react";
 import type { UIMessage } from "ai";
 import {
   MESSAGE_PART_STATE,
@@ -6,6 +6,7 @@ import {
   MESSAGE_ROLE,
   TOOL_PART_STATE,
   TOOL_PART_TYPE_PREFIX,
+  OPERATION_TYPE,
   type FileAttachment,
 } from "@ocean-mcp/shared";
 import { FlowNodeCard } from "./FlowNodeCard";
@@ -49,6 +50,143 @@ class PartErrorBoundary extends React.Component<
     }
     return this.props.children;
   }
+}
+
+// ─── ToolCallCard (collapsible tool execution card) ─────────────────────────
+
+type ToolCallCardProps = {
+  toolCallId: string;
+  toolName: string;
+  displayName: string;
+  state: string;
+  input?: any;
+  output?: any;
+  errorText?: string;
+  fnDef?: ReturnType<typeof functionRegistry.get>;
+  fnArgs: Record<string, any>;
+  approvalId?: string;
+  onApprove?: (toolCallId: string, toolName: string, approvalId?: string) => void;
+  onDeny?: (toolCallId: string, toolName: string, approvalId?: string) => void;
+};
+
+function ToolCallCard({
+  toolCallId,
+  toolName,
+  displayName,
+  state,
+  input,
+  output,
+  errorText,
+  fnDef,
+  fnArgs,
+  approvalId,
+  onApprove,
+  onDeny,
+}: ToolCallCardProps) {
+  const isReadOp = fnDef?.operationType === OPERATION_TYPE.READ;
+  const isLoadSkill = toolName === "loadSkill";
+  const [expanded, setExpanded] = useState(!isReadOp && !isLoadSkill);
+
+  const hasCustomRender = !!fnDef?.showRender;
+
+  return (
+    <div className="my-3 rounded-xl border border-border bg-surface overflow-hidden shadow-card ocean-fade-in">
+      <button
+        onClick={() => setExpanded((v) => !v)}
+        className="w-full px-4 py-3 border-b border-border bg-surface-secondary hover:bg-surface-tertiary transition-colors cursor-pointer"
+      >
+        <div className="flex items-center gap-2">
+          <span className="text-xs text-text-tertiary">{expanded ? "▼" : "▶"}</span>
+          <span className="text-sm">🔧</span>
+          <span className="text-sm font-semibold text-text-primary">
+            {displayName}
+          </span>
+          {state === TOOL_PART_STATE.OUTPUT_AVAILABLE && (
+            <span className="ml-auto flex items-center gap-1.5 text-xs text-emerald-600">
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
+              {t("tool.status.complete")}
+            </span>
+          )}
+          {state === TOOL_PART_STATE.OUTPUT_ERROR && (
+            <span className="ml-auto flex items-center gap-1.5 text-xs text-red-500">
+              <span className="w-1.5 h-1.5 rounded-full bg-red-400" />
+              {t("tool.status.error")}
+            </span>
+          )}
+          {(state === TOOL_PART_STATE.INPUT_AVAILABLE ||
+            state === TOOL_PART_STATE.APPROVAL_RESPONDED) && (
+            <span className="ml-auto flex items-center gap-1.5 text-xs text-ocean-500">
+              <span
+                className="inline-block w-3 h-3 border-2 border-ocean-500 border-t-transparent rounded-full"
+                style={{ animation: "ocean-spin 0.8s linear infinite" }}
+              />
+              {t("tool.status.running")}
+            </span>
+          )}
+        </div>
+      </button>
+      {expanded && (
+        <>
+          {hasCustomRender ? (
+            <div className="px-4 py-3">
+              {fnDef!.showRender!({
+                id: fnDef!.id,
+                functionId: fnDef!.id,
+                title: displayName,
+                arguments: fnArgs,
+                status: state === TOOL_PART_STATE.OUTPUT_AVAILABLE
+                  ? ("success" as any)
+                  : state === TOOL_PART_STATE.OUTPUT_ERROR
+                    ? ("failed" as any)
+                    : ("running" as any),
+              })}
+              {state === TOOL_PART_STATE.OUTPUT_AVAILABLE &&
+                output !== undefined && (
+                <div className="pt-2">
+                  <p className="text-xs font-medium text-text-tertiary mb-1.5">{t("tool.label.result")}</p>
+                  <pre className="text-xs bg-surface-tertiary rounded-lg p-3 overflow-x-auto text-text-secondary font-mono max-h-32 overflow-y-auto">
+                    {typeof output === "string"
+                      ? output
+                      : JSON.stringify(output, null, 2)}
+                  </pre>
+                </div>
+              )}
+            </div>
+          ) : (
+            <>
+              {input !== undefined &&
+                Object.keys(input).length > 0 && (
+                <div className="px-4 pt-3 pb-1">
+                  <p className="text-xs font-medium text-text-tertiary mb-1.5">{t("tool.label.parameters")}</p>
+                  <pre className="text-xs bg-surface-tertiary rounded-lg p-3 overflow-x-auto text-text-secondary font-mono max-h-32 overflow-y-auto">
+                    {toolName === "browserExecute"
+                      ? JSON.stringify(input.arguments ?? {}, null, 2)
+                      : JSON.stringify(input, null, 2)}
+                  </pre>
+                </div>
+                )}
+              {state === TOOL_PART_STATE.OUTPUT_AVAILABLE &&
+                output !== undefined && (
+                <div className="px-4 pt-2 pb-3">
+                  <p className="text-xs font-medium text-text-tertiary mb-1.5">{t("tool.label.result")}</p>
+                  <pre className="text-xs bg-surface-tertiary rounded-lg p-3 overflow-x-auto text-text-secondary font-mono max-h-32 overflow-y-auto">
+                    {typeof output === "string"
+                      ? output
+                      : JSON.stringify(output, null, 2)}
+                  </pre>
+                </div>
+                )}
+            </>
+          )}
+          {state === TOOL_PART_STATE.OUTPUT_ERROR && errorText && (
+            <div className="p-4">
+              <p className="text-xs text-red-500">{typeof errorText === "string" ? errorText : JSON.stringify(errorText)}</p>
+            </div>
+          )}
+        </>
+      )}
+    </div>
+  );
 }
 
 type MessageRendererProps = {
@@ -358,9 +496,6 @@ export function MessageRenderer({
         }
       }
 
-      // Check if the registered function has a custom showRender
-      const hasCustomRender = !!fnDef?.showRender;
-
       return (
         <div key={toolCallId || index}>
           {state === TOOL_PART_STATE.INPUT_STREAMING ? (
@@ -375,96 +510,20 @@ export function MessageRenderer({
               onDeny={onDeny}
             />
           ) : (
-            <div className="my-3 rounded-xl border border-border bg-surface overflow-hidden shadow-card ocean-fade-in">
-              <div className="px-4 py-3 border-b border-border bg-surface-secondary flex items-center gap-2">
-                <span className="text-sm">🔧</span>
-                <span className="text-sm font-semibold text-text-primary">
-                  {displayName}
-                </span>
-                {state === TOOL_PART_STATE.OUTPUT_AVAILABLE && (
-                  <span className="ml-auto flex items-center gap-1.5 text-xs text-emerald-600">
-                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
-                    {t("tool.status.complete")}
-                  </span>
-                )}
-                {state === TOOL_PART_STATE.OUTPUT_ERROR && (
-                  <span className="ml-auto flex items-center gap-1.5 text-xs text-red-500">
-                    <span className="w-1.5 h-1.5 rounded-full bg-red-400" />
-                    {t("tool.status.error")}
-                  </span>
-                )}
-                {(state === TOOL_PART_STATE.INPUT_AVAILABLE ||
-                  state === TOOL_PART_STATE.APPROVAL_RESPONDED) && (
-                  <span className="ml-auto flex items-center gap-1.5 text-xs text-ocean-500">
-                    <span
-                      className="inline-block w-3 h-3 border-2 border-ocean-500 border-t-transparent rounded-full"
-                      style={{ animation: "ocean-spin 0.8s linear infinite" }}
-                    />
-                    {t("tool.status.running")}
-                  </span>
-                )}
-              </div>
-              {hasCustomRender ? (
-                /* Custom showRender from the registered function (e.g. Monaco diff editor) */
-                <div className="px-4 py-3">
-                  {fnDef!.showRender!({
-                    id: fnDef!.id,
-                    functionId: fnDef!.id,
-                    title: displayName,
-                    arguments: fnArgs,
-                    status: state === TOOL_PART_STATE.OUTPUT_AVAILABLE
-                      ? ("success" as any)
-                      : state === TOOL_PART_STATE.OUTPUT_ERROR
-                        ? ("failed" as any)
-                        : ("running" as any),
-                  })}
-                  {/* Still show result summary below the custom render */}
-                  {state === TOOL_PART_STATE.OUTPUT_AVAILABLE &&
-                    output !== undefined && (
-                    <div className="pt-2">
-                      <p className="text-xs font-medium text-text-tertiary mb-1.5">{t("tool.label.result")}</p>
-                      <pre className="text-xs bg-surface-tertiary rounded-lg p-3 overflow-x-auto text-text-secondary font-mono max-h-32 overflow-y-auto">
-                        {typeof output === "string"
-                          ? output
-                          : JSON.stringify(output, null, 2)}
-                      </pre>
-                    </div>
-                  )}
-                </div>
-              ) : (
-                <>
-                  {/* Show parameters when available */}
-                  {input !== undefined &&
-                    Object.keys(input).length > 0 && (
-                    <div className="px-4 pt-3 pb-1">
-                      <p className="text-xs font-medium text-text-tertiary mb-1.5">{t("tool.label.parameters")}</p>
-                      <pre className="text-xs bg-surface-tertiary rounded-lg p-3 overflow-x-auto text-text-secondary font-mono max-h-32 overflow-y-auto">
-                        {toolName === "browserExecute"
-                          ? JSON.stringify(input.arguments ?? {}, null, 2)
-                          : JSON.stringify(input, null, 2)}
-                      </pre>
-                    </div>
-                    )}
-                  {/* Show result when available */}
-                  {state === TOOL_PART_STATE.OUTPUT_AVAILABLE &&
-                    output !== undefined && (
-                    <div className="px-4 pt-2 pb-3">
-                      <p className="text-xs font-medium text-text-tertiary mb-1.5">{t("tool.label.result")}</p>
-                      <pre className="text-xs bg-surface-tertiary rounded-lg p-3 overflow-x-auto text-text-secondary font-mono max-h-32 overflow-y-auto">
-                        {typeof output === "string"
-                          ? output
-                          : JSON.stringify(output, null, 2)}
-                      </pre>
-                    </div>
-                    )}
-                </>
-              )}
-              {state === TOOL_PART_STATE.OUTPUT_ERROR && errorText && (
-                <div className="p-4">
-                  <p className="text-xs text-red-500">{typeof errorText === "string" ? errorText : JSON.stringify(errorText)}</p>
-                </div>
-              )}
-            </div>
+            <ToolCallCard
+              toolCallId={toolCallId}
+              toolName={toolName}
+              displayName={displayName}
+              state={state}
+              input={input}
+              output={output}
+              errorText={errorText}
+              fnDef={fnDef}
+              fnArgs={fnArgs}
+              approvalId={approvalId}
+              onApprove={onApprove}
+              onDeny={onDeny}
+            />
           )}
         </div>
       );
