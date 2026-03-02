@@ -36,6 +36,8 @@ export interface ParameterDefinition {
 export interface BaseFunctionDefinition {
   id: string;
   name: string;
+  /** Localized Chinese display name; shown when locale is zh-CN */
+  cnName?: string;
   description: string;
   operationType: OperationType;
   parameters: ParameterDefinition[];

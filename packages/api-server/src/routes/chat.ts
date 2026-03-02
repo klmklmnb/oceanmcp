@@ -141,10 +141,12 @@ export async function handleChatRequest(req: Request): Promise<Response> {
       messages,
       modelId,
       connectionId,
+      locale,
     }: {
-      messages: any[]; // Vercel AI SDK UI messages
+      messages: any[];
       modelId?: string;
       connectionId?: string;
+      locale?: string;
     } = body;
 
     if (!messages || !Array.isArray(messages)) {
@@ -184,7 +186,7 @@ export async function handleChatRequest(req: Request): Promise<Response> {
 
     const result = streamText({
       model: getLanguageModel(modelId),
-      system: getSystemPrompt(connectionId),
+      system: getSystemPrompt(connectionId, locale),
       messages: modelMessages,
       tools: mergedTools,
       stopWhen: stepCountIs(10),

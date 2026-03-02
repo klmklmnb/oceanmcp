@@ -16,6 +16,7 @@ import instructions from "./devops-instructions.md?raw";
  */
 export const devopsSkill: SkillDefinition = {
   name: "devops",
+  cnName: "运维",
   description:
     "Frontend DevOps operations for the Trinity platform. Handles deploy group management, archive deployment, work order lifecycle, cluster operations, and dynamic render HTML updates. Use when the user wants to deploy, release, publish, or manage frontend static resources across testing, pre, and prod environments.",
   instructions,

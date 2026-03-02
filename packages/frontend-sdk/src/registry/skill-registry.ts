@@ -16,6 +16,8 @@ import type {
 export interface SkillDefinition {
   /** Unique skill identifier (used by loadSkill) */
   name: string;
+  /** Localized Chinese display name; shown when locale is zh-CN */
+  cnName?: string;
   /** When to use this skill (shown in system prompt catalog) */
   description: string;
   /** Full markdown instructions (returned by loadSkill on-demand) */
