@@ -1,5 +1,6 @@
 import React, { useState } from "react";
 import type { ColumnConfig } from "@ocean-mcp/shared";
+import { sdkConfig } from "../runtime/sdk-config";
 import { t } from "../locale";
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
@@ -65,13 +66,14 @@ export function ArrayTable({ data, columns: colConfig }: { data: Record<string, 
           <tr className="bg-surface-tertiary">
             {visibleCols.map((col) => {
               const cfg = colConfig?.[col];
+              const displayLabel = sdkConfig.locale === "zh-CN" && cfg?.label ? cfg.label : col;
               return (
                 <th
                   key={col}
                   className="px-2 py-1.5 text-left font-semibold text-text-tertiary whitespace-nowrap border-b border-border"
-                  title={cfg?.label ? col : undefined}
+                  title={displayLabel !== col ? col : undefined}
                 >
-                  {cfg?.label ?? col}
+                  {displayLabel}
                 </th>
               );
             })}

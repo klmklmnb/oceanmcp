@@ -20,6 +20,14 @@ import { API_URL } from "../config";
 const AUTO_DENY_REASON =
   "User sent a new message instead of responding to approval";
 
+type PendingFile = {
+  id: string;
+  file: File;
+  status: "uploading" | "ready" | "error";
+  attachment?: FileAttachment;
+  error?: string;
+};
+
 function isToolPart(part: any): boolean {
   return (
     typeof part?.type === "string" &&
@@ -130,6 +138,7 @@ export function ChatWidget() {
   const scrollRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const [input, setInput] = useState("");
+  const [pendingFiles, setPendingFiles] = useState<PendingFile[]>([]);
   /** Track approval IDs that have already triggered an auto-submit to prevent re-sends. */
   const submittedApprovalIdsRef = useRef<Set<string>>(new Set());
   /** Track userSelect toolCallIds that have already triggered an auto-submit to prevent re-sends. */
@@ -248,11 +257,38 @@ export function ChatWidget() {
 
   const handleSubmit = async (e?: React.FormEvent) => {
     e?.preventDefault();
-    if (!input.trim()) return;
+    
+    const hasText = input.trim();
+    const readyFiles = pendingFiles.filter((f) => f.status === "ready");
+    
+    if (!hasText && readyFiles.length === 0) return;
+
     const value = input;
     setInput("");
+    setPendingFiles([]);
 
-    await sendUserText(value);
+    const normalized = denyPendingApprovalParts(messages as any[]);
+    if (normalized.changed) {
+      setMessages(normalized.messages as any);
+    }
+
+    const parts: any[] = [];
+    
+    if (hasText) {
+      parts.push({ type: MESSAGE_PART_TYPE.TEXT, text: value });
+    }
+    
+    if (readyFiles.length > 0) {
+      parts.push({
+        type: MESSAGE_PART_TYPE.FILE_ATTACHMENT,
+        data: readyFiles.map((f) => f.attachment!),
+      });
+    }
+
+    await sendMessage({
+      role: MESSAGE_ROLE.USER,
+      parts,
+    });
   };
 
   // Auto-scroll to bottom on new messages
@@ -269,50 +305,57 @@ export function ChatWidget() {
 
   // ─── Upload ──────────────────────────────────────────────────────────────
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const [uploading, setUploading] = useState(false);
 
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(e.target.files || []);
     if (files.length === 0) return;
     e.target.value = "";
 
-    setUploading(true);
+    const newPending: PendingFile[] = files.map((file) => ({
+      id: `${Date.now()}-${Math.random()}`,
+      file,
+      status: "uploading",
+    }));
+
+    setPendingFiles((prev) => [...prev, ...newPending]);
+
     try {
       const results = await uploadRegistry.upload(files);
 
-      const attachments: FileAttachment[] = results.map((r, i) => {
-        const { url, name, size, type, ...rest } = r;
-        const attachment: FileAttachment = {
-          url,
-          name: name ?? files[i].name,
-          size: size ?? files[i].size,
-          mimeType: type ?? (files[i].type || "application/octet-stream"),
-        };
-        if (Object.keys(rest).length > 0) {
-          attachment.metadata = rest;
-        }
-        return attachment;
-      });
+      setPendingFiles((prev) =>
+        prev.map((pf) => {
+          const idx = newPending.findIndex((np) => np.id === pf.id);
+          if (idx === -1) return pf;
 
-      const fileParts = [{
-        type: MESSAGE_PART_TYPE.FILE_ATTACHMENT,
-        data: attachments,
-      }];
+          const result = results[idx];
+          const { url, name, size, type, ...rest } = result;
+          const attachment: FileAttachment = {
+            url,
+            name: name ?? pf.file.name,
+            size: size ?? pf.file.size,
+            mimeType: type ?? (pf.file.type || "application/octet-stream"),
+          };
+          if (Object.keys(rest).length > 0) {
+            attachment.metadata = rest;
+          }
 
-      const normalized = denyPendingApprovalParts(messages as any[]);
-      if (normalized.changed) {
-        setMessages(normalized.messages as any);
-      }
-
-      await sendMessage({
-        role: MESSAGE_ROLE.USER,
-        parts: fileParts,
-      });
+          return { ...pf, status: "ready", attachment };
+        })
+      );
     } catch (err: any) {
       console.error("[OceanMCP] Upload failed:", err);
-    } finally {
-      setUploading(false);
+      setPendingFiles((prev) =>
+        prev.map((pf) =>
+          newPending.some((np) => np.id === pf.id)
+            ? { ...pf, status: "error", error: err.message || "Upload failed" }
+            : pf
+        )
+      );
     }
+  };
+
+  const removeFile = (id: string) => {
+    setPendingFiles((prev) => prev.filter((f) => f.id !== id));
   };
 
   // Bridge: expose widget capabilities to OceanMCPSDK.*() methods
@@ -504,6 +547,54 @@ export function ChatWidget() {
             onSubmit={handleSubmit}
             className="relative bg-surface border border-border rounded-2xl shadow-float transition-shadow focus-within:shadow-glow focus-within:border-ocean-300"
           >
+            {/* File preview area */}
+            {pendingFiles.length > 0 && (
+              <div className="px-4 pt-4 pb-2 border-b border-border/30">
+                <div className="flex gap-2 overflow-x-auto overflow-y-visible">
+                  {pendingFiles.map((pf) => (
+                    <div
+                      key={pf.id}
+                      className="relative flex-shrink-0 w-[45px] h-[45px] rounded-md border border-border bg-surface-secondary overflow-visible group"
+                    >
+                      {pf.status === "uploading" && (
+                        <div className="w-full h-full flex items-center justify-center">
+                          <div className="w-4 h-4 border-2 border-ocean-500 border-t-transparent rounded-full animate-spin" />
+                        </div>
+                      )}
+                      {pf.status === "ready" && pf.attachment && (
+                        <div className="w-full h-full overflow-hidden rounded-md">
+                          {pf.attachment.mimeType.startsWith("image/") ? (
+                            <img
+                              src={pf.attachment.url}
+                              alt={pf.attachment.name}
+                              className="w-full h-full object-cover"
+                              title={pf.attachment.name}
+                            />
+                          ) : (
+                            <div className="w-full h-full flex items-center justify-center" title={pf.attachment.name}>
+                              <span className="text-xl">📄</span>
+                            </div>
+                          )}
+                        </div>
+                      )}
+                      {pf.status === "error" && (
+                        <div className="w-full h-full flex items-center justify-center bg-red-50" title={pf.error || "Error"}>
+                          <span className="text-lg text-red-500">⚠</span>
+                        </div>
+                      )}
+                      <button
+                        type="button"
+                        onClick={() => removeFile(pf.id)}
+                        className="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-black/60 text-white text-xs flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer hover:bg-black/80"
+                        title={t("chat.upload.remove")}
+                      >
+                        ×
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
             <textarea
               ref={inputRef}
               value={input}
@@ -528,12 +619,8 @@ export function ChatWidget() {
                   <button
                     type="button"
                     onClick={() => fileInputRef.current?.click()}
-                    disabled={uploading || isStreaming || isLoading}
-                    className={`w-8 h-8 rounded-lg flex items-center justify-center transition-all cursor-pointer ${
-                      uploading
-                        ? "text-ocean-500 animate-pulse"
-                        : "text-text-tertiary hover:text-text-secondary hover:bg-surface-tertiary"
-                    }`}
+                    disabled={isStreaming || isLoading}
+                    className="w-8 h-8 rounded-lg flex items-center justify-center transition-all cursor-pointer text-text-tertiary hover:text-text-secondary hover:bg-surface-tertiary"
                     title={t("chat.upload.title")}
                   >
                     <AttachIcon />
@@ -542,9 +629,17 @@ export function ChatWidget() {
               </div>
               <button
                 type="submit"
-                disabled={!input.trim() || isStreaming || isLoading}
+                disabled={
+                  (!input.trim() && pendingFiles.filter(f => f.status === "ready").length === 0) ||
+                  isStreaming ||
+                  isLoading ||
+                  pendingFiles.some(f => f.status === "uploading")
+                }
                 className={`w-8 h-8 rounded-lg flex items-center justify-center transition-all cursor-pointer ${
-                  input.trim() && !isStreaming && !isLoading
+                  (input.trim() || pendingFiles.some(f => f.status === "ready")) &&
+                  !isStreaming &&
+                  !isLoading &&
+                  !pendingFiles.some(f => f.status === "uploading")
                     ? "bg-ocean-600 text-white hover:bg-ocean-700 shadow-sm"
                     : "bg-surface-tertiary text-text-tertiary"
                 }`}

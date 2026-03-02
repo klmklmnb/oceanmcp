@@ -651,6 +651,43 @@ export function MessageRenderer({
     (p) => p.type === MESSAGE_PART_TYPE.TEXT && (p as any).text,
   );
 
+  // For user messages with both files and text, split into two separate bubbles
+  if (isUser && message.parts && message.parts.length > 1) {
+    const fileParts = message.parts.filter((p) => p.type === MESSAGE_PART_TYPE.FILE_ATTACHMENT);
+    const textParts = message.parts.filter((p) => p.type === MESSAGE_PART_TYPE.TEXT);
+    
+    if (fileParts.length > 0 && textParts.length > 0) {
+      return (
+        <div className="ocean-fade-in flex flex-col gap-2 items-end">
+          {/* File bubble */}
+          <div className="max-w-[80%]">
+            {fileParts.map((part, index) => {
+              const node = renderPart(part, index);
+              if (node === null) return null;
+              return (
+                <PartErrorBoundary key={`eb-file-${index}`} partIndex={index} partData={part}>
+                  {node}
+                </PartErrorBoundary>
+              );
+            })}
+          </div>
+          {/* Text bubble */}
+          <div className="max-w-[80%]">
+            {textParts.map((part, index) => {
+              const node = renderPart(part, index);
+              if (node === null) return null;
+              return (
+                <PartErrorBoundary key={`eb-text-${index}`} partIndex={index} partData={part}>
+                  {node}
+                </PartErrorBoundary>
+              );
+            })}
+          </div>
+        </div>
+      );
+    }
+  }
+
   return (
     <div
       className={`ocean-fade-in ${isUser ? "flex justify-end" : "flex gap-3"}`}

@@ -188,7 +188,9 @@ export function FlowNodeCard({
                     const columnsMap = new Map<string, Record<string, ColumnConfig>>();
                     if (fnDef?.parameters) {
                       for (const p of fnDef.parameters) {
-                        if (p.showName) showNameMap.set(p.name, p.showName);
+                        if (sdkConfig.locale === "zh-CN" && p.showName) {
+                          showNameMap.set(p.name, p.showName);
+                        }
                         if (p.enumMap) enumMaps.set(p.name, p.enumMap);
                         if (p.columns) columnsMap.set(p.name, p.columns);
                       }

@@ -85,6 +85,13 @@ export async function initSkills(): Promise<void> {
   }
 }
 
+// ─── Locale Instructions ─────────────────────────────────────────────────────
+
+const LOCALE_INSTRUCTIONS: Record<string, string> = {
+  "zh-CN": "\n\n请用简体中文回复用户的所有消息。",
+  "en-US": "\n\nPlease respond to all user messages in English.",
+};
+
 // ─── Public API ──────────────────────────────────────────────────────────────
 
 /**
@@ -99,8 +106,11 @@ export async function initSkills(): Promise<void> {
  * frontend-registered skills on name conflicts.
  *
  * Called on every chat request to ensure the latest skills are included.
+ *
+ * @param connectionId - Optional WS connection ID for per-connection skills
+ * @param locale - Optional locale string (e.g., "zh-CN", "en-US") to append language instructions
  */
-export function getSystemPrompt(connectionId?: string): string {
+export function getSystemPrompt(connectionId?: string, locale?: string): string {
   // Server-side skills: file-based (global) + zip-loaded (per-connection)
   const fileSkills = discoveredSkills;
   const zipSkills = connectionManager.getZipSkills(connectionId);
@@ -119,7 +129,13 @@ export function getSystemPrompt(connectionId?: string): string {
     ),
   ];
 
-  return basePrompt + buildSkillsPrompt(allSkills);
+  let system = basePrompt + buildSkillsPrompt(allSkills);
+  
+  if (locale && LOCALE_INSTRUCTIONS[locale]) {
+    system += LOCALE_INSTRUCTIONS[locale];
+  }
+
+  return system;
 }
 
 /**

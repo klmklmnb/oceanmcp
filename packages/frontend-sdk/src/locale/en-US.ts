@@ -7,6 +7,8 @@ const enUS = {
   "chat.welcome.suggestion3": "What can you do?",
   "chat.input.placeholder": "Send a message...",
   "chat.upload.title": "Upload file",
+  "chat.upload.uploading": "Uploading...",
+  "chat.upload.remove": "Remove",
   "chat.error.label": "Error:",
 
   // MessageRenderer

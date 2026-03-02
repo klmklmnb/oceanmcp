@@ -7,6 +7,8 @@ const zhCN = {
   "chat.welcome.suggestion3": "你能做什么？",
   "chat.input.placeholder": "输入消息...",
   "chat.upload.title": "上传文件",
+  "chat.upload.uploading": "上传中...",
+  "chat.upload.remove": "移除",
   "chat.error.label": "错误：",
 
   // MessageRenderer
