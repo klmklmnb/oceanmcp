@@ -12,6 +12,8 @@ import { MessageRenderer } from "./MessageRenderer";
 import { wsClient } from "../runtime/ws-client";
 import { chatBridge } from "../runtime/chat-bridge";
 import { uploadRegistry } from "../runtime/upload-registry";
+import { sdkConfig } from "../runtime/sdk-config";
+import { t } from "../locale";
 import { CHAT_STATUS } from "../constants/chat";
 import { API_URL } from "../config";
 
@@ -432,15 +434,14 @@ export function ChatWidget() {
                 OceanMCP
               </h2>
               <p className="text-sm text-text-tertiary text-center max-w-sm">
-                Your browser-in-the-loop AI assistant. I can read data, execute
-                actions, and automate workflows within this application.
+                {t("chat.welcome.description")}
               </p>
               {/* Suggested messages */}
               <div className="flex flex-wrap gap-2 mt-8 justify-center max-w-lg">
                 {[
-                  "What's on this page?",
-                  "Show me the page info",
-                  "What can you do?",
+                  t("chat.welcome.suggestion1"),
+                  t("chat.welcome.suggestion2"),
+                  t("chat.welcome.suggestion3"),
                 ].map((suggestion) => (
                   <button
                     key={suggestion}
@@ -491,7 +492,7 @@ export function ChatWidget() {
       {/* Error display */}
       {error && (
         <div className="px-4 py-2 mx-auto max-w-3xl mb-2 bg-red-50 border border-red-200 rounded-xl text-sm text-red-600 ocean-fade-in">
-          <strong>Error:</strong> {typeof error.message === "string" ? error.message : JSON.stringify(error.message ?? error)}
+          <strong>{t("chat.error.label")}</strong> {typeof error.message === "string" ? error.message : JSON.stringify(error.message ?? error)}
         </div>
       )}
 
@@ -508,7 +509,7 @@ export function ChatWidget() {
               value={input}
               onChange={handleInputChange}
               onKeyDown={handleKeyDown}
-              placeholder="Send a message..."
+              placeholder={t("chat.input.placeholder")}
               rows={1}
               className="w-full resize-none bg-transparent px-4 pt-4 pb-12 text-sm text-text-primary placeholder-text-tertiary focus:outline-none rounded-2xl"
               style={{ minHeight: "56px", maxHeight: "200px" }}
@@ -533,7 +534,7 @@ export function ChatWidget() {
                         ? "text-ocean-500 animate-pulse"
                         : "text-text-tertiary hover:text-text-secondary hover:bg-surface-tertiary"
                     }`}
-                    title="Upload file"
+                    title={t("chat.upload.title")}
                   >
                     <AttachIcon />
                   </button>

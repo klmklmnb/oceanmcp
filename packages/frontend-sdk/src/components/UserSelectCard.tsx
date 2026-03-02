@@ -1,6 +1,7 @@
 import React from "react";
 import { TOOL_PART_STATE } from "@ocean-mcp/shared";
 import { functionRegistry } from "../registry";
+import { t } from "../locale";
 
 type UserSelectOptionInput = {
   value: unknown;
@@ -186,10 +187,10 @@ export function UserSelectCard({
 
   const statusLabel =
     state === TOOL_PART_STATE.OUTPUT_AVAILABLE
-      ? "Complete"
+      ? t("select.status.complete")
       : state === TOOL_PART_STATE.OUTPUT_ERROR
-        ? "Error"
-        : "Pending";
+        ? t("select.status.error")
+        : t("select.status.pending");
 
   const statusColor =
     state === TOOL_PART_STATE.OUTPUT_AVAILABLE
@@ -233,29 +234,29 @@ export function UserSelectCard({
       <div className="px-4 py-3 border-b border-border bg-surface-secondary flex items-center gap-2">
         <span className="text-sm">🧭</span>
         <span className="text-sm font-semibold text-text-primary">
-          User Selection
+          {t("select.title")}
         </span>
         <span className={`ml-auto text-xs ${statusColor}`}>{statusLabel}</span>
       </div>
 
       {state === TOOL_PART_STATE.OUTPUT_AVAILABLE ? (
         <div className="p-4 text-sm text-text-secondary">
-          <div>Selected: {chosenLabel}</div>
+          <div>{t("select.selected")} {chosenLabel}</div>
           {selectedValueText && selectedValueText !== chosenLabel && (
             <div className="mt-1 text-xs text-text-tertiary font-mono">
-              Value: {selectedValueText}
+              {t("select.value")} {selectedValueText}
             </div>
           )}
         </div>
       ) : state === TOOL_PART_STATE.OUTPUT_ERROR ? (
         <div className="p-4 text-sm text-red-500">
-          {typeof errorText === "string" ? errorText : "Selection failed."}
+          {typeof errorText === "string" ? errorText : t("select.failed")}
         </div>
       ) : (
         <>
           <div className="p-4">
             <p className="text-sm text-text-primary">
-              {typeof input?.message === "string" ? input.message : "Please choose an option:"}
+              {typeof input?.message === "string" ? input.message : t("select.prompt")}
             </p>
 
             {isBinaryOptions ? (
@@ -293,12 +294,12 @@ export function UserSelectCard({
             ) : (
               <>
                 <p className="mt-2 text-xs text-text-tertiary">
-                  No predefined options were found. Enter a value manually.
+                  {t("select.noOptions")}
                 </p>
                 <input
                   value={manualValue}
                   onChange={(e) => setManualValue(e.target.value)}
-                  placeholder="Enter value"
+                  placeholder={t("select.inputPlaceholder")}
                   className="mt-3 w-full rounded-lg border border-border bg-surface-tertiary px-3 py-2 text-sm text-text-primary focus:outline-none focus:ring-2 focus:ring-ocean-400"
                 />
               </>
@@ -318,7 +319,7 @@ export function UserSelectCard({
                 disabled={!selectedOption && !manualValue.trim()}
                 className="px-4 py-2 text-sm font-medium text-white bg-ocean-600 hover:bg-ocean-700 disabled:opacity-50 disabled:cursor-not-allowed rounded-lg transition-colors shadow-sm cursor-pointer"
               >
-                Confirm
+                {t("select.confirm")}
               </button>
             </div>
           )}

@@ -12,7 +12,9 @@ import { FlowNodeCard } from "./FlowNodeCard";
 import { ApprovalButtons } from "./ApprovalButtons";
 import { UserSelectCard } from "./UserSelectCard";
 import { MarkdownRenderer } from "./MarkdownRenderer";
-import { functionRegistry } from "../registry";
+import { functionRegistry, skillRegistry } from "../registry";
+import { sdkConfig } from "../runtime/sdk-config";
+import { t } from "../locale";
 
 class PartErrorBoundary extends React.Component<
   { children: React.ReactNode; partIndex: number; partData?: any },
@@ -41,7 +43,7 @@ class PartErrorBoundary extends React.Component<
     if (this.state.hasError) {
       return (
         <div className="my-1 px-3 py-2 bg-red-50 border border-red-200 rounded-lg text-xs text-red-500">
-          Render error: {this.state.error?.message ?? "Unknown error"}
+          {t("tool.renderError")} {this.state.error?.message ?? "Unknown error"}
         </div>
       );
     }
@@ -103,7 +105,7 @@ function CopyButton({ text }: { text: string }) {
     <button
       onClick={handleCopy}
       className="p-1.5 text-text-tertiary hover:text-text-secondary transition-colors rounded-md hover:bg-surface-tertiary cursor-pointer"
-      title="Copy"
+      title={t("copy.title")}
     >
       {copied ? (
         <svg
@@ -335,15 +337,23 @@ export function MessageRenderer({
       let fnArgs: Record<string, any> = {};
       if (toolName === "browserExecute" && input?.functionId) {
         fnDef = functionRegistry.get(input.functionId);
-        displayName = fnDef?.name || input.functionId;
+        displayName = fnDef
+          ? sdkConfig.resolveDisplayName(fnDef.name, fnDef.cnName)
+          : input.functionId;
         fnArgs = input.arguments || {};
       } else if (toolName === "loadSkill" && input?.name) {
-        displayName = `Load Skill: ${input.name}`;
+        const skill = skillRegistry.get(input.name);
+        const skillLabel = skill
+          ? sdkConfig.resolveDisplayName(skill.name, skill.cnName)
+          : input.name;
+        displayName = sdkConfig.locale === "zh-CN"
+          ? `技能装填：${skillLabel}`
+          : `Load Skill: ${skillLabel}`;
       } else {
         // Direct proxy tool — toolName is the function ID itself
         fnDef = functionRegistry.get(toolName);
         if (fnDef) {
-          displayName = fnDef.name || toolName;
+          displayName = sdkConfig.resolveDisplayName(fnDef.name, fnDef.cnName) || toolName;
           fnArgs = input || {};
         }
       }
@@ -374,13 +384,13 @@ export function MessageRenderer({
                 {state === TOOL_PART_STATE.OUTPUT_AVAILABLE && (
                   <span className="ml-auto flex items-center gap-1.5 text-xs text-emerald-600">
                     <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
-                    Complete
+                    {t("tool.status.complete")}
                   </span>
                 )}
                 {state === TOOL_PART_STATE.OUTPUT_ERROR && (
                   <span className="ml-auto flex items-center gap-1.5 text-xs text-red-500">
                     <span className="w-1.5 h-1.5 rounded-full bg-red-400" />
-                    Error
+                    {t("tool.status.error")}
                   </span>
                 )}
                 {(state === TOOL_PART_STATE.INPUT_AVAILABLE ||
@@ -390,7 +400,7 @@ export function MessageRenderer({
                       className="inline-block w-3 h-3 border-2 border-ocean-500 border-t-transparent rounded-full"
                       style={{ animation: "ocean-spin 0.8s linear infinite" }}
                     />
-                    Running
+                    {t("tool.status.running")}
                   </span>
                 )}
               </div>
@@ -412,7 +422,7 @@ export function MessageRenderer({
                   {state === TOOL_PART_STATE.OUTPUT_AVAILABLE &&
                     output !== undefined && (
                     <div className="pt-2">
-                      <p className="text-xs font-medium text-text-tertiary mb-1.5">Result</p>
+                      <p className="text-xs font-medium text-text-tertiary mb-1.5">{t("tool.label.result")}</p>
                       <pre className="text-xs bg-surface-tertiary rounded-lg p-3 overflow-x-auto text-text-secondary font-mono max-h-32 overflow-y-auto">
                         {typeof output === "string"
                           ? output
@@ -427,7 +437,7 @@ export function MessageRenderer({
                   {input !== undefined &&
                     Object.keys(input).length > 0 && (
                     <div className="px-4 pt-3 pb-1">
-                      <p className="text-xs font-medium text-text-tertiary mb-1.5">Parameters</p>
+                      <p className="text-xs font-medium text-text-tertiary mb-1.5">{t("tool.label.parameters")}</p>
                       <pre className="text-xs bg-surface-tertiary rounded-lg p-3 overflow-x-auto text-text-secondary font-mono max-h-32 overflow-y-auto">
                         {toolName === "browserExecute"
                           ? JSON.stringify(input.arguments ?? {}, null, 2)
@@ -439,7 +449,7 @@ export function MessageRenderer({
                   {state === TOOL_PART_STATE.OUTPUT_AVAILABLE &&
                     output !== undefined && (
                     <div className="px-4 pt-2 pb-3">
-                      <p className="text-xs font-medium text-text-tertiary mb-1.5">Result</p>
+                      <p className="text-xs font-medium text-text-tertiary mb-1.5">{t("tool.label.result")}</p>
                       <pre className="text-xs bg-surface-tertiary rounded-lg p-3 overflow-x-auto text-text-secondary font-mono max-h-32 overflow-y-auto">
                         {typeof output === "string"
                           ? output
