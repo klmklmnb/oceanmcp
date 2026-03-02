@@ -1,4 +1,4 @@
-import React, { useRef, useEffect, useState } from "react";
+import React, { useRef, useEffect, useState, useMemo, useCallback } from "react";
 import { useChat } from "@ai-sdk/react";
 import { DefaultChatTransport } from "ai";
 import {
@@ -133,38 +133,24 @@ export function ChatWidget() {
   /** Track userSelect toolCallIds that have already triggered an auto-submit to prevent re-sends. */
   const submittedUserSelectIdsRef = useRef<Set<string>>(new Set());
 
-  const {
-    messages,
-    setMessages,
-    status,
-    error,
-    addToolResult,
-    addToolApprovalResponse,
-    sendMessage,
-  } = useChat({
-    transport: new DefaultChatTransport({
-      api: `${API_URL}/api/chat`,
-      body: () => ({
-        connectionId: wsClient.currentConnectionId ?? undefined,
+  const transport = useMemo(
+    () =>
+      new DefaultChatTransport({
+        api: `${API_URL}/api/chat`,
+        body: () => ({
+          connectionId: wsClient.currentConnectionId ?? undefined,
+        }),
       }),
-    }),
-    /**
-     * AI SDK v6: After approval responses or client-side tool outputs are added,
-     * decide whether to auto-submit the updated message back to the server.
-     *
-     * Important: we only auto-submit approval responses once *all* tool parts in
-     * the last assistant message are settled. Otherwise we can submit a mixed
-     * state (one approval responded, another still approval-requested), which
-     * leads to missing tool-result pairs for OpenAI-compatible APIs.
-     */
-    sendAutomaticallyWhen: ({ messages: msgs }) => {
+    [],
+  );
+
+  const sendAutomaticallyWhen = useCallback(
+    ({ messages: msgs }: { messages: any[] }) => {
       const lastMsg = msgs[msgs.length - 1];
       if (!lastMsg || lastMsg.role !== MESSAGE_ROLE.ASSISTANT) return false;
 
       const toolParts = (lastMsg.parts || []).filter(isToolPart);
 
-      // Only consider approval responses that haven't already been submitted,
-      // so we don't re-trigger an infinite send loop.
       const approvalRespondedParts = toolParts.filter((part: any) => {
         return (
           part.state === TOOL_PART_STATE.APPROVAL_RESPONDED &&
@@ -188,12 +174,11 @@ export function ChatWidget() {
         );
       });
 
-      // Only consider userSelect results that haven't already been submitted,
-      // so we don't re-trigger an infinite send loop (same logic as approvals).
       const settledUserSelectParts = toolParts.filter((part: any) => {
         if (getToolName(part) !== "userSelect") return false;
         if (!part.toolCallId) return false;
-        if (submittedUserSelectIdsRef.current.has(part.toolCallId)) return false;
+        if (submittedUserSelectIdsRef.current.has(part.toolCallId))
+          return false;
         return (
           part.state === TOOL_PART_STATE.OUTPUT_AVAILABLE ||
           part.state === TOOL_PART_STATE.OUTPUT_ERROR
@@ -209,8 +194,11 @@ export function ChatWidget() {
             : hasUserSelectResult),
       );
 
-      // Mark these IDs as submitted so we never re-trigger for them.
       if (decision) {
+        console.log(
+          "[OceanMCP] sendAutomaticallyWhen → true",
+          { approvalCount: approvalRespondedParts.length, userSelectCount: settledUserSelectParts.length },
+        );
         for (const part of approvalRespondedParts) {
           if ((part as any).approval?.id) {
             submittedApprovalIdsRef.current.add((part as any).approval.id);
@@ -225,7 +213,18 @@ export function ChatWidget() {
 
       return decision;
     },
-  });
+    [],
+  );
+
+  const {
+    messages,
+    setMessages,
+    status,
+    error,
+    addToolResult,
+    addToolApprovalResponse,
+    sendMessage,
+  } = useChat({ transport, sendAutomaticallyWhen });
 
   const handleInputChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
     setInput(e.target.value);

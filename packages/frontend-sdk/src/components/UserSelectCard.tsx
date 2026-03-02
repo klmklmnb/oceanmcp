@@ -165,16 +165,20 @@ export function UserSelectCard({
     return deriveOptionsFromDescription(paramDef?.description);
   }, [paramDef?.description]);
 
-  const finalOptions = options.length > 0 ? options : derivedOptions;
+  const finalOptions = React.useMemo(
+    () => (options.length > 0 ? options : derivedOptions),
+    [options, derivedOptions],
+  );
   const isBinaryOptions = finalOptions.length === 2;
 
   const [selectedOptionId, setSelectedOptionId] = React.useState("");
   const [manualValue, setManualValue] = React.useState("");
 
+  const firstOptionId = finalOptions[0]?.id ?? "";
   React.useEffect(() => {
-    setSelectedOptionId(finalOptions[0]?.id ?? "");
+    setSelectedOptionId(firstOptionId);
     setManualValue("");
-  }, [finalOptions, toolCallId]);
+  }, [firstOptionId, toolCallId]);
 
   const selectedOption = finalOptions.find(
     (option) => option.id === selectedOptionId,
