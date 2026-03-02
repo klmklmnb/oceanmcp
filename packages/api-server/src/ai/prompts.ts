@@ -21,7 +21,6 @@
  *      both discovered and frontend-registered skills
  */
 
-import { readFileSync } from "fs";
 import { join, dirname } from "path";
 import { fileURLToPath } from "url";
 import {
@@ -31,14 +30,10 @@ import {
   type DiscoveredSkill,
 } from "./skills";
 import { connectionManager } from "../ws/connection-manager";
+import basePrompt from "./prompt.md" with { type: "text" };
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
-
-// ─── Base Prompt ─────────────────────────────────────────────────────────────
-
-/** Base system prompt loaded from prompt.md (sync, available immediately) */
-const basePrompt = readFileSync(join(__dirname, "prompt.md"), "utf-8");
 
 // ─── Skills System ───────────────────────────────────────────────────────────
 
@@ -95,40 +90,67 @@ export async function initSkills(): Promise<void> {
 /**
  * Get the full system prompt, including the skills catalog.
  *
- * When `connectionId` is provided, merges file-based skills with
- * frontend-registered skills from that connection. File-based skills
- * take priority on name conflicts.
+ * Merges skills from three sources (in priority order):
+ *   1. File-based skills: discovered from SKILL.md files at startup (global)
+ *   2. Zip-loaded skills: downloaded from CDN URLs (per-connection)
+ *   3. Frontend-registered skills: sent by browser clients via WebSocket (per-connection)
+ *
+ * File-based and zip-loaded skills (server-side) take priority over
+ * frontend-registered skills on name conflicts.
  *
  * Called on every chat request to ensure the latest skills are included.
- * The skills catalog section is empty if no skills exist, making this
- * safe to call even before initSkills() or without a connectionId.
  */
-export function getSystemPrompt(connectionId?: string): string {
-  // Start with file-based skills
-  const fileSkills = discoveredSkills;
+const LOCALE_INSTRUCTIONS: Record<string, string> = {
+  "zh-CN": "You MUST respond in Simplified Chinese (简体中文). All text output, explanations, and labels should be in Chinese.",
+  "en-US": "You MUST respond in English. All text output, explanations, and labels should be in English.",
+};
 
-  // Merge frontend-registered skills, skipping name conflicts
+export function getSystemPrompt(connectionId?: string, locale?: string): string {
+  const fileSkills = discoveredSkills;
+  const zipSkills = connectionManager.getZipSkills(connectionId);
+  const serverSkillNames = new Set(
+    [...fileSkills, ...zipSkills].map((s) => s.name.toLowerCase()),
+  );
+
   const frontendSkills = connectionManager.getSkillSchemas(connectionId);
-  const fileSkillNames = new Set(fileSkills.map((s) => s.name.toLowerCase()));
 
   const allSkills: Array<{ name: string; description: string }> = [
     ...fileSkills,
+    ...zipSkills,
     ...frontendSkills.filter(
-      (s) => !fileSkillNames.has(s.name.toLowerCase()),
+      (s) => !serverSkillNames.has(s.name.toLowerCase()),
     ),
   ];
 
-  return basePrompt + buildSkillsPrompt(allSkills);
+  let prompt = basePrompt + buildSkillsPrompt(allSkills);
+
+  if (locale) {
+    const instruction = LOCALE_INSTRUCTIONS[locale];
+    if (instruction) {
+      prompt += `\n\n## Language\n${instruction}\n`;
+    }
+  }
+
+  return prompt;
 }
 
 /**
  * Get the sandbox and discovered skills for use by the loadSkill tool
  * and for merging skill-bundled tools into getMergedTools().
  *
- * Returns the sandbox instance and the current list of discovered skills.
- * The tools/index.ts module calls this to wire up the loadSkill tool and
- * merge any tools exported by skill directories.
+ * Returns the sandbox instance and the combined list of file-based +
+ * zip-loaded skills for the given connection. The tools/index.ts module
+ * calls this to wire up the loadSkill tool and merge any tools exported
+ * by skill directories.
+ *
+ * @param connectionId - Optional WS connection ID to include per-connection zip skills
  */
-export function getSkillsContext() {
-  return { sandbox, skills: discoveredSkills };
+export function getSkillsContext(connectionId?: string) {
+  return {
+    sandbox,
+    skills: [
+      ...discoveredSkills,
+      ...connectionManager.getZipSkills(connectionId),
+    ],
+  };
 }

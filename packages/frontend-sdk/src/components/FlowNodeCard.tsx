@@ -1,6 +1,8 @@
 import React from "react";
 import { FLOW_STEP_STATUS, TOOL_PART_STATE } from "@ocean-mcp/shared";
 import { functionRegistry } from "../registry";
+import { sdkConfig } from "../runtime/sdk-config";
+import { t } from "../locale";
 
 type FlowNodeCardProps = {
   steps: Array<{
@@ -121,10 +123,10 @@ export function FlowNodeCard({
         <div className="flex items-center gap-2">
           <span className="text-sm">📋</span>
           <span className="text-sm font-semibold text-text-primary">
-            Execution Plan
+            {t("flow.title")}
           </span>
           <span className="ml-auto text-xs px-2 py-0.5 rounded-full bg-ocean-100 text-ocean-700 font-medium">
-            {steps.length} step{steps.length !== 1 ? "s" : ""}
+            {t("flow.stepCount", { count: steps.length })}
           </span>
         </div>
       </div>
@@ -156,18 +158,24 @@ export function FlowNodeCard({
 
                 <div className="flex-1 min-w-0">
                   <p className="text-sm font-medium text-text-primary">
-                    {step.title}
+                    {typeof step.title === "string" ? step.title : JSON.stringify(step.title)}
                   </p>
                   {(() => {
                     const fnDef = functionRegistry.get(step.functionId);
                     if (fnDef?.showRender) {
-                      return fnDef.showRender({
-                        id: step.functionId,
-                        functionId: step.functionId,
-                        title: step.title,
-                        arguments: step.arguments || {},
-                        status: status as any,
-                      });
+                      try {
+                        const rendered = fnDef.showRender({
+                          id: step.functionId,
+                          functionId: step.functionId,
+                          title: step.title,
+                          arguments: step.arguments || {},
+                          status: status as any,
+                        });
+                        if (React.isValidElement(rendered)) return rendered;
+                        return null;
+                      } catch {
+                        return null;
+                      }
                     }
 
                     // Build maps from param definitions for display overrides
@@ -183,16 +191,22 @@ export function FlowNodeCard({
                     const renderValue = (key: string, value: any) => {
                       const em = enumMaps.get(key);
                       if (em && typeof value === "string" && value in em) {
-                        return em[value];
+                        const mapped = em[value];
+                        if (React.isValidElement(mapped)) return mapped;
+                        return typeof mapped === "string" ? mapped : String(mapped);
                       }
                       return typeof value === "string"
                         ? `"${value}"`
                         : JSON.stringify(value);
                     };
 
+                    const fnLabel = fnDef
+                      ? sdkConfig.resolveDisplayName(fnDef.name, fnDef.cnName)
+                      : step.functionId;
+
                     return (
                       <div className="text-xs text-text-tertiary mt-0.5 font-mono">
-                        <span>{step.functionId}(</span>
+                        <span>{fnLabel}(</span>
                         {Object.entries(step.arguments || {}).length > 0 && (
                           <div className="pl-4 overflow-x-auto">
                             {Object.entries(step.arguments || {}).map(
@@ -230,7 +244,7 @@ export function FlowNodeCard({
                   {stepResult?.status === FLOW_STEP_STATUS.FAILED &&
                     stepResult.error && (
                       <p className="mt-1 text-xs text-red-500">
-                        {stepResult.error}
+                        {typeof stepResult.error === "string" ? stepResult.error : JSON.stringify(stepResult.error)}
                       </p>
                     )}
                 </div>
@@ -251,13 +265,13 @@ export function FlowNodeCard({
               onClick={() => onDeny(toolCallId, toolName, approvalId)}
               className="px-4 py-2 text-sm font-medium text-text-secondary hover:text-text-primary hover:bg-surface-tertiary rounded-lg transition-colors cursor-pointer"
             >
-              Deny
+              {t("flow.deny")}
             </button>
             <button
               onClick={() => onApprove(toolCallId, toolName, approvalId)}
               className="px-4 py-2 text-sm font-medium text-white bg-ocean-600 hover:bg-ocean-700 rounded-lg transition-colors shadow-sm cursor-pointer"
             >
-              Allow
+              {t("flow.approve")}
             </button>
           </div>
         )}

@@ -3,62 +3,83 @@ import { createRoot } from "react-dom/client";
 import { ChatWidget } from "./components/ChatWidget";
 import { functionRegistry, skillRegistry } from "./registry";
 import type { SkillDefinition } from "./registry";
-import { mockFunctions } from "./registry/mock/mockFunctions";
-import { devopsSkill } from "./registry/devops";
-import { miCoffeeSkill } from "./registry/mi-coffee";
 import { wsClient } from "./runtime/ws-client";
 import {
   FUNCTION_TYPE,
   OPERATION_TYPE,
   type FunctionDefinition,
 } from "@ocean-mcp/shared";
+import { baseFunctions } from "./registry/base/baseFunctions";
+import { chatBridge } from "./runtime/chat-bridge";
+import {
+  uploadRegistry,
+  type UploadHandler,
+} from "./runtime/upload-registry";
+import { sdkConfig, type SupportedLocale } from "./runtime/sdk-config";
 import "./styles/index.css";
 
-// ─── Register pre-bundled mock functions ─────────────────────────────────────
-for (const fn of mockFunctions) {
-    functionRegistry.register(fn);
-}
-
-// ─── Register pre-bundled skills ─────────────────────────────────────────────
-// Skills bundle both instructions (for the LLM) and tools (for browser-side
-// execution). The skill registry sends metadata to the server, while tools
-// are also added to the function registry for local execution.
-const preregisteredSkills: SkillDefinition[] = [devopsSkill, miCoffeeSkill];
-
-for (const skill of preregisteredSkills) {
-  skillRegistry.register(skill);
-  if (skill.tools) {
-    for (const tool of skill.tools) {
-      functionRegistry.register(tool);
-    }
-  }
+// ─── Register base functions ─────────────────────────────────────────────────
+// These are built-in tools that ship with the SDK and are always available.
+for (const fn of baseFunctions) {
+  functionRegistry.register(fn);
 }
 
 // ─── Connect WebSocket to server ─────────────────────────────────────────────
+// SDK connects to the backend so it can send registered capabilities (skills/tools)
+// and receive function execution requests.
 wsClient.connect();
 
 // ─── Mount the Chat Widget ──────────────────────────────────────────────────
-function mountOceanMCP() {
-  let container = document.getElementById("ocean-mcp-root");
-  if (!container) {
-    container = document.createElement("div");
-    container.id = "ocean-mcp-root";
-    // Float overlay style for injection into existing apps
-    Object.assign(container.style, {
-      position: "fixed",
-      bottom: "0",
-      right: "0",
-      width: "420px",
-      height: "600px",
-      zIndex: "99999",
-      borderRadius: "16px 16px 0 0",
-      overflow: "hidden",
-      boxShadow: "0 -4px 32px rgba(0,0,0,0.12)",
-    });
-    document.body.appendChild(container);
+type MountTarget = string | HTMLElement;
+
+type MountOptions = {
+  root?: MountTarget;
+  locale?: SupportedLocale;
+};
+
+function mountOceanMCP(target?: MountTarget | MountOptions) {
+  let container: HTMLElement | null = null;
+  let resolvedTarget: MountTarget | undefined;
+
+  if (target && typeof target === "object" && !(target instanceof HTMLElement)) {
+    const opts = target as MountOptions;
+    resolvedTarget = opts.root;
+    if (opts.locale) {
+      sdkConfig.locale = opts.locale;
+    }
   } else {
-    // Dev mode: full height
-    container.style.height = "100vh";
+    resolvedTarget = target as MountTarget | undefined;
+  }
+
+  if (typeof resolvedTarget === "string") {
+    container = document.getElementById(resolvedTarget);
+  } else if (resolvedTarget instanceof HTMLElement) {
+    container = resolvedTarget;
+  } else {
+    container = document.getElementById("ocean-mcp-root");
+    if (!container) {
+      container = document.createElement("div");
+      container.id = "ocean-mcp-root";
+      Object.assign(container.style, {
+        position: "fixed",
+        bottom: "0",
+        right: "0",
+        width: "420px",
+        height: "600px",
+        zIndex: "99999",
+        borderRadius: "16px 16px 0 0",
+        overflow: "hidden",
+        boxShadow: "0 -4px 32px rgba(0,0,0,0.12)",
+      });
+      document.body.appendChild(container);
+    } else {
+      container.style.height = "100vh";
+    }
+  }
+
+  if (!container) {
+    console.error("[OceanMCP] Mount target not found:", resolvedTarget);
+    return;
   }
 
   const root = createRoot(container);
@@ -129,6 +150,45 @@ const OceanMCPSDK = {
   },
 
   /**
+   * Register skill(s) from a remote .zip file hosted on a CDN.
+   *
+   * The zip is downloaded and extracted on the server. Skills are discovered
+   * using the same directory convention as server-side file-based skills:
+   *
+   *   - If the zip root contains `SKILL.md`, it's treated as a single skill.
+   *     Subdirectories are NOT scanned (they're treated as resources).
+   *   - Otherwise, each subdirectory containing a `SKILL.md` is registered
+   *     as a separate skill.
+   *
+   * Registered skills are added to the server's discovered skills pool and
+   * become available in the system prompt catalog and via `loadSkill`.
+   *
+   * @param url - CDN URL pointing to a .zip file
+   * @returns Promise resolving to the metadata of all discovered skills
+   *
+   * @example
+   * ```ts
+   * // Single skill zip
+   * const skills = await OceanMCPSDK.registerSkillFromZip(
+   *   'https://cdn.example.com/skills/pdf-processing.zip',
+   * );
+   *
+   * // Multi-skill zip
+   * const skills = await OceanMCPSDK.registerSkillFromZip(
+   *   'https://cdn.example.com/skills/devops-pack.zip',
+   * );
+   * console.log('Registered:', skills.map(s => s.name));
+   * ```
+   */
+  async registerSkillFromZip(url: string) {
+    const skills = await wsClient.registerSkillFromZip(url);
+    console.log(
+      `[OceanMCP] Zip skill(s) registered: ${skills.map((s) => s.name).join(", ")}`,
+    );
+    return skills;
+  },
+
+  /**
    * Register a standalone tool dynamically from the host application.
    * Supports both 'code' and 'executor' type definitions.
    */
@@ -170,8 +230,113 @@ const OceanMCPSDK = {
     return skillRegistry.getAll();
   },
 
-  /** Mount the chat widget (called automatically, can be re-called) */
-  mount: mountOceanMCP,
+  /**
+   * Programmatically send a chat message.
+   *
+   * The text is briefly shown in the input box for visual feedback,
+   * then automatically submitted as a user message.
+   *
+   * @param text - The message text to send
+   * @returns Promise that resolves when the message has been sent
+   *
+   * @example
+   * ```ts
+   * await OceanMCPSDK.chat("What's on this page?");
+   * ```
+   */
+  async chat(text: string) {
+    return chatBridge.call("chat", text);
+  },
+
+  /**
+   * Set the input box text without sending.
+   *
+   * @example
+   * ```ts
+   * OceanMCPSDK.setInput("draft message...");
+   * ```
+   */
+  async setInput(text: string) {
+    return chatBridge.call("setInput", text);
+  },
+
+  /**
+   * Get the current chat messages.
+   */
+  async getMessages() {
+    return chatBridge.call<any[]>("getMessages");
+  },
+
+  /**
+   * Clear all chat messages.
+   */
+  async clearMessages() {
+    return chatBridge.call("clearMessages");
+  },
+
+  /**
+   * Register a file upload handler.
+   *
+   * When registered, a paperclip button appears in the input area.
+   * Clicking it opens a file picker. All selected files are passed to
+   * your handler as an array, which should upload them and return the results.
+   * The results are then sent as a user message in the chat.
+   *
+   * @param handler - Async function that receives a File[] and returns UploadResult[]
+   * @returns A function to unregister the handler
+   *
+   * @example
+   * ```ts
+   * OceanMCPSDK.registerUploader(async (files) => {
+   *   const form = new FormData();
+   *   files.forEach((file) => form.append('files', file));
+   *   const res = await fetch('/api/upload', { method: 'POST', body: form });
+   *   const data = await res.json();
+   *   return data.map((d, i) => ({
+   *     url: d.url, name: files[i].name, size: files[i].size, type: files[i].type,
+   *   }));
+   * });
+   * ```
+   */
+  registerUploader(handler: UploadHandler) {
+    uploadRegistry.register(handler);
+    console.log("[OceanMCP] Upload handler registered");
+    return () => this.unregisterUploader();
+  },
+
+  /** Remove the registered upload handler. The upload button will be hidden. */
+  unregisterUploader() {
+    uploadRegistry.unregister();
+    console.log("[OceanMCP] Upload handler unregistered");
+  },
+
+  /**
+   * Mount the chat widget.
+   *
+   * Accepts either the legacy target (string ID / HTMLElement) or an options
+   * object for richer configuration.
+   *
+   * @example
+   * ```ts
+   * // Legacy — mount by element
+   * OceanMCPSDK.mount(document.getElementById("chat-container"));
+   *
+   * // Legacy — mount by ID string
+   * OceanMCPSDK.mount("#my-chat");
+   *
+   * // Options object — with locale
+   * OceanMCPSDK.mount({
+   *   root: document.getElementById("root"),
+   *   locale: "zh-CN",
+   * });
+   *
+   * // Auto-create floating overlay (default)
+   * OceanMCPSDK.mount();
+   * ```
+   */
+  mount(target?: MountTarget | MountOptions) {
+    mountOceanMCP(target);
+  },
 
   /** Registry and WebSocket client refs for advanced usage */
   functionRegistry: functionRegistry as any,
@@ -184,13 +349,6 @@ if (typeof window !== "undefined") {
   (window as any).OceanMCPSDK = OceanMCPSDK;
 }
 
-// Auto-mount when script loads (dev mode only)
-if (typeof document !== "undefined" && import.meta.env.DEV) {
-  if (document.readyState === "loading") {
-    document.addEventListener("DOMContentLoaded", mountOceanMCP);
-  } else {
-    mountOceanMCP();
-  }
-}
+// In production/SDK usage, call OceanMCPSDK.mount() explicitly
 
 export default OceanMCPSDK;

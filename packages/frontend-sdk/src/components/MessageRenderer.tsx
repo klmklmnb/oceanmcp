@@ -6,11 +6,50 @@ import {
   MESSAGE_ROLE,
   TOOL_PART_STATE,
   TOOL_PART_TYPE_PREFIX,
+  type FileAttachment,
 } from "@ocean-mcp/shared";
 import { FlowNodeCard } from "./FlowNodeCard";
 import { ApprovalButtons } from "./ApprovalButtons";
 import { UserSelectCard } from "./UserSelectCard";
-import { functionRegistry } from "../registry";
+import { MarkdownRenderer } from "./MarkdownRenderer";
+import { functionRegistry, skillRegistry } from "../registry";
+import { sdkConfig } from "../runtime/sdk-config";
+import { t } from "../locale";
+
+class PartErrorBoundary extends React.Component<
+  { children: React.ReactNode; partIndex: number; partData?: any },
+  { hasError: boolean; error?: Error }
+> {
+  constructor(props: { children: React.ReactNode; partIndex: number; partData?: any }) {
+    super(props);
+    this.state = { hasError: false };
+  }
+
+  static getDerivedStateFromError(error: Error) {
+    return { hasError: true, error };
+  }
+
+  componentDidCatch(error: Error, info: React.ErrorInfo) {
+    console.error(
+      `[OceanMCP] Render error in message part ${this.props.partIndex}:`,
+      "\n  Error:", error.message,
+      "\n  Stack:", error.stack,
+      "\n  Component Stack:", info.componentStack,
+      "\n  Part data:", JSON.stringify(this.props.partData, null, 2),
+    );
+  }
+
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div className="my-1 px-3 py-2 bg-red-50 border border-red-200 rounded-lg text-xs text-red-500">
+          {t("tool.renderError")} {this.state.error?.message ?? "Unknown error"}
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
 
 type MessageRendererProps = {
   message: UIMessage;
@@ -66,7 +105,7 @@ function CopyButton({ text }: { text: string }) {
     <button
       onClick={handleCopy}
       className="p-1.5 text-text-tertiary hover:text-text-secondary transition-colors rounded-md hover:bg-surface-tertiary cursor-pointer"
-      title="Copy"
+      title={t("copy.title")}
     >
       {copied ? (
         <svg
@@ -97,6 +136,86 @@ function CopyButton({ text }: { text: string }) {
 }
 
 import { MessageReasoning } from "./MessageReasoning";
+
+function formatFileSize(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+function FileIcon({ mimeType }: { mimeType: string }) {
+  const isImage = mimeType.startsWith("image/");
+  const isPdf = mimeType === "application/pdf";
+
+  if (isImage) {
+    return (
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+        <rect x="3" y="3" width="18" height="18" rx="2" ry="2" />
+        <circle cx="8.5" cy="8.5" r="1.5" />
+        <polyline points="21 15 16 10 5 21" />
+      </svg>
+    );
+  }
+
+  if (isPdf) {
+    return (
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+        <polyline points="14 2 14 8 20 8" />
+        <line x1="16" y1="13" x2="8" y2="13" />
+        <line x1="16" y1="17" x2="8" y2="17" />
+      </svg>
+    );
+  }
+
+  return (
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M13 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z" />
+      <polyline points="13 2 13 9 20 9" />
+    </svg>
+  );
+}
+
+function FileAttachmentCard({ file }: { file: FileAttachment }) {
+  const isImage = file.mimeType.startsWith("image/");
+
+  return (
+    <a
+      href={file.url}
+      target="_blank"
+      rel="noopener noreferrer"
+      className="flex items-center gap-3 px-3 py-2.5 rounded-lg bg-white/10 hover:bg-white/20 transition-colors"
+    >
+      {isImage ? (
+        <img
+          src={file.url}
+          alt={file.name}
+          className="w-9 h-9 rounded-md object-cover flex-shrink-0"
+        />
+      ) : (
+        <div className="w-9 h-9 rounded-md bg-white/15 flex items-center justify-center flex-shrink-0 text-white/80">
+          <FileIcon mimeType={file.mimeType} />
+        </div>
+      )}
+      <div className="min-w-0 flex-1">
+        <p className="text-sm font-medium text-white truncate">{file.name}</p>
+        <p className="text-xs text-white/60">
+          {formatFileSize(file.size)}
+        </p>
+      </div>
+    </a>
+  );
+}
+
+function FileAttachmentGroup({ files }: { files: FileAttachment[] }) {
+  return (
+    <div className="inline-flex flex-col gap-1 px-3 py-2.5 rounded-2xl bg-ocean-600 max-w-xs">
+      {files.map((file, i) => (
+        <FileAttachmentCard key={`${file.url}-${i}`} file={file} />
+      ))}
+    </div>
+  );
+}
 
 /**
  * Helper: Check if a part is a tool part (AI SDK v6 uses `tool-${toolName}` pattern)
@@ -146,6 +265,7 @@ export function MessageRenderer({
   const isUser = message.role === MESSAGE_ROLE.USER;
 
   const renderPart = (part: any, index: number) => {
+    try {
     // 1. Tool Parts (AI SDK v6: type is "tool-${toolName}")
     if (isToolPart(part)) {
       const toolName = getToolName(part);
@@ -178,7 +298,7 @@ export function MessageRenderer({
                 />
                 {state === TOOL_PART_STATE.OUTPUT_ERROR && errorText && (
                   <div className="my-2 px-4 py-2 bg-red-50 border border-red-200 rounded-xl text-sm text-red-600">
-                    <strong>Error:</strong> {errorText}
+                    <strong>{t("tool.status.error")}:</strong> {typeof errorText === "string" ? errorText : JSON.stringify(errorText)}
                   </div>
                 )}
               </>
@@ -217,15 +337,22 @@ export function MessageRenderer({
       let fnArgs: Record<string, any> = {};
       if (toolName === "browserExecute" && input?.functionId) {
         fnDef = functionRegistry.get(input.functionId);
-        displayName = fnDef?.name || input.functionId;
+        displayName = fnDef
+          ? sdkConfig.resolveDisplayName(fnDef.name, fnDef.cnName)
+          : input.functionId;
         fnArgs = input.arguments || {};
       } else if (toolName === "loadSkill" && input?.name) {
-        displayName = `Load Skill: ${input.name}`;
+        const skill = skillRegistry.get(input.name);
+        const skillLabel = skill
+          ? sdkConfig.resolveDisplayName(skill.name, skill.cnName)
+          : input.name;
+        displayName = sdkConfig.locale === "zh-CN"
+          ? `技能装填：${skillLabel}`
+          : `Load Skill: ${skillLabel}`;
       } else {
-        // Direct proxy tool — toolName is the function ID itself
         fnDef = functionRegistry.get(toolName);
         if (fnDef) {
-          displayName = fnDef.name || toolName;
+          displayName = sdkConfig.resolveDisplayName(fnDef.name, fnDef.cnName) || toolName;
           fnArgs = input || {};
         }
       }
@@ -256,13 +383,13 @@ export function MessageRenderer({
                 {state === TOOL_PART_STATE.OUTPUT_AVAILABLE && (
                   <span className="ml-auto flex items-center gap-1.5 text-xs text-emerald-600">
                     <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
-                    Complete
+                    {t("tool.status.complete")}
                   </span>
                 )}
                 {state === TOOL_PART_STATE.OUTPUT_ERROR && (
                   <span className="ml-auto flex items-center gap-1.5 text-xs text-red-500">
                     <span className="w-1.5 h-1.5 rounded-full bg-red-400" />
-                    Error
+                    {t("tool.status.error")}
                   </span>
                 )}
                 {(state === TOOL_PART_STATE.INPUT_AVAILABLE ||
@@ -272,7 +399,7 @@ export function MessageRenderer({
                       className="inline-block w-3 h-3 border-2 border-ocean-500 border-t-transparent rounded-full"
                       style={{ animation: "ocean-spin 0.8s linear infinite" }}
                     />
-                    Running
+                    {t("tool.status.running")}
                   </span>
                 )}
               </div>
@@ -294,7 +421,7 @@ export function MessageRenderer({
                   {state === TOOL_PART_STATE.OUTPUT_AVAILABLE &&
                     output !== undefined && (
                     <div className="pt-2">
-                      <p className="text-xs font-medium text-text-tertiary mb-1.5">Result</p>
+                      <p className="text-xs font-medium text-text-tertiary mb-1.5">{t("tool.label.result")}</p>
                       <pre className="text-xs bg-surface-tertiary rounded-lg p-3 overflow-x-auto text-text-secondary font-mono max-h-32 overflow-y-auto">
                         {typeof output === "string"
                           ? output
@@ -309,7 +436,7 @@ export function MessageRenderer({
                   {input !== undefined &&
                     Object.keys(input).length > 0 && (
                     <div className="px-4 pt-3 pb-1">
-                      <p className="text-xs font-medium text-text-tertiary mb-1.5">Parameters</p>
+                      <p className="text-xs font-medium text-text-tertiary mb-1.5">{t("tool.label.parameters")}</p>
                       <pre className="text-xs bg-surface-tertiary rounded-lg p-3 overflow-x-auto text-text-secondary font-mono max-h-32 overflow-y-auto">
                         {toolName === "browserExecute"
                           ? JSON.stringify(input.arguments ?? {}, null, 2)
@@ -321,7 +448,7 @@ export function MessageRenderer({
                   {state === TOOL_PART_STATE.OUTPUT_AVAILABLE &&
                     output !== undefined && (
                     <div className="px-4 pt-2 pb-3">
-                      <p className="text-xs font-medium text-text-tertiary mb-1.5">Result</p>
+                      <p className="text-xs font-medium text-text-tertiary mb-1.5">{t("tool.label.result")}</p>
                       <pre className="text-xs bg-surface-tertiary rounded-lg p-3 overflow-x-auto text-text-secondary font-mono max-h-32 overflow-y-auto">
                         {typeof output === "string"
                           ? output
@@ -333,7 +460,7 @@ export function MessageRenderer({
               )}
               {state === TOOL_PART_STATE.OUTPUT_ERROR && errorText && (
                 <div className="p-4">
-                  <p className="text-xs text-red-500">{errorText}</p>
+                  <p className="text-xs text-red-500">{typeof errorText === "string" ? errorText : JSON.stringify(errorText)}</p>
                 </div>
               )}
             </div>
@@ -349,18 +476,38 @@ export function MessageRenderer({
 
     // 3. Reasoning Parts (Native AI SDK)
     if (part.type === MESSAGE_PART_TYPE.REASONING) {
+      const reasoningText = typeof part.text === "string"
+        ? part.text
+        : typeof part.details?.text === "string"
+          ? part.details.text
+          : "";
       return (
         <MessageReasoning
           key={`reasoning-${index}`}
-          reasoning={part.details?.text || part.text || ""}
+          reasoning={reasoningText}
           isLoading={part.state === MESSAGE_PART_STATE.STREAMING}
         />
       );
     }
 
-    // 4. Text Parts (with potential <think> tags)
+    // 4. File Attachment Parts
+    if (part.type === MESSAGE_PART_TYPE.FILE_ATTACHMENT && part.data) {
+      const files: FileAttachment[] = Array.isArray(part.data)
+        ? part.data
+        : [part.data];
+      return (
+        <FileAttachmentGroup key={`file-${index}`} files={files} />
+      );
+    }
+
+    // 5. Skip any other data-* parts to prevent rendering objects as React children
+    if (typeof part.type === "string" && part.type.startsWith("data-")) {
+      return null;
+    }
+
+    // 6. Text Parts (with potential <think> tags)
     if (part.type === MESSAGE_PART_TYPE.TEXT) {
-      const text = part.text || "";
+      const text = typeof part.text === "string" ? part.text : "";
 
       // Regex to process <think> tags
       const parts: React.ReactNode[] = [];
@@ -375,16 +522,16 @@ export function MessageRenderer({
           const content = text.substring(lastIndex, match.index);
           if (content.trim()) {
             parts.push(
-              <div
-                key={`text-${lastIndex}`}
-                className={
-                  isUser
-                    ? "inline-block px-4 py-2.5 rounded-2xl bg-ocean-600 text-white text-sm leading-relaxed"
-                    : "text-sm text-text-primary leading-relaxed whitespace-pre-wrap"
-                }
-              >
-                {content}
-              </div>,
+              isUser ? (
+                <div
+                  key={`text-${lastIndex}`}
+                  className="inline-block px-4 py-2.5 rounded-2xl bg-ocean-600 text-white text-sm leading-relaxed"
+                >
+                  {content}
+                </div>
+              ) : (
+                <MarkdownRenderer key={`text-${lastIndex}`} content={content} />
+              ),
             );
           }
         }
@@ -410,16 +557,16 @@ export function MessageRenderer({
       if (lastIndex < text.length) {
         const content = text.substring(lastIndex);
         parts.push(
-          <div
-            key={`text-${lastIndex}`}
-            className={
-              isUser
-                ? "inline-block px-4 py-2.5 rounded-2xl bg-ocean-600 text-white text-sm leading-relaxed"
-                : "text-sm text-text-primary leading-relaxed whitespace-pre-wrap"
-            }
-          >
-            {content}
-          </div>,
+          isUser ? (
+            <div
+              key={`text-${lastIndex}`}
+              className="inline-block px-4 py-2.5 rounded-2xl bg-ocean-600 text-white text-sm leading-relaxed"
+            >
+              {content}
+            </div>
+          ) : (
+            <MarkdownRenderer key={`text-${lastIndex}`} content={content} />
+          ),
         );
       }
 
@@ -427,6 +574,17 @@ export function MessageRenderer({
     }
 
     return null;
+    } catch (err: any) {
+      console.error(
+        "[OceanMCP] renderPart error:",
+        "\n  Part index:", index,
+        "\n  Part type:", part?.type,
+        "\n  Part data:", JSON.stringify(part, null, 2),
+        "\n  Error:", err?.message,
+        "\n  Stack:", err?.stack,
+      );
+      return null;
+    }
   };
 
   const hasTextContent = message.parts?.some(
@@ -442,7 +600,15 @@ export function MessageRenderer({
 
       <div className={`max-w-[80%] ${isUser ? "" : "flex-1"}`}>
         {/* Render all parts */}
-        {message.parts?.map((part, index) => renderPart(part, index))}
+        {message.parts?.map((part, index) => {
+          const node = renderPart(part, index);
+          if (node === null) return null;
+          return (
+            <PartErrorBoundary key={`eb-${index}`} partIndex={index} partData={part}>
+              {node}
+            </PartErrorBoundary>
+          );
+        })}
 
         {/* Action buttons for AI messages */}
         {!isUser && hasTextContent && (

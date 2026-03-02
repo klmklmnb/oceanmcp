@@ -1,4 +1,4 @@
-import React, { useRef, useEffect, useState } from "react";
+import React, { useRef, useEffect, useState, useMemo, useCallback } from "react";
 import { useChat } from "@ai-sdk/react";
 import { DefaultChatTransport } from "ai";
 import {
@@ -6,9 +6,14 @@ import {
   MESSAGE_ROLE,
   TOOL_PART_STATE,
   TOOL_PART_TYPE_PREFIX,
+  type FileAttachment,
 } from "@ocean-mcp/shared";
 import { MessageRenderer } from "./MessageRenderer";
 import { wsClient } from "../runtime/ws-client";
+import { chatBridge } from "../runtime/chat-bridge";
+import { uploadRegistry } from "../runtime/upload-registry";
+import { sdkConfig } from "../runtime/sdk-config";
+import { t } from "../locale";
 import { CHAT_STATUS } from "../constants/chat";
 import { API_URL } from "../config";
 
@@ -98,6 +103,24 @@ function SendIcon() {
   );
 }
 
+/** Paperclip icon for upload */
+function AttachIcon() {
+  return (
+    <svg
+      width="16"
+      height="16"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <path d="M21.44 11.05l-9.19 9.19a6 6 0 01-8.49-8.49l9.19-9.19a4 4 0 015.66 5.66l-9.2 9.19a2 2 0 01-2.83-2.83l8.49-8.48" />
+    </svg>
+  );
+}
+
 /**
  * Main Chat Widget component.
  * Uses Vercel AI SDK's `useChat` with `fetch`-based transport to connect
@@ -112,38 +135,25 @@ export function ChatWidget() {
   /** Track userSelect toolCallIds that have already triggered an auto-submit to prevent re-sends. */
   const submittedUserSelectIdsRef = useRef<Set<string>>(new Set());
 
-  const {
-    messages,
-    setMessages,
-    status,
-    error,
-    addToolResult,
-    addToolApprovalResponse,
-    sendMessage,
-  } = useChat({
-    transport: new DefaultChatTransport({
-      api: `${API_URL}/api/chat`,
-      body: () => ({
-        connectionId: wsClient.currentConnectionId ?? undefined,
+  const transport = useMemo(
+    () =>
+      new DefaultChatTransport({
+        api: `${API_URL}/api/chat`,
+        body: () => ({
+          connectionId: wsClient.currentConnectionId ?? undefined,
+          locale: sdkConfig.locale ?? undefined,
+        }),
       }),
-    }),
-    /**
-     * AI SDK v6: After approval responses or client-side tool outputs are added,
-     * decide whether to auto-submit the updated message back to the server.
-     *
-     * Important: we only auto-submit approval responses once *all* tool parts in
-     * the last assistant message are settled. Otherwise we can submit a mixed
-     * state (one approval responded, another still approval-requested), which
-     * leads to missing tool-result pairs for OpenAI-compatible APIs.
-     */
-    sendAutomaticallyWhen: ({ messages: msgs }) => {
+    [],
+  );
+
+  const sendAutomaticallyWhen = useCallback(
+    ({ messages: msgs }: { messages: any[] }) => {
       const lastMsg = msgs[msgs.length - 1];
       if (!lastMsg || lastMsg.role !== MESSAGE_ROLE.ASSISTANT) return false;
 
       const toolParts = (lastMsg.parts || []).filter(isToolPart);
 
-      // Only consider approval responses that haven't already been submitted,
-      // so we don't re-trigger an infinite send loop.
       const approvalRespondedParts = toolParts.filter((part: any) => {
         return (
           part.state === TOOL_PART_STATE.APPROVAL_RESPONDED &&
@@ -167,12 +177,11 @@ export function ChatWidget() {
         );
       });
 
-      // Only consider userSelect results that haven't already been submitted,
-      // so we don't re-trigger an infinite send loop (same logic as approvals).
       const settledUserSelectParts = toolParts.filter((part: any) => {
         if (getToolName(part) !== "userSelect") return false;
         if (!part.toolCallId) return false;
-        if (submittedUserSelectIdsRef.current.has(part.toolCallId)) return false;
+        if (submittedUserSelectIdsRef.current.has(part.toolCallId))
+          return false;
         return (
           part.state === TOOL_PART_STATE.OUTPUT_AVAILABLE ||
           part.state === TOOL_PART_STATE.OUTPUT_ERROR
@@ -188,8 +197,11 @@ export function ChatWidget() {
             : hasUserSelectResult),
       );
 
-      // Mark these IDs as submitted so we never re-trigger for them.
       if (decision) {
+        console.log(
+          "[OceanMCP] sendAutomaticallyWhen → true",
+          { approvalCount: approvalRespondedParts.length, userSelectCount: settledUserSelectParts.length },
+        );
         for (const part of approvalRespondedParts) {
           if ((part as any).approval?.id) {
             submittedApprovalIdsRef.current.add((part as any).approval.id);
@@ -204,7 +216,18 @@ export function ChatWidget() {
 
       return decision;
     },
-  });
+    [],
+  );
+
+  const {
+    messages,
+    setMessages,
+    status,
+    error,
+    addToolResult,
+    addToolApprovalResponse,
+    sendMessage,
+  } = useChat({ transport, sendAutomaticallyWhen });
 
   const handleInputChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
     setInput(e.target.value);
@@ -243,6 +266,79 @@ export function ChatWidget() {
   // Focus input on mount
   useEffect(() => {
     inputRef.current?.focus();
+  }, []);
+
+  // ─── Upload ──────────────────────────────────────────────────────────────
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [uploading, setUploading] = useState(false);
+
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(e.target.files || []);
+    if (files.length === 0) return;
+    e.target.value = "";
+
+    setUploading(true);
+    try {
+      const results = await uploadRegistry.upload(files);
+
+      const attachments: FileAttachment[] = results.map((r, i) => {
+        const { url, name, size, type, ...rest } = r;
+        const attachment: FileAttachment = {
+          url,
+          name: name ?? files[i].name,
+          size: size ?? files[i].size,
+          mimeType: type ?? (files[i].type || "application/octet-stream"),
+        };
+        if (Object.keys(rest).length > 0) {
+          attachment.metadata = rest;
+        }
+        return attachment;
+      });
+
+      const fileParts = [{
+        type: MESSAGE_PART_TYPE.FILE_ATTACHMENT,
+        data: attachments,
+      }];
+
+      const normalized = denyPendingApprovalParts(messages as any[]);
+      if (normalized.changed) {
+        setMessages(normalized.messages as any);
+      }
+
+      await sendMessage({
+        role: MESSAGE_ROLE.USER,
+        parts: fileParts,
+      });
+    } catch (err: any) {
+      console.error("[OceanMCP] Upload failed:", err);
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  // Bridge: expose widget capabilities to OceanMCPSDK.*() methods
+  const sendUserTextRef = useRef(sendUserText);
+  sendUserTextRef.current = sendUserText;
+
+  useEffect(() => {
+    chatBridge.register("chat", async (text: string) => {
+      setInput(text);
+      await new Promise((r) => setTimeout(r, 80));
+      setInput("");
+      await sendUserTextRef.current(text);
+    });
+
+    chatBridge.register("setInput", (text: string) => {
+      setInput(text);
+    });
+
+    chatBridge.register("getMessages", () => messages);
+
+    chatBridge.register("clearMessages", () => {
+      setMessages([]);
+    });
+
+    return () => chatBridge.unregisterAll();
   }, []);
 
   /**
@@ -339,15 +435,14 @@ export function ChatWidget() {
                 OceanMCP
               </h2>
               <p className="text-sm text-text-tertiary text-center max-w-sm">
-                Your browser-in-the-loop AI assistant. I can read data, execute
-                actions, and automate workflows within this application.
+                {t("chat.welcome.description")}
               </p>
               {/* Suggested messages */}
               <div className="flex flex-wrap gap-2 mt-8 justify-center max-w-lg">
                 {[
-                  "What's on this page?",
-                  "Show me the page info",
-                  "What can you do?",
+                  t("chat.welcome.suggestion1"),
+                  t("chat.welcome.suggestion2"),
+                  t("chat.welcome.suggestion3"),
                 ].map((suggestion) => (
                   <button
                     key={suggestion}
@@ -398,7 +493,7 @@ export function ChatWidget() {
       {/* Error display */}
       {error && (
         <div className="px-4 py-2 mx-auto max-w-3xl mb-2 bg-red-50 border border-red-200 rounded-xl text-sm text-red-600 ocean-fade-in">
-          <strong>Error:</strong> {error.message}
+          <strong>{t("chat.error.label")}</strong> {typeof error.message === "string" ? error.message : JSON.stringify(error.message ?? error)}
         </div>
       )}
 
@@ -415,27 +510,36 @@ export function ChatWidget() {
               value={input}
               onChange={handleInputChange}
               onKeyDown={handleKeyDown}
-              placeholder="Send a message..."
+              placeholder={t("chat.input.placeholder")}
               rows={1}
               className="w-full resize-none bg-transparent px-4 pt-4 pb-12 text-sm text-text-primary placeholder-text-tertiary focus:outline-none rounded-2xl"
               style={{ minHeight: "56px", maxHeight: "200px" }}
               disabled={isStreaming || isLoading}
             />
+            <input
+              ref={fileInputRef}
+              type="file"
+              multiple
+              className="hidden"
+              onChange={handleFileChange}
+            />
             <div className="absolute bottom-2 left-2 right-2 flex items-center justify-between px-2">
               <div className="flex items-center gap-2 text-text-tertiary">
-                {/* <span className="text-xs flex items-center gap-1">
-                  <svg
-                    width="12"
-                    height="12"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="2"
+                {uploadRegistry.isRegistered && (
+                  <button
+                    type="button"
+                    onClick={() => fileInputRef.current?.click()}
+                    disabled={uploading || isStreaming || isLoading}
+                    className={`w-8 h-8 rounded-lg flex items-center justify-center transition-all cursor-pointer ${
+                      uploading
+                        ? "text-ocean-500 animate-pulse"
+                        : "text-text-tertiary hover:text-text-secondary hover:bg-surface-tertiary"
+                    }`}
+                    title={t("chat.upload.title")}
                   >
-                    <path d="M12 2L14.09 8.26L20 9.27L15.5 13.14L16.82 19.02L12 16.09L7.18 19.02L8.5 13.14L4 9.27L9.91 8.26L12 2Z" />
-                  </svg>
-                  OceanMCP
-                </span> */}
+                    <AttachIcon />
+                  </button>
+                )}
               </div>
               <button
                 type="submit"

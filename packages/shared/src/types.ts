@@ -6,6 +6,17 @@ import type {
   ParameterType,
 } from "./constants";
 
+// ─── File Attachment ─────────────────────────────────────────────────────────
+
+export interface FileAttachment {
+  url: string;
+  name: string;
+  size: number;
+  mimeType: string;
+  /** Extra fields from the upload handler (e.g. id, file_id) */
+  metadata?: Record<string, unknown>;
+}
+
 // ─── Parameter Definition ────────────────────────────────────────────────────
 
 export interface ParameterDefinition {
@@ -25,6 +36,8 @@ export interface ParameterDefinition {
 export interface BaseFunctionDefinition {
   id: string;
   name: string;
+  /** Localized Chinese display name; shown when locale is zh-CN */
+  cnName?: string;
   description: string;
   operationType: OperationType;
   parameters: ParameterDefinition[];

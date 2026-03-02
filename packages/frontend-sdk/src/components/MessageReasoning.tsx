@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from "react";
+import { t } from "../locale";
 
 interface MessageReasoningProps {
   reasoning: string;
@@ -53,7 +54,7 @@ export function MessageReasoning({
           </svg>
         </div>
         <span className="font-medium">
-          {isLoading ? "Thinking..." : "Thought Content"}
+          {isLoading ? t("reasoning.loading") : t("reasoning.title")}
         </span>
         {isLoading && (
           <span className="text-text-quaternary ml-auto">{duration}s</span>
