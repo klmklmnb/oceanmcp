@@ -42,7 +42,6 @@ type MountOptions = {
   avatar?: string;
   welcomeTitle?: string;
   welcomeDescription?: string;
-  suggestions?: string[];
   /**
    * LLM model configuration for chat requests.
    *

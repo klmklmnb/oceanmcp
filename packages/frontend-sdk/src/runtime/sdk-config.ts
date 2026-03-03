@@ -19,7 +19,6 @@ export type SDKConfig = {
   avatar?: string;
   welcomeTitle?: string;
   welcomeDescription?: string;
-  suggestions?: string[];
   /** LLM model configuration sent to the api-server on each chat request. */
   model?: ModelConfig;
   /** Custom welcome-screen suggestion questions. When set, replaces the default i18n suggestions. */
@@ -59,14 +58,6 @@ export const sdkConfig = {
 
   set welcomeDescription(value: string | undefined) {
     config.welcomeDescription = value;
-  },
-
-  get suggestions(): string[] | undefined {
-    return config.suggestions;
-  },
-
-  set suggestions(value: string[] | undefined) {
-    config.suggestions = value;
   },
 
   get model(): ModelConfig | undefined {
