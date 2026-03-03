@@ -186,6 +186,10 @@ export async function handleChatRequest(req: Request): Promise<Response> {
     const modelMessages = await convertToModelMessages(normalizedMessages);
 
     const result = streamText({
+      // NOTE: Currently only the "default" model is used for all requests.
+      // `modelConfig.fast` is accepted from the frontend but not yet wired
+      // in — it will be consumed once task-level model routing is added
+      // (e.g. using the fast model for intent classification or summaries).
       model: getLanguageModel(modelConfig?.default),
       system: getSystemPrompt(connectionId, locale),
       messages: modelMessages,

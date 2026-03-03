@@ -19,6 +19,17 @@ const privateLLM = createOpenAICompatible({
 const provider = customProvider({
   languageModels: {
     default: privateLLM(process.env.LLM_MODEL || "gpt-4o"),
+    /**
+     * Fast / lightweight model alias.
+     *
+     * **Not yet used** — currently registered for future use. The plan is to
+     * route simple, low-latency tasks (e.g. intent classification, short
+     * summaries, tool-selection steps) to this cheaper model while keeping
+     * the "default" alias for complex reasoning tasks.
+     *
+     * To activate it, call `getLanguageModel("fast")` or
+     * `getLanguageModel(modelConfig.fast)` in the relevant code path.
+     */
     fast: privateLLM(
       process.env.LLM_FAST_MODEL || process.env.LLM_MODEL || "gpt-4o-mini",
     ),

@@ -17,7 +17,17 @@ import type {
 export interface ModelConfig {
   /** Primary model ID (e.g. "gpt-4o", "claude-sonnet-4-20250514"). Falls back to env `LLM_MODEL` → `"default"` alias. */
   default?: string;
-  /** Fast / lightweight model ID used for simple tasks. Falls back to env `LLM_FAST_MODEL` → `LLM_MODEL`. */
+  /**
+   * Fast / lightweight model ID used for simple, low-latency tasks
+   * (e.g. intent classification, short summaries, tool-selection steps).
+   *
+   * Falls back to env `LLM_FAST_MODEL` → `LLM_MODEL` → `"gpt-4o-mini"`.
+   *
+   * **Not yet consumed by the server** — the value is forwarded in every
+   * `/api/chat` request but the server currently only reads `default`.
+   * This field is reserved for future use once task-level model routing
+   * is implemented on the server side.
+   */
   fast?: string;
   /** Maximum number of output tokens per response. Falls back to env `LLM_MAX_TOKENS` → `16384`. */
   maxTokens?: number;
