@@ -53,7 +53,6 @@ OceanMCPSDK.mount({
 });
 
 // ─── Mount the test panel ───────────────────────────────────────────────────
-
 const panelRoot = document.getElementById("demo-panel");
 if (panelRoot) {
   createRoot(panelRoot).render(<TestPanel />);
