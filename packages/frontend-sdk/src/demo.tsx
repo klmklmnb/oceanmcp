@@ -41,6 +41,7 @@ OceanMCPSDK.registerUploader(async (files: File[]) => {
 });
 
 // ─── Mount the chat widget ──────────────────────────────────────────────────
+// OceanMCPSDK.mount({ locale: "zh-CN", model: { default: "z-ai/glm-4.6", maxTokens: 104800 } });
 OceanMCPSDK.mount({ locale: "zh-CN" });
 
 // ─── Mount the test panel ───────────────────────────────────────────────────

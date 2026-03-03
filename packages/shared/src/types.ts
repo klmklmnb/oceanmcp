@@ -6,6 +6,23 @@ import type {
   ParameterType,
 } from "./constants";
 
+// ─── Model Configuration ─────────────────────────────────────────────────────
+
+/**
+ * LLM model configuration passed from the frontend SDK to the api-server.
+ *
+ * All fields are optional. When omitted the server falls back to the
+ * corresponding `LLM_*` environment variables, then to built-in defaults.
+ */
+export interface ModelConfig {
+  /** Primary model ID (e.g. "gpt-4o", "claude-sonnet-4-20250514"). Falls back to env `LLM_MODEL` → `"default"` alias. */
+  default?: string;
+  /** Fast / lightweight model ID used for simple tasks. Falls back to env `LLM_FAST_MODEL` → `LLM_MODEL`. */
+  fast?: string;
+  /** Maximum number of output tokens per response. Falls back to env `LLM_MAX_TOKENS` → `16384`. */
+  maxTokens?: number;
+}
+
 // ─── File Attachment ─────────────────────────────────────────────────────────
 
 export interface FileAttachment {

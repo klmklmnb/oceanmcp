@@ -9,6 +9,7 @@ import { baseFunctions } from "./registry/base/baseFunctions";
 import { chatBridge } from "./runtime/chat-bridge";
 import { uploadRegistry, type UploadHandler } from "./runtime/upload-registry";
 import { sdkConfig, type SupportedLocale } from "./runtime/sdk-config";
+import type { ModelConfig } from "@ocean-mcp/shared";
 import {
   createShadowHost,
   injectStyles,
@@ -40,6 +41,26 @@ type MountOptions = {
   locale?: SupportedLocale;
   avatar?: string;
   /**
+   * LLM model configuration for chat requests.
+   *
+   * When set, the config is sent in every `/api/chat` request, allowing the
+   * host app to control which models and parameters are used. Any field
+   * omitted here falls back to the api-server's `LLM_*` environment
+   * variables, then to built-in defaults.
+   *
+   * @example
+   * ```ts
+   * // Use a specific model with token limit
+   * OceanMCPSDK.mount({
+   *   model: { default: "gpt-4o", fast: "gpt-4o-mini", maxTokens: 8192 },
+   * });
+   *
+   * // Only override the default model
+   * OceanMCPSDK.mount({ model: { default: "claude-sonnet-4-20250514" } });
+   * ```
+   */
+  model?: ModelConfig;
+  /**
    * Whether to render the SDK inside a Shadow DOM for full style isolation.
    *
    * - `true` (default): The widget renders inside a shadow root. Host-page
@@ -69,6 +90,9 @@ function mountOceanMCP(target?: MountTarget | MountOptions) {
     }
     if (options.avatar) {
       sdkConfig.avatar = options.avatar;
+    }
+    if (options.model) {
+      sdkConfig.model = options.model;
     }
     if (options.shadowDOM === false) {
       useShadowDOM = false;
@@ -397,6 +421,14 @@ const OceanMCPSDK = {
    * // Mount with locale configuration
    * OceanMCPSDK.mount({ locale: "zh-CN" });
    * OceanMCPSDK.mount({ root: "#my-chat", locale: "zh-CN" });
+   *
+   * // Mount with LLM model configuration
+   * OceanMCPSDK.mount({ model: { default: "gpt-4o", maxTokens: 8192 } });
+   * OceanMCPSDK.mount({
+   *   root: "#my-chat",
+   *   model: { default: "gpt-4o", fast: "gpt-4o-mini", maxTokens: 16384 },
+   *   locale: "zh-CN",
+   * });
    *
    * // Mount without Shadow DOM (light DOM mode)
    * OceanMCPSDK.mount({ shadowDOM: false });
