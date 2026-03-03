@@ -1,3 +1,5 @@
+import type { ModelConfig } from "@ocean-mcp/shared";
+
 export type SupportedLocale = "zh-CN" | "en-US";
 
 export type SDKConfig = {
@@ -6,6 +8,8 @@ export type SDKConfig = {
   welcomeTitle?: string;
   welcomeDescription?: string;
   suggestions?: string[];
+  /** LLM model configuration sent to the api-server on each chat request. */
+  model?: ModelConfig;
 };
 
 const config: SDKConfig = {};
@@ -49,6 +53,14 @@ export const sdkConfig = {
 
   set suggestions(value: string[] | undefined) {
     config.suggestions = value;
+  },
+
+  get model(): ModelConfig | undefined {
+    return config.model;
+  },
+
+  set model(value: ModelConfig | undefined) {
+    config.model = value;
   },
 
   /** Resolve display name: returns cnName when locale is zh-CN, otherwise name */

@@ -160,6 +160,7 @@ export function ChatWidget({ avatar }: { avatar?: string }) {
         api: `${API_URL}/api/chat`,
         body: () => ({
           connectionId: wsClient.currentConnectionId ?? undefined,
+          modelConfig: sdkConfig.model ?? undefined,
         }),
       }),
     [],

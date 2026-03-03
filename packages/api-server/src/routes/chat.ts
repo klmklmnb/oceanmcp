@@ -10,7 +10,8 @@ import {
   TOOL_PART_TYPE_PREFIX,
   type FileAttachment,
 } from "@ocean-mcp/shared";
-import { getLanguageModel } from "../ai/providers";
+import type { ModelConfig } from "@ocean-mcp/shared";
+import { getLanguageModel, resolveMaxTokens } from "../ai/providers";
 import { getSystemPrompt } from "../ai/prompts";
 import { getMergedTools } from "../ai/tools";
 import { connectionManager } from "../ws/connection-manager";
@@ -139,12 +140,12 @@ export async function handleChatRequest(req: Request): Promise<Response> {
     const body = await req.json();
     const {
       messages,
-      modelId,
+      modelConfig,
       connectionId,
       locale,
     }: {
       messages: any[];
-      modelId?: string;
+      modelConfig?: ModelConfig;
       connectionId?: string;
       locale?: string;
     } = body;
@@ -185,10 +186,15 @@ export async function handleChatRequest(req: Request): Promise<Response> {
     const modelMessages = await convertToModelMessages(normalizedMessages);
 
     const result = streamText({
-      model: getLanguageModel(modelId),
+      // NOTE: Currently only the "default" model is used for all requests.
+      // `modelConfig.fast` is accepted from the frontend but not yet wired
+      // in — it will be consumed once task-level model routing is added
+      // (e.g. using the fast model for intent classification or summaries).
+      model: getLanguageModel(modelConfig?.default),
       system: getSystemPrompt(connectionId, locale),
       messages: modelMessages,
       tools: mergedTools,
+      maxOutputTokens: resolveMaxTokens(modelConfig?.maxTokens),
       stopWhen: stepCountIs(10),
     });
 
