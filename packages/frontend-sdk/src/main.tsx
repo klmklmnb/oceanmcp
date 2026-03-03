@@ -35,6 +35,7 @@ type MountTarget = string | HTMLElement;
 type MountOptions = {
   root?: MountTarget;
   locale?: SupportedLocale;
+  avatar?: string;
 };
 
 function mountOceanMCP(target?: MountTarget | MountOptions) {
@@ -45,6 +46,9 @@ function mountOceanMCP(target?: MountTarget | MountOptions) {
     const options = target as MountOptions;
     if (options.locale) {
       sdkConfig.locale = options.locale;
+    }
+    if (options.avatar) {
+      sdkConfig.avatar = options.avatar;
     }
     target = options.root;
   }
@@ -86,7 +90,7 @@ function mountOceanMCP(target?: MountTarget | MountOptions) {
   const root = createRoot(container);
   root.render(
     <React.StrictMode>
-      <ChatWidget />
+      <ChatWidget avatar={sdkConfig.avatar} />
     </React.StrictMode>,
   );
 }

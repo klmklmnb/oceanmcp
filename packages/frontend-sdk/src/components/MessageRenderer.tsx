@@ -198,10 +198,15 @@ type MessageRendererProps = {
   ) => void;
   onDeny: (toolCallId: string, toolName: string, approvalId?: string) => void;
   onUserSelect: (toolCallId: string, output: Record<string, any>) => void;
+  avatar?: string;
 };
 
-/** Sparkle icon for AI messages */
-function SparkleIcon() {
+/** Avatar icon for AI messages */
+function AvatarIcon({ avatar }: { avatar?: string }) {
+  if (avatar) {
+    return <img src={avatar} alt="AI" className="flex-shrink-0 w-8 h-8 object-cover" />;
+  }
+  
   return (
     <div className="flex-shrink-0 w-8 h-8 rounded-full bg-gradient-to-br from-ocean-400 to-ocean-600 flex items-center justify-center shadow-sm">
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
@@ -399,6 +404,7 @@ export function MessageRenderer({
   onApprove,
   onDeny,
   onUserSelect,
+  avatar,
 }: MessageRendererProps) {
   const isUser = message.role === MESSAGE_ROLE.USER;
 
@@ -692,8 +698,8 @@ export function MessageRenderer({
     <div
       className={`ocean-fade-in ${isUser ? "flex justify-end" : "flex gap-3"}`}
     >
-      {/* AI sparkle icon */}
-      {!isUser && <SparkleIcon />}
+      {/* AI avatar icon */}
+      {!isUser && <AvatarIcon avatar={avatar} />}
 
       <div className={`max-w-[80%] ${isUser ? "" : "flex-1"}`}>
         {/* Render all parts */}

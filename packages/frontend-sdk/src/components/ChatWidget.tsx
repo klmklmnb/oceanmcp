@@ -134,7 +134,7 @@ function AttachIcon() {
  * Uses Vercel AI SDK's `useChat` with `fetch`-based transport to connect
  * to the api-server's /api/chat endpoint.
  */
-export function ChatWidget() {
+export function ChatWidget({ avatar }: { avatar?: string }) {
   const scrollRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const [input, setInput] = useState("");
@@ -462,17 +462,21 @@ export function ChatWidget() {
         <div className="max-w-3xl mx-auto space-y-6">
           {messages.length === 0 && (
             <div className="flex flex-col items-center justify-center py-20 ocean-fade-in">
-              <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-ocean-400 to-ocean-600 flex items-center justify-center shadow-lg mb-6">
-                <svg width="32" height="32" viewBox="0 0 24 24" fill="none">
-                  <path
-                    d="M12 2L14.09 8.26L20 9.27L15.5 13.14L16.82 19.02L12 16.09L7.18 19.02L8.5 13.14L4 9.27L9.91 8.26L12 2Z"
-                    fill="white"
-                    stroke="white"
-                    strokeWidth="1"
-                    strokeLinejoin="round"
-                  />
-                </svg>
-              </div>
+              {avatar ? (
+                <img src={avatar} alt="AI" className="w-16 h-16 object-cover mb-6" />
+              ) : (
+                <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-ocean-400 to-ocean-600 flex items-center justify-center shadow-lg mb-6">
+                  <svg width="32" height="32" viewBox="0 0 24 24" fill="none">
+                    <path
+                      d="M12 2L14.09 8.26L20 9.27L15.5 13.14L16.82 19.02L12 16.09L7.18 19.02L8.5 13.14L4 9.27L9.91 8.26L12 2Z"
+                      fill="white"
+                      stroke="white"
+                      strokeWidth="1"
+                      strokeLinejoin="round"
+                    />
+                  </svg>
+                </div>
+              )}
               <h2 className="text-xl font-semibold text-text-primary mb-2">
                 OceanMCP
               </h2>
@@ -508,20 +512,25 @@ export function ChatWidget() {
               onApprove={handleApprove}
               onDeny={handleDeny}
               onUserSelect={handleUserSelect}
+              avatar={avatar}
             />
           ))}
 
           {/* Loading indicator */}
           {isLoading && (
             <div className="flex gap-3 ocean-fade-in">
-              <div className="flex-shrink-0 w-8 h-8 rounded-full bg-gradient-to-br from-ocean-400 to-ocean-600 flex items-center justify-center shadow-sm">
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
-                  <path
-                    d="M12 2L14.09 8.26L20 9.27L15.5 13.14L16.82 19.02L12 16.09L7.18 19.02L8.5 13.14L4 9.27L9.91 8.26L12 2Z"
-                    fill="white"
-                  />
-                </svg>
-              </div>
+              {avatar ? (
+                <img src={avatar} alt="AI" className="flex-shrink-0 w-8 h-8 object-cover" />
+              ) : (
+                <div className="flex-shrink-0 w-8 h-8 rounded-full bg-gradient-to-br from-ocean-400 to-ocean-600 flex items-center justify-center shadow-sm">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
+                    <path
+                      d="M12 2L14.09 8.26L20 9.27L15.5 13.14L16.82 19.02L12 16.09L7.18 19.02L8.5 13.14L4 9.27L9.91 8.26L12 2Z"
+                      fill="white"
+                    />
+                  </svg>
+                </div>
+              )}
               <div className="flex gap-1.5 items-center py-2">
                 <div className="w-2 h-2 rounded-full bg-ocean-400 ocean-typing-dot" />
                 <div className="w-2 h-2 rounded-full bg-ocean-400 ocean-typing-dot" />
