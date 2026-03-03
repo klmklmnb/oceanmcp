@@ -8,7 +8,7 @@ import { FUNCTION_TYPE, OPERATION_TYPE, type FunctionDefinition } from "@ocean-m
 import { baseFunctions } from "./registry/base/baseFunctions";
 import { chatBridge } from "./runtime/chat-bridge";
 import { uploadRegistry, type UploadHandler } from "./runtime/upload-registry";
-import { sdkConfig, type SupportedLocale } from "./runtime/sdk-config";
+import { sdkConfig, type SupportedLocale, type SuggestionItem } from "./runtime/sdk-config";
 import type { ModelConfig } from "@ocean-mcp/shared";
 import {
   createShadowHost,
@@ -76,6 +76,29 @@ type MountOptions = {
    *   interact with host-page styles.
    */
   shadowDOM?: boolean;
+  /**
+   * Custom suggestion questions displayed on the chat welcome screen.
+   *
+   * Each item has a `label` (button display text) and an optional `text`
+   * (the message actually sent when clicked). If `text` is omitted, `label`
+   * is used as both display and send text.
+   *
+   * When provided, these suggestions **replace** the default i18n
+   * suggestions entirely. If not provided, the built-in default suggestions
+   * are shown.
+   *
+   * @example
+   * ```ts
+   * OceanMCPSDK.mount({
+   *   suggestions: [
+   *     { label: "What's on this page?", text: "Analyze the current page content in detail" },
+   *     { label: "Help me debug", text: "Look at the console errors and help me fix them" },
+   *     { label: "What can you do?" }, // text omitted → sends "What can you do?"
+   *   ],
+   * });
+   * ```
+   */
+  suggestions?: SuggestionItem[];
 };
 
 /** Cleanup function returned by the Monaco style observer. */
@@ -105,6 +128,9 @@ function mountOceanMCP(target?: MountTarget | MountOptions) {
     }
     if (options.model) {
       sdkConfig.model = options.model;
+    }
+    if (options.suggestions) {
+      sdkConfig.suggestions = options.suggestions;
     }
     if (options.shadowDOM === false) {
       useShadowDOM = false;
@@ -475,3 +501,4 @@ if (typeof window !== "undefined") {
 // In production/SDK usage, call OceanMCPSDK.mount() explicitly
 
 export default OceanMCPSDK;
+export type { SuggestionItem };

@@ -2,6 +2,18 @@ import type { ModelConfig } from "@ocean-mcp/shared";
 
 export type SupportedLocale = "zh-CN" | "en-US";
 
+/**
+ * A suggestion question shown on the chat welcome screen.
+ *
+ * - `label` – the text displayed on the suggestion button.
+ * - `text`  – the message actually sent to the chat when the button is
+ *   clicked.  If omitted, `label` is used as both display and send text.
+ */
+export type SuggestionItem = {
+  label: string;
+  text?: string;
+};
+
 export type SDKConfig = {
   locale?: SupportedLocale;
   avatar?: string;
@@ -10,6 +22,8 @@ export type SDKConfig = {
   suggestions?: string[];
   /** LLM model configuration sent to the api-server on each chat request. */
   model?: ModelConfig;
+  /** Custom welcome-screen suggestion questions. When set, replaces the default i18n suggestions. */
+  suggestions?: SuggestionItem[];
 };
 
 const config: SDKConfig = {};
@@ -61,6 +75,14 @@ export const sdkConfig = {
 
   set model(value: ModelConfig | undefined) {
     config.model = value;
+  },
+
+  get suggestions(): SuggestionItem[] | undefined {
+    return config.suggestions;
+  },
+
+  set suggestions(value: SuggestionItem[] | undefined) {
+    config.suggestions = value;
   },
 
   /** Resolve display name: returns cnName when locale is zh-CN, otherwise name */

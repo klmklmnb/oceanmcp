@@ -545,22 +545,30 @@ export function ChatWidget({ avatar }: { avatar?: string }) {
                 {welcomeDescription}
               </p>
               {/* Suggested messages */}
-              {suggestions.length > 0 && (
-                <div className="flex flex-wrap gap-2 mt-8 justify-center max-w-lg">
-                  {suggestions.map((suggestion) => (
-                    <button
-                      key={suggestion}
-                      onClick={() => {
-                        setInput("");
-                        void sendUserText(suggestion);
-                      }}
-                      className="px-4 py-2 text-sm text-text-secondary border border-border rounded-xl hover:bg-surface hover:border-ocean-300 hover:text-ocean-600 transition-all cursor-pointer"
-                    >
-                      {suggestion}
-                    </button>
-                  ))}
-                </div>
-              )}
+              <div className="flex flex-wrap gap-2 mt-8 justify-center max-w-lg">
+                {(sdkConfig.suggestions && sdkConfig.suggestions.length > 0
+                  ? sdkConfig.suggestions.map((item) => ({
+                      label: item.label,
+                      text: item.text ?? item.label,
+                    }))
+                  : [
+                      t("chat.welcome.suggestion1"),
+                      t("chat.welcome.suggestion2"),
+                      t("chat.welcome.suggestion3"),
+                    ].map((s) => ({ label: s, text: s }))
+                ).map((suggestion) => (
+                  <button
+                    key={suggestion.label}
+                    onClick={() => {
+                      setInput("");
+                      void sendUserText(suggestion.text);
+                    }}
+                    className="px-4 py-2 text-sm text-text-secondary border border-border rounded-xl hover:bg-surface hover:border-ocean-300 hover:text-ocean-600 transition-all cursor-pointer"
+                  >
+                    {suggestion.label}
+                  </button>
+                ))}
+              </div>
             </div>
           )}
 

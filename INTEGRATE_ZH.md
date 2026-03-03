@@ -126,6 +126,11 @@ OceanMCPSDK.mount({
     maxTokens: 8192,
   },
   shadowDOM: true,         // 可选：样式隔离（默认开启）
+  suggestions: [           // 可选：自定义欢迎页建议问题
+    { label: "这个页面有什么？", text: "请详细分析当前页面的内容" },
+    { label: "帮我调试", text: "查看控制台错误并帮我修复它们" },
+    { label: "你能做什么？" },  // 省略 text → 发送 "你能做什么？"
+  ],
 });
 ```
 
@@ -138,6 +143,7 @@ OceanMCPSDK.mount({
 | `avatar` | `string` | `undefined` | AI 助手在聊天中显示的头像图片 URL。 |
 | `model` | `ModelConfig` | `undefined` | LLM 模型配置。控制聊天请求使用的模型和参数。详见下方[模型配置](#模型配置)。 |
 | `shadowDOM` | `boolean` | `true` | 为 `true` 时，组件在 Shadow DOM 内渲染，实现完全的 CSS 隔离——你的应用样式不会影响组件，组件样式也不会影响你的应用。设为 `false` 可用于调试，但要注意样式可能会互相影响。 |
+| `suggestions` | `SuggestionItem[]` | `undefined` | 自定义欢迎页建议问题。每个条目包含 `label`（按钮显示文本）和可选的 `text`（点击时实际发送的消息）。设置后会完全替换默认的建议问题。如果省略 `text`，则 `label` 同时用于显示和发送。 |
 
 **小贴士：** 如果你想让组件填满页面的某个区域（比如侧边栏），创建一个有你期望尺寸的容器，然后把它作为 `root` 传入：
 
@@ -188,6 +194,24 @@ OceanMCPSDK.mount({
   model: { default: "claude-sonnet-4-20250514" },
 });
 ```
+
+### 建议配置
+
+`suggestions` 选项让你自定义欢迎页面上的建议按钮。每个条目指定一个 `label`（按钮上显示的文本）和可选的 `text`（点击时实际发送给 AI 的消息）。如果省略 `text`，则 `label` 同时用作显示文本和发送消息。
+
+设置后，自定义建议会**完全替换**默认的国际化建议。如果不设置，则显示内置的默认建议（基于当前 `locale`）。
+
+```ts
+OceanMCPSDK.mount({
+  suggestions: [
+    { label: "这个页面有什么？", text: "请详细分析当前页面的内容" },
+    { label: "帮我调试", text: "查看控制台错误并帮我修复它们" },
+    { label: "你能做什么？" },  // 省略 text → 发送 "你能做什么？"
+  ],
+});
+```
+
+这在你希望建议按钮显示简短、用户友好的标签，同时在幕后向 AI 发送更详细或结构化的提示时非常有用。
 
 ---
 
@@ -611,6 +635,15 @@ interface ModelConfig {
   default?: string;    // 主模型 ID（如 "gpt-4o"、"claude-sonnet-4-20250514"）
   fast?: string;       // 轻量模型 ID，用于简单任务
   maxTokens?: number;  // 每次响应的最大输出 token 数
+}
+```
+
+### SuggestionItem
+
+```ts
+interface SuggestionItem {
+  label: string;       // 按钮上显示的文本
+  text?: string;       // 点击时发送给 AI 的消息（省略时默认使用 label）
 }
 ```
 

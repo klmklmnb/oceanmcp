@@ -125,6 +125,11 @@ OceanMCPSDK.mount({
     maxTokens: 8192,
   },
   shadowDOM: true,         // Optional: style isolation (default: true)
+  suggestions: [           // Optional: custom welcome-screen suggestion questions
+    { label: "What's on this page?", text: "Analyze the current page content in detail" },
+    { label: "Help me debug", text: "Look at the console errors and help me fix them" },
+    { label: "What can you do?" },  // text omitted → sends "What can you do?"
+  ],
 });
 ```
 
@@ -137,6 +142,7 @@ OceanMCPSDK.mount({
 | `avatar` | `string` | `undefined` | URL for the AI assistant's avatar image in the chat. |
 | `model` | `ModelConfig` | `undefined` | LLM model configuration. Controls which model and parameters are used for chat requests. See [Model Configuration](#model-configuration) below. |
 | `shadowDOM` | `boolean` | `true` | When `true`, the widget renders inside a Shadow DOM for full CSS isolation — your app's styles won't affect the widget and vice versa. Set to `false` for debugging or in environments where Shadow DOM causes issues. |
+| `suggestions` | `SuggestionItem[]` | `undefined` | Custom suggestion questions displayed on the welcome screen. Each item has a `label` (button display text) and an optional `text` (the message sent when clicked). When provided, replaces the default suggestions entirely. If `text` is omitted, `label` is used as both display and send text. |
 
 **Tip:** If you want the widget to fill a specific area of your page (like a sidebar), create a container with your desired dimensions and pass it as `root`:
 
@@ -187,6 +193,24 @@ OceanMCPSDK.mount({
   model: { default: "claude-sonnet-4-20250514" },
 });
 ```
+
+### Suggestion Configuration
+
+The `suggestions` option lets you customise the welcome-screen suggestion buttons. Each item specifies a `label` (the text shown on the button) and an optional `text` (the actual message sent to the AI when clicked). If `text` is omitted, `label` is used as both the display text and the sent message.
+
+When provided, custom suggestions **replace** the default i18n suggestions entirely. If not provided, the built-in defaults are shown (based on the current `locale`).
+
+```ts
+OceanMCPSDK.mount({
+  suggestions: [
+    { label: "What's on this page?", text: "Analyze the current page content in detail" },
+    { label: "Help me debug", text: "Look at the console errors and help me fix them" },
+    { label: "What can you do?" },  // text omitted → sends "What can you do?"
+  ],
+});
+```
+
+This is useful when you want the suggestion buttons to show short, user-friendly labels while sending more detailed or structured prompts to the AI behind the scenes.
 
 ---
 
@@ -609,6 +633,15 @@ interface ModelConfig {
   default?: string;    // Primary model ID (e.g. "gpt-4o", "claude-sonnet-4-20250514")
   fast?: string;       // Lightweight model ID for simple tasks
   maxTokens?: number;  // Maximum output tokens per response
+}
+```
+
+### SuggestionItem
+
+```ts
+interface SuggestionItem {
+  label: string;       // Text displayed on the suggestion button
+  text?: string;       // Message sent to the AI when clicked (defaults to label if omitted)
 }
 ```
 

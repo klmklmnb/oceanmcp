@@ -26,7 +26,7 @@ for (const skill of preregisteredSkills) {
 
 // ─── Register skill from zip ────────────────────────────────────────────────
 OceanMCPSDK.registerSkillFromZip(
-  "https://fastcdn.mihoyo.com/static-resource-v2/2026/02/27/7cc1ae17ed278759a3ba318dafcecf27_7974366858840692508.zip",
+  "https://fastcdn.mihoyo.com/static-resource-v2/2026/02/27/7cc1ae17ed278759a3ba318dafcecf27_7974366858840692508.zip"
 );
 
 // ─── Register upload handler (demo mock) ────────────────────────────────────
@@ -36,13 +36,21 @@ OceanMCPSDK.registerUploader(async (files: File[]) => {
     url: URL.createObjectURL(file),
     name: file.name,
     size: file.size,
-    type: file.type,
+    type: file.type
   }));
 });
 
 // ─── Mount the chat widget ──────────────────────────────────────────────────
 // OceanMCPSDK.mount({ locale: "zh-CN", model: { default: "z-ai/glm-4.6", maxTokens: 104800 } });
-OceanMCPSDK.mount({ locale: "zh-CN" });
+OceanMCPSDK.mount({
+  locale: "zh-CN",
+  suggestions: [
+    { label: "这个页面有什么？", text: "详细分析当前页面内容" },
+    { label: "帮我在米咖点一杯拿铁" },
+    { label: "米饭上今天的晚餐是什么？" },
+    { label: "你能做什么？" }
+  ]
+});
 
 // ─── Mount the test panel ───────────────────────────────────────────────────
 
