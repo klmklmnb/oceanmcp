@@ -144,6 +144,14 @@ export function ChatWidget({ avatar }: { avatar?: string }) {
   /** Track userSelect toolCallIds that have already triggered an auto-submit to prevent re-sends. */
   const submittedUserSelectIdsRef = useRef<Set<string>>(new Set());
 
+  const welcomeTitle = sdkConfig.welcomeTitle ?? t("chat.welcome.title");
+  const welcomeDescription = sdkConfig.welcomeDescription ?? t("chat.welcome.description");
+  const suggestions = sdkConfig.suggestions ?? [
+    t("chat.welcome.suggestion1"),
+    t("chat.welcome.suggestion2"),
+    t("chat.welcome.suggestion3"),
+  ];
+
   const transport = useMemo(
     () =>
       new DefaultChatTransport({
@@ -478,30 +486,28 @@ export function ChatWidget({ avatar }: { avatar?: string }) {
                 </div>
               )}
               <h2 className="text-xl font-semibold text-text-primary mb-2">
-                OceanMCP
+                {welcomeTitle}
               </h2>
               <p className="text-sm text-text-tertiary text-center max-w-sm">
-                {t("chat.welcome.description")}
+                {welcomeDescription}
               </p>
               {/* Suggested messages */}
-              <div className="flex flex-wrap gap-2 mt-8 justify-center max-w-lg">
-                {[
-                  t("chat.welcome.suggestion1"),
-                  t("chat.welcome.suggestion2"),
-                  t("chat.welcome.suggestion3"),
-                ].map((suggestion) => (
-                  <button
-                    key={suggestion}
-                    onClick={() => {
-                      setInput("");
-                      void sendUserText(suggestion);
-                    }}
-                    className="px-4 py-2 text-sm text-text-secondary border border-border rounded-xl hover:bg-surface hover:border-ocean-300 hover:text-ocean-600 transition-all cursor-pointer"
-                  >
-                    {suggestion}
-                  </button>
-                ))}
-              </div>
+              {suggestions.length > 0 && (
+                <div className="flex flex-wrap gap-2 mt-8 justify-center max-w-lg">
+                  {suggestions.map((suggestion) => (
+                    <button
+                      key={suggestion}
+                      onClick={() => {
+                        setInput("");
+                        void sendUserText(suggestion);
+                      }}
+                      className="px-4 py-2 text-sm text-text-secondary border border-border rounded-xl hover:bg-surface hover:border-ocean-300 hover:text-ocean-600 transition-all cursor-pointer"
+                    >
+                      {suggestion}
+                    </button>
+                  ))}
+                </div>
+              )}
             </div>
           )}
 

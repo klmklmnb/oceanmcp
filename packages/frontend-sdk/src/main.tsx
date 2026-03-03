@@ -36,6 +36,9 @@ type MountOptions = {
   root?: MountTarget;
   locale?: SupportedLocale;
   avatar?: string;
+  welcomeTitle?: string;
+  welcomeDescription?: string;
+  suggestions?: string[];
 };
 
 function mountOceanMCP(target?: MountTarget | MountOptions) {
@@ -49,6 +52,15 @@ function mountOceanMCP(target?: MountTarget | MountOptions) {
     }
     if (options.avatar) {
       sdkConfig.avatar = options.avatar;
+    }
+    if (options.welcomeTitle !== undefined) {
+      sdkConfig.welcomeTitle = options.welcomeTitle;
+    }
+    if (options.welcomeDescription !== undefined) {
+      sdkConfig.welcomeDescription = options.welcomeDescription;
+    }
+    if (options.suggestions !== undefined) {
+      sdkConfig.suggestions = options.suggestions;
     }
     target = options.root;
   }
@@ -331,6 +343,13 @@ const OceanMCPSDK = {
    * // Mount with locale configuration
    * OceanMCPSDK.mount({ locale: "zh-CN" });
    * OceanMCPSDK.mount({ root: "#my-chat", locale: "zh-CN" });
+   *
+   * // Mount with custom welcome message and suggestions
+   * OceanMCPSDK.mount({
+   *   welcomeTitle: "My AI Assistant",
+   *   welcomeDescription: "Ask me anything about this page!",
+   *   suggestions: ["Help me get started", "What can you do?", "Show me examples"]
+   * });
    *
    * // Auto-create floating overlay (default behavior)
    * OceanMCPSDK.mount();
