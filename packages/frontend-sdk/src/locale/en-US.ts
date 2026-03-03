@@ -9,6 +9,8 @@ const enUS = {
   "chat.upload.title": "Upload file",
   "chat.upload.uploading": "Uploading...",
   "chat.upload.remove": "Remove",
+  "chat.dragdrop.title": "Drop files here",
+  "chat.dragdrop.description": "Release to upload",
   "chat.error.label": "Error:",
 
   // MessageRenderer

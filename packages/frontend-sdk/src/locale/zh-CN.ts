@@ -9,6 +9,8 @@ const zhCN = {
   "chat.upload.title": "上传文件",
   "chat.upload.uploading": "上传中...",
   "chat.upload.remove": "移除",
+  "chat.dragdrop.title": "拖放文件到这里",
+  "chat.dragdrop.description": "松开鼠标即可上传",
   "chat.error.label": "错误：",
 
   // MessageRenderer

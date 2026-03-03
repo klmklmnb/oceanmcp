@@ -139,6 +139,8 @@ export function ChatWidget({ avatar }: { avatar?: string }) {
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const [input, setInput] = useState("");
   const [pendingFiles, setPendingFiles] = useState<PendingFile[]>([]);
+  const [isDragging, setIsDragging] = useState(false);
+  const dragCounterRef = useRef(0);
   /** Track approval IDs that have already triggered an auto-submit to prevent re-sends. */
   const submittedApprovalIdsRef = useRef<Set<string>>(new Set());
   /** Track userSelect toolCallIds that have already triggered an auto-submit to prevent re-sends. */
@@ -314,10 +316,8 @@ export function ChatWidget({ avatar }: { avatar?: string }) {
   // ─── Upload ──────────────────────────────────────────────────────────────
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const files = Array.from(e.target.files || []);
+  const processFiles = async (files: File[]) => {
     if (files.length === 0) return;
-    e.target.value = "";
 
     const newPending: PendingFile[] = files.map((file) => ({
       id: `${Date.now()}-${Math.random()}`,
@@ -362,8 +362,54 @@ export function ChatWidget({ avatar }: { avatar?: string }) {
     }
   };
 
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(e.target.files || []);
+    e.target.value = "";
+    await processFiles(files);
+  };
+
   const removeFile = (id: string) => {
     setPendingFiles((prev) => prev.filter((f) => f.id !== id));
+  };
+
+  // ─── Drag and Drop ───────────────────────────────────────────────────────
+  const handleDragEnter = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (!uploadRegistry.isRegistered) return;
+    
+    dragCounterRef.current++;
+    if (e.dataTransfer.types.includes("Files")) {
+      setIsDragging(true);
+    }
+  };
+
+  const handleDragLeave = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    
+    dragCounterRef.current--;
+    if (dragCounterRef.current === 0) {
+      setIsDragging(false);
+    }
+  };
+
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+  };
+
+  const handleDrop = async (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    
+    dragCounterRef.current = 0;
+    setIsDragging(false);
+    
+    if (!uploadRegistry.isRegistered) return;
+    
+    const files = Array.from(e.dataTransfer.files);
+    await processFiles(files);
   };
 
   // Bridge: expose widget capabilities to OceanMCPSDK.*() methods
@@ -461,7 +507,13 @@ export function ChatWidget({ avatar }: { avatar?: string }) {
   const isLoading = status === CHAT_STATUS.SUBMITTED;
 
   return (
-    <div className="flex flex-col h-full bg-surface-secondary">
+    <div 
+      className="flex flex-col h-full bg-surface-secondary relative"
+      onDragEnter={handleDragEnter}
+      onDragLeave={handleDragLeave}
+      onDragOver={handleDragOver}
+      onDrop={handleDrop}
+    >
       {/* Messages area */}
       <div
         ref={scrollRef}
@@ -665,6 +717,38 @@ export function ChatWidget({ avatar }: { avatar?: string }) {
           </form>
         </div>
       </div>
+
+      {/* Drag and drop overlay */}
+      {isDragging && uploadRegistry.isRegistered && (
+        <div className="fixed inset-0 bg-white/90 flex items-center justify-center z-50 ocean-fade-in pointer-events-none">
+          <div className="flex flex-col items-center gap-4">
+            <div className="w-20 h-20 rounded-full bg-ocean-500 flex items-center justify-center shadow-xl">
+              <svg
+                width="40"
+                height="40"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="white"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              >
+                <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4" />
+                <polyline points="17 8 12 3 7 8" />
+                <line x1="12" y1="3" x2="12" y2="15" />
+              </svg>
+            </div>
+            <div className="text-center">
+              <p className="text-xl font-semibold text-text-primary mb-1">
+                {t("chat.dragdrop.title")}
+              </p>
+              <p className="text-sm text-text-secondary">
+                {t("chat.dragdrop.description")}
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
