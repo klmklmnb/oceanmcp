@@ -143,6 +143,25 @@ export function hoistPropertyRulesToDocument(css: string): void {
 }
 
 // ─── Monaco Editor style observer ──────────────────────────────────────────
+//
+// Monaco Editor injects styles into `document.head` in two ways:
+//
+// 1. **`<link rel="stylesheet">`** — When loaded via CDN (the default for
+//    `@monaco-editor/loader`), Monaco's AMD bundle appends a `<link>` pointing
+//    to `editor.main.css`.  This contains all core structural CSS (layout,
+//    scrollbar, gutter, diff overlays, etc.).
+//
+// 2. **`<style>` elements** — Monaco dynamically creates `<style>` tags for
+//    theme colors, token colors, codicon fonts, and programmatic CSS rules
+//    (via `createCSSRule` / `insertRule`).  Some carry `data-vscode-*`
+//    attributes; others are plain `<style>` tags whose content references
+//    `.monaco-editor` selectors.
+//
+// Both kinds are invisible inside a Shadow DOM.  We observe `document.head`
+// and clone matching elements into the shadow root.
+//
+// See: https://github.com/microsoft/monaco-editor/pull/5159
+//      https://github.com/microsoft/monaco-editor/issues/5145
 
 /**
  * Attribute prefixes that identify Monaco Editor's injected `<style>` tags.
@@ -154,11 +173,32 @@ const MONACO_STYLE_MARKERS = [
 ] as const;
 
 /**
- * Check whether a DOM node is a Monaco-injected `<style>` element.
+ * Check whether a DOM node is a Monaco-injected `<style>` or `<link>` element.
+ *
+ * Matches:
+ * - `<link rel="stylesheet">` whose `href` references Monaco CSS files
+ * - `<style>` tags with `data-vscode-*` attributes
+ * - `<style>` tags whose `textContent` contains Monaco-specific selectors
  */
-function isMonacoStyleNode(node: Node): node is HTMLStyleElement {
+function isMonacoStyleNode(node: Node): node is HTMLElement {
   if (node.nodeType !== Node.ELEMENT_NODE) return false;
   const el = node as HTMLElement;
+
+  // ── <link rel="stylesheet"> with Monaco CSS href ──────────────────────
+  if (el.tagName === "LINK") {
+    const link = el as HTMLLinkElement;
+    if (link.rel !== "stylesheet") return false;
+    const href = link.href || "";
+    // The CDN-loaded Monaco appends a <link> whose href contains
+    // "monaco-editor" or "vs/editor/editor.main.css".
+    return (
+      href.includes("monaco-editor") ||
+      href.includes("vs/editor") ||
+      href.includes("editor.main.css")
+    );
+  }
+
+  // ── <style> elements ──────────────────────────────────────────────────
   if (el.tagName !== "STYLE") return false;
 
   // Monaco style tags carry `data-vscode-*` attributes
@@ -184,52 +224,125 @@ function isMonacoStyleNode(node: Node): node is HTMLStyleElement {
 }
 
 /**
- * Observe `document.head` for dynamically-added `<style>` elements from
- * Monaco Editor and clone them into the shadow root so they take effect
- * inside the isolated widget.
+ * Track which source elements have already been cloned into the shadow root,
+ * so we don't duplicate them on re-observation or mutation callbacks.
+ */
+const _clonedElements = new WeakSet<HTMLElement>();
+
+/**
+ * Observe `document.head` for dynamically-added `<style>` and `<link>`
+ * elements from Monaco Editor and clone them into the shadow root so they
+ * take effect inside the isolated widget.
+ *
+ * Handles two kinds of mutations:
+ * - `childList`: new `<style>` / `<link>` nodes added to `<head>`
+ * - `characterData` / `childList` on subtree: Monaco updates existing
+ *   `<style>` elements' `textContent` when the theme changes
  *
  * Returns a cleanup function that disconnects the observer.
  */
 export function observeMonacoStyles(shadowRoot: ShadowRoot): () => void {
+  // Map from source <style> element → CSSStyleSheet clone in the shadow root,
+  // so we can update it when Monaco changes the source element's content.
+  const styleSheetMap = new Map<HTMLElement, CSSStyleSheet>();
+
   // First pass: clone any Monaco styles already present in <head>
   for (const node of Array.from(document.head.children)) {
     if (isMonacoStyleNode(node)) {
-      cloneStyleIntoShadow(node, shadowRoot);
+      cloneIntoShadow(node, shadowRoot, styleSheetMap);
     }
   }
 
-  // Watch for future additions
+  // Watch for future additions and content changes
   const observer = new MutationObserver((mutations) => {
     for (const mutation of mutations) {
-      for (const added of Array.from(mutation.addedNodes)) {
-        if (isMonacoStyleNode(added)) {
-          cloneStyleIntoShadow(added, shadowRoot);
+      // New nodes added to <head>
+      if (mutation.type === "childList") {
+        for (const added of Array.from(mutation.addedNodes)) {
+          if (isMonacoStyleNode(added)) {
+            cloneIntoShadow(added, shadowRoot, styleSheetMap);
+          }
+        }
+      }
+
+      // Existing <style> element content changed (Monaco theme updates)
+      if (
+        mutation.type === "characterData" ||
+        mutation.type === "childList"
+      ) {
+        const target = mutation.target;
+        // The mutation target may be the text node inside a <style> element,
+        // so walk up to the parent <style> element.
+        const styleEl =
+          target.nodeType === Node.TEXT_NODE
+            ? target.parentElement
+            : (target as HTMLElement);
+        if (styleEl && styleSheetMap.has(styleEl)) {
+          const sheet = styleSheetMap.get(styleEl)!;
+          const newText = styleEl.textContent || "";
+          try {
+            sheet.replaceSync(newText);
+          } catch {
+            // If replaceSync fails, remove the old sheet and re-clone
+            shadowRoot.adoptedStyleSheets =
+              shadowRoot.adoptedStyleSheets.filter((s) => s !== sheet);
+            styleSheetMap.delete(styleEl);
+            _clonedElements.delete(styleEl);
+            cloneIntoShadow(styleEl, shadowRoot, styleSheetMap);
+          }
         }
       }
     }
   });
 
-  observer.observe(document.head, { childList: true });
+  observer.observe(document.head, {
+    childList: true,
+    // Observe text content changes inside <style> elements so we can
+    // propagate Monaco theme updates into the shadow root.
+    subtree: true,
+    characterData: true,
+  });
 
   return () => observer.disconnect();
 }
 
 /**
- * Clone a `<style>` element's content into the shadow root using
- * `adoptedStyleSheets` so it participates in the cascade within the
- * shadow boundary.
+ * Clone a Monaco `<style>` or `<link>` element into the shadow root.
+ *
+ * - `<link>` elements are cloned as-is (the browser fetches the CSS via the
+ *   same `href`, which is already cached).  This is the approach recommended
+ *   by the official Monaco web-component sample.
+ *
+ * - `<style>` elements are cloned via `adoptedStyleSheets` for better
+ *   performance.  A reference is stored in `styleSheetMap` so we can update
+ *   the sheet in-place when Monaco changes the source element's content.
+ *
+ * See: https://github.com/microsoft/monaco-editor/pull/5159
  */
-function cloneStyleIntoShadow(
-  styleEl: HTMLStyleElement,
+function cloneIntoShadow(
+  el: HTMLElement,
   shadowRoot: ShadowRoot,
+  styleSheetMap: Map<HTMLElement, CSSStyleSheet>,
 ): void {
-  const cssText = styleEl.textContent || "";
+  // Avoid duplicating the same element
+  if (_clonedElements.has(el)) return;
+  _clonedElements.add(el);
+
+  // ── <link> elements: clone the node directly ──────────────────────────
+  if (el.tagName === "LINK") {
+    shadowRoot.appendChild(el.cloneNode(true));
+    return;
+  }
+
+  // ── <style> elements: use adoptedStyleSheets for in-place updates ─────
+  const cssText = el.textContent || "";
   if (!cssText) return;
 
   try {
     const sheet = new CSSStyleSheet();
     sheet.replaceSync(cssText);
     shadowRoot.adoptedStyleSheets = [...shadowRoot.adoptedStyleSheets, sheet];
+    styleSheetMap.set(el, sheet);
   } catch {
     // Fallback: insert a <style> element directly
     const clone = document.createElement("style");
