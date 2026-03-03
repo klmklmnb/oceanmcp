@@ -35,7 +35,15 @@
 }
 
 /* ─── Base ────────────────────────────────────────────────────────────────── */
-#ocean-mcp-root {
+/* :host targets the shadow host element from within the shadow root.        */
+/* #ocean-mcp-inner is the React mount point created by shadow-dom.ts.       */
+:host {
+  /* Ensure the shadow host fills its container */
+  display: block;
+  height: 100%;
+}
+
+#ocean-mcp-inner {
   font-family: var(--font-sans);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;

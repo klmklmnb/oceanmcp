@@ -4,19 +4,22 @@ import { ChatWidget } from "./components/ChatWidget";
 import { functionRegistry, skillRegistry } from "./registry";
 import type { SkillDefinition } from "./registry";
 import { wsClient } from "./runtime/ws-client";
-import {
-  FUNCTION_TYPE,
-  OPERATION_TYPE,
-  type FunctionDefinition,
-} from "@ocean-mcp/shared";
+import { FUNCTION_TYPE, OPERATION_TYPE, type FunctionDefinition } from "@ocean-mcp/shared";
 import { baseFunctions } from "./registry/base/baseFunctions";
 import { chatBridge } from "./runtime/chat-bridge";
-import {
-  uploadRegistry,
-  type UploadHandler,
-} from "./runtime/upload-registry";
+import { uploadRegistry, type UploadHandler } from "./runtime/upload-registry";
 import { sdkConfig, type SupportedLocale } from "./runtime/sdk-config";
-import "./styles/index.css";
+import {
+  createShadowHost,
+  injectStyles,
+  observeMonacoStyles,
+  patchCssForShadowDom,
+  hoistPropertyRulesToDocument
+} from "./shadow-dom";
+
+// Import CSS as a raw string (Vite `?inline` suffix) so we can inject it
+// into the Shadow DOM instead of the document <head>.
+import sdkStyles from "./styles/index.css?inline";
 
 // ─── Register base functions ─────────────────────────────────────────────────
 // These are built-in tools that ship with the SDK and are always available.
@@ -36,11 +39,28 @@ type MountOptions = {
   root?: MountTarget;
   locale?: SupportedLocale;
   avatar?: string;
+  /**
+   * Whether to render the SDK inside a Shadow DOM for full style isolation.
+   *
+   * - `true` (default): The widget renders inside a shadow root. Host-page
+   *   styles cannot leak in and SDK styles cannot leak out. Tailwind v4
+   *   `@property` rules are automatically patched for compatibility.
+   * - `false`: The widget renders directly in the light DOM. Useful for
+   *   development, debugging, or environments where Shadow DOM causes issues
+   *   (e.g. certain browser extensions or test frameworks). Note that SDK
+   *   styles **will** be injected into the document `<head>` and may
+   *   interact with host-page styles.
+   */
+  shadowDOM?: boolean;
 };
+
+/** Cleanup function returned by the Monaco style observer. */
+let _cleanupMonacoObserver: (() => void) | null = null;
 
 function mountOceanMCP(target?: MountTarget | MountOptions) {
   let container: HTMLElement | null = null;
-  
+  let useShadowDOM = true; // default: shadow DOM enabled
+
   // Handle options object
   if (target && typeof target === "object" && !("nodeType" in target)) {
     const options = target as MountOptions;
@@ -49,6 +69,9 @@ function mountOceanMCP(target?: MountTarget | MountOptions) {
     }
     if (options.avatar) {
       sdkConfig.avatar = options.avatar;
+    }
+    if (options.shadowDOM === false) {
+      useShadowDOM = false;
     }
     target = options.root;
   }
@@ -73,7 +96,7 @@ function mountOceanMCP(target?: MountTarget | MountOptions) {
         zIndex: "99999",
         borderRadius: "16px 16px 0 0",
         overflow: "hidden",
-        boxShadow: "0 -4px 32px rgba(0,0,0,0.12)",
+        boxShadow: "0 -4px 32px rgba(0,0,0,0.12)"
       });
       document.body.appendChild(container);
     } else {
@@ -87,11 +110,54 @@ function mountOceanMCP(target?: MountTarget | MountOptions) {
     return;
   }
 
-  const root = createRoot(container);
+  let mountPoint: HTMLElement;
+
+  if (useShadowDOM) {
+    // ─── Shadow DOM isolation ────────────────────────────────────────────
+    // All SDK UI renders inside a Shadow DOM so host-page styles cannot
+    // leak in and SDK styles cannot leak out.
+    const result = createShadowHost(container);
+    mountPoint = result.mountPoint;
+
+    // Patch Tailwind v4 CSS for Shadow DOM compatibility:
+    // 1. Strip the @supports guard so --tw-* fallback variables always apply.
+    // 2. Hoist @property rules to the document so typed initial values and
+    //    animation interpolation still work (e.g. animating box-shadow).
+    const patchedStyles = patchCssForShadowDom(sdkStyles);
+    hoistPropertyRulesToDocument(sdkStyles);
+
+    // Inject the (patched) SDK stylesheet into the shadow root.
+    injectStyles(result.shadowRoot, patchedStyles);
+
+    // Observe document.head for Monaco Editor's dynamically-injected <style>
+    // tags and clone them into the shadow root.
+    _cleanupMonacoObserver?.();
+    _cleanupMonacoObserver = observeMonacoStyles(result.shadowRoot);
+  } else {
+    // ─── Light DOM mode (no Shadow DOM) ──────────────────────────────────
+    // Render directly into the container. Styles are injected into the
+    // document <head>. Useful for development or environments where
+    // Shadow DOM is problematic.
+    mountPoint = document.createElement("div");
+    mountPoint.id = "ocean-mcp-inner";
+    mountPoint.style.height = "100%";
+    container.appendChild(mountPoint);
+
+    // Inject SDK styles into <head> (skip if already present)
+    const STYLE_ID = "ocean-mcp-styles";
+    if (!document.getElementById(STYLE_ID)) {
+      const style = document.createElement("style");
+      style.id = STYLE_ID;
+      style.textContent = sdkStyles;
+      document.head.appendChild(style);
+    }
+  }
+
+  const root = createRoot(mountPoint);
   root.render(
     <React.StrictMode>
       <ChatWidget avatar={sdkConfig.avatar} />
-    </React.StrictMode>,
+    </React.StrictMode>
   );
 }
 
@@ -187,9 +253,7 @@ const OceanMCPSDK = {
    */
   async registerSkillFromZip(url: string) {
     const skills = await wsClient.registerSkillFromZip(url);
-    console.log(
-      `[OceanMCP] Zip skill(s) registered: ${skills.map((s) => s.name).join(", ")}`,
-    );
+    console.log(`[OceanMCP] Zip skill(s) registered: ${skills.map((s) => s.name).join(", ")}`);
     return skills;
   },
 
@@ -204,10 +268,10 @@ const OceanMCPSDK = {
       parameters: [],
       name: definition.id,
       description: "",
-      ...definition,
+      ...definition
     } as FunctionDefinition;
 
-  functionRegistry.register(fn);
+    functionRegistry.register(fn);
 
     // Re-register capabilities with the server so it knows about the new tool
     if (wsClient.isConnected) {
@@ -318,11 +382,13 @@ const OceanMCPSDK = {
   /**
    * Mount the chat widget to a specific target.
    *
-   * @param target - CSS selector string, HTMLElement, or options object with root and locale.
+   * @param target - CSS selector string, HTMLElement, or options object with
+   *                 root, locale, and shadowDOM settings.
    *                 If not provided, creates a floating overlay or uses existing #ocean-mcp-root.
+   *
    * @example
    * ```ts
-   * // Mount to a specific element
+   * // Mount to a specific element (shadow DOM enabled by default)
    * OceanMCPSDK.mount(document.getElementById("chat-container"));
    *
    * // Mount to an element by ID
@@ -331,6 +397,10 @@ const OceanMCPSDK = {
    * // Mount with locale configuration
    * OceanMCPSDK.mount({ locale: "zh-CN" });
    * OceanMCPSDK.mount({ root: "#my-chat", locale: "zh-CN" });
+   *
+   * // Mount without Shadow DOM (light DOM mode)
+   * OceanMCPSDK.mount({ shadowDOM: false });
+   * OceanMCPSDK.mount({ root: "#my-chat", shadowDOM: false });
    *
    * // Auto-create floating overlay (default behavior)
    * OceanMCPSDK.mount();
@@ -343,7 +413,7 @@ const OceanMCPSDK = {
   /** Registry and WebSocket client refs for advanced usage */
   functionRegistry: functionRegistry as any,
   skillRegistry: skillRegistry as any,
-  wsClient: wsClient as any,
+  wsClient: wsClient as any
 };
 
 // Attach to window

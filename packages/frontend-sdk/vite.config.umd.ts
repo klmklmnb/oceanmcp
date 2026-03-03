@@ -6,13 +6,13 @@ import tailwindcss from "@tailwindcss/vite";
 /**
  * Separate build config for the UMD bundle.
  *
- * Produces `sdk.umd.js` + `sdk.css`.
- * CSS is output as a standalone file (not injected by JS) so it works
- * correctly inside qiankun / micro-frontend sandboxes.
+ * Produces `sdk.umd.js` (self-contained — CSS is embedded in the JS and
+ * injected into the Shadow DOM at mount time, so no external `sdk.css` is
+ * needed).
  *
  * Usage:
- *   <link rel="stylesheet" href="sdk.css" />
  *   <script src="sdk.umd.js"></script>
+ *   <script>OceanMCPSDK.mount();</script>
  *
  * Run after the main build so it doesn't clear the dist folder.
  */
@@ -22,6 +22,8 @@ export default defineConfig({
   },
   plugins: [react(), tailwindcss()],
   build: {
+    // CSS is imported as `?inline` in main.tsx — it becomes a JS string
+    // constant embedded in the bundle, not a separate CSS asset.
     cssCodeSplit: false,
     cssMinify: true,
     emptyOutDir: false,
