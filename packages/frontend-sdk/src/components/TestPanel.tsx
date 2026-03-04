@@ -1,6 +1,6 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import OceanMCPSDK from "../main";
-import { sdkConfig, type SupportedLocale } from "../runtime/sdk-config";
+import { sdkConfig, type SupportedLocale, type Theme } from "../runtime/sdk-config";
 
 const btnBase: React.CSSProperties = {
   padding: "8px 0",
@@ -14,34 +14,74 @@ const btnBase: React.CSSProperties = {
   width: "100%",
 };
 
-const labelStyle: React.CSSProperties = {
-  margin: 0,
-  fontSize: 11,
-  color: "#6b7280",
-  fontWeight: 500,
+type PanelColors = {
+  bg: string;
+  border: string;
+  shadow: string;
+  title: string;
+  label: string;
+  codeBg: string;
+  inputBg: string;
+  inputBorder: string;
+  inputText: string;
+  resultBg: string;
+  resultBorder: string;
+  resultText: string;
+  selectedBg: string;
+  selectedBorder: string;
+  selectedText: string;
+  unselectedBg: string;
+  unselectedBorder: string;
+  unselectedText: string;
 };
 
-const codeStyle: React.CSSProperties = {
-  background: "#f3f4f6",
-  padding: "1px 4px",
-  borderRadius: 3,
-  fontSize: 10,
+const lightColors: PanelColors = {
+  bg: "#fff",
+  border: "#e5e7eb",
+  shadow: "0 8px 30px rgba(0,0,0,0.12)",
+  title: "#374151",
+  label: "#6b7280",
+  codeBg: "#f3f4f6",
+  inputBg: "#fff",
+  inputBorder: "#d1d5db",
+  inputText: "#374151",
+  resultBg: "#f9fafb",
+  resultBorder: "#e5e7eb",
+  resultText: "#374151",
+  selectedBg: "#eff6ff",
+  selectedBorder: "#3b82f6",
+  selectedText: "#1d4ed8",
+  unselectedBg: "#fff",
+  unselectedBorder: "#d1d5db",
+  unselectedText: "#374151",
 };
 
-const resultBoxStyle: React.CSSProperties = {
-  margin: 0,
-  padding: 8,
-  borderRadius: 6,
-  background: "#f9fafb",
-  border: "1px solid #e5e7eb",
-  fontSize: 11,
-  color: "#374151",
-  maxHeight: 120,
-  overflow: "auto",
-  whiteSpace: "pre-wrap",
-  wordBreak: "break-all",
-  fontFamily: "ui-monospace, monospace",
+const darkColors: PanelColors = {
+  bg: "#1f2937",
+  border: "#374151",
+  shadow: "0 8px 30px rgba(0,0,0,0.4)",
+  title: "#f9fafb",
+  label: "#9ca3af",
+  codeBg: "#374151",
+  inputBg: "#111827",
+  inputBorder: "#4b5563",
+  inputText: "#f9fafb",
+  resultBg: "#111827",
+  resultBorder: "#374151",
+  resultText: "#d1d5db",
+  selectedBg: "#1e3a5f",
+  selectedBorder: "#3b82f6",
+  selectedText: "#93c5fd",
+  unselectedBg: "#111827",
+  unselectedBorder: "#4b5563",
+  unselectedText: "#9ca3af",
 };
+
+function resolveEffectiveTheme(t: Theme): "light" | "dark" {
+  if (t === "dark") return "dark";
+  if (t === "light") return "light";
+  return window.matchMedia?.("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+}
 
 export function TestPanel() {
   const [open, setOpen] = useState(false);
@@ -49,8 +89,20 @@ export function TestPanel() {
   const [loading, setLoading] = useState<string | null>(null);
   const [result, setResult] = useState<string | null>(null);
   const [locale, setLocale] = useState<SupportedLocale | "">(sdkConfig.locale ?? "zh-CN");
+  const [theme, setTheme] = useState<Theme>(sdkConfig.theme ?? "auto");
 
-  // Sync default locale to sdkConfig on first render
+  const isDark = resolveEffectiveTheme(theme) === "dark";
+  const c = isDark ? darkColors : lightColors;
+
+  useEffect(() => {
+    if (theme !== "auto") return;
+    const mq = window.matchMedia("(prefers-color-scheme: dark)");
+    const handler = () => setTheme((prev) => (prev === "auto" ? "auto" : prev));
+    mq.addEventListener("change", handler);
+    return () => mq.removeEventListener("change", handler);
+  }, [theme]);
+
+  // Sync defaults to sdkConfig on first render
   if (!sdkConfig.locale) {
     sdkConfig.locale = "zh-CN";
   }
@@ -115,25 +167,26 @@ export function TestPanel() {
             width: 320,
             padding: 20,
             borderRadius: 14,
-            background: "#fff",
-            border: "1px solid #e5e7eb",
-            boxShadow: "0 8px 30px rgba(0,0,0,0.12)",
+            background: c.bg,
+            border: `1px solid ${c.border}`,
+            boxShadow: c.shadow,
             display: "flex",
             flexDirection: "column",
             gap: 12,
             fontFamily: "system-ui, sans-serif",
             maxHeight: "calc(100vh - 80px)",
             overflow: "auto",
+            transition: "background 0.2s, border-color 0.2s",
           }}
         >
-          <h3 style={{ margin: 0, fontSize: 14, color: "#374151" }}>
+          <h3 style={{ margin: 0, fontSize: 14, color: c.title }}>
             SDK Test Panel
           </h3>
 
           {/* Locale selector */}
           <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-            <p style={labelStyle}>
-              <code style={codeStyle}>locale</code> 模型回复语言
+            <p style={{ margin: 0, fontSize: 11, color: c.label, fontWeight: 500 }}>
+              <code style={{ background: c.codeBg, padding: "1px 4px", borderRadius: 3, fontSize: 10, color: c.label }}>locale</code> 模型回复语言
             </p>
             <select
               value={locale}
@@ -146,10 +199,10 @@ export function TestPanel() {
                 width: "100%",
                 padding: "8px 10px",
                 borderRadius: 8,
-                border: "1px solid #d1d5db",
+                border: `1px solid ${c.inputBorder}`,
                 fontSize: 12,
-                background: "#fff",
-                color: "#374151",
+                background: c.inputBg,
+                color: c.inputText,
                 cursor: "pointer",
               }}
             >
@@ -157,6 +210,41 @@ export function TestPanel() {
               <option value="zh-CN">zh-CN (简体中文)</option>
               <option value="en-US">en-US (English)</option>
             </select>
+          </div>
+
+          {/* Theme selector */}
+          <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+            <p style={{ margin: 0, fontSize: 11, color: c.label, fontWeight: 500 }}>
+              <code style={{ background: c.codeBg, padding: "1px 4px", borderRadius: 3, fontSize: 10, color: c.label }}>theme</code> 主题切换
+            </p>
+            <div style={{ display: "flex", gap: 6 }}>
+              {(["light", "dark", "auto"] as const).map((t) => {
+                const selected = theme === t;
+                return (
+                  <button
+                    key={t}
+                    onClick={() => {
+                      setTheme(t);
+                      sdkConfig.theme = t;
+                    }}
+                    style={{
+                      flex: 1,
+                      padding: "6px 0",
+                      borderRadius: 8,
+                      border: selected ? `2px solid ${c.selectedBorder}` : `1px solid ${c.unselectedBorder}`,
+                      background: selected ? c.selectedBg : c.unselectedBg,
+                      color: selected ? c.selectedText : c.unselectedText,
+                      fontSize: 11,
+                      fontWeight: selected ? 600 : 400,
+                      cursor: "pointer",
+                      transition: "all 0.15s",
+                    }}
+                  >
+                    {t === "light" ? "☀️ Light" : t === "dark" ? "🌙 Dark" : "💻 Auto"}
+                  </button>
+                );
+              })}
+            </div>
           </div>
 
           {/* Text input */}
@@ -168,26 +256,28 @@ export function TestPanel() {
               width: "100%",
               padding: 10,
               borderRadius: 8,
-              border: "1px solid #d1d5db",
+              border: `1px solid ${c.inputBorder}`,
               fontSize: 12,
               resize: "vertical",
               boxSizing: "border-box",
               fontFamily: "inherit",
+              background: c.inputBg,
+              color: c.inputText,
             }}
             placeholder="输入测试文本..."
           />
 
           {/* chat() */}
           <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-            <p style={labelStyle}>
-              <code style={codeStyle}>chat(text)</code> 填入并发送消息
+            <p style={{ margin: 0, fontSize: 11, color: c.label, fontWeight: 500 }}>
+              <code style={{ background: c.codeBg, padding: "1px 4px", borderRadius: 3, fontSize: 10, color: c.label }}>chat(text)</code> 填入并发送消息
             </p>
             <button
               onClick={() => run("chat", () => OceanMCPSDK.chat(text))}
               disabled={!text.trim() || loading !== null}
               style={{
                 ...btnBase,
-                background: !text.trim() || loading !== null ? "#d1d5db" : "#3b82f6",
+                background: !text.trim() || loading !== null ? (isDark ? "#4b5563" : "#d1d5db") : "#3b82f6",
                 cursor: !text.trim() || loading !== null ? "not-allowed" : "pointer",
               }}
             >
@@ -197,15 +287,15 @@ export function TestPanel() {
 
           {/* setInput() */}
           <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-            <p style={labelStyle}>
-              <code style={codeStyle}>setInput(text)</code> 只填入输入框，不发送
+            <p style={{ margin: 0, fontSize: 11, color: c.label, fontWeight: 500 }}>
+              <code style={{ background: c.codeBg, padding: "1px 4px", borderRadius: 3, fontSize: 10, color: c.label }}>setInput(text)</code> 只填入输入框，不发送
             </p>
             <button
               onClick={() => run("setInput", () => OceanMCPSDK.setInput(text))}
               disabled={!text.trim() || loading !== null}
               style={{
                 ...btnBase,
-                background: !text.trim() || loading !== null ? "#d1d5db" : "#8b5cf6",
+                background: !text.trim() || loading !== null ? (isDark ? "#4b5563" : "#d1d5db") : "#8b5cf6",
                 cursor: !text.trim() || loading !== null ? "not-allowed" : "pointer",
               }}
             >
@@ -215,15 +305,15 @@ export function TestPanel() {
 
           {/* getMessages() */}
           <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-            <p style={labelStyle}>
-              <code style={codeStyle}>getMessages()</code> 获取当前消息列表
+            <p style={{ margin: 0, fontSize: 11, color: c.label, fontWeight: 500 }}>
+              <code style={{ background: c.codeBg, padding: "1px 4px", borderRadius: 3, fontSize: 10, color: c.label }}>getMessages()</code> 获取当前消息列表
             </p>
             <button
               onClick={() => run("getMessages", () => OceanMCPSDK.getMessages())}
               disabled={loading !== null}
               style={{
                 ...btnBase,
-                background: loading !== null ? "#d1d5db" : "#10b981",
+                background: loading !== null ? (isDark ? "#4b5563" : "#d1d5db") : "#10b981",
                 cursor: loading !== null ? "not-allowed" : "pointer",
               }}
             >
@@ -233,15 +323,15 @@ export function TestPanel() {
 
           {/* clearMessages() */}
           <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-            <p style={labelStyle}>
-              <code style={codeStyle}>clearMessages()</code> 清空所有聊天记录
+            <p style={{ margin: 0, fontSize: 11, color: c.label, fontWeight: 500 }}>
+              <code style={{ background: c.codeBg, padding: "1px 4px", borderRadius: 3, fontSize: 10, color: c.label }}>clearMessages()</code> 清空所有聊天记录
             </p>
             <button
               onClick={() => run("clearMessages", () => OceanMCPSDK.clearMessages())}
               disabled={loading !== null}
               style={{
                 ...btnBase,
-                background: loading !== null ? "#d1d5db" : "#ef4444",
+                background: loading !== null ? (isDark ? "#4b5563" : "#d1d5db") : "#ef4444",
                 cursor: loading !== null ? "not-allowed" : "pointer",
               }}
             >
@@ -252,8 +342,21 @@ export function TestPanel() {
           {/* Result area */}
           {result && (
             <div>
-              <p style={{ ...labelStyle, marginBottom: 4 }}>Result:</p>
-              <pre style={resultBoxStyle}>{result}</pre>
+              <p style={{ margin: 0, fontSize: 11, color: c.label, fontWeight: 500, marginBottom: 4 }}>Result:</p>
+              <pre style={{
+                margin: 0,
+                padding: 8,
+                borderRadius: 6,
+                background: c.resultBg,
+                border: `1px solid ${c.resultBorder}`,
+                fontSize: 11,
+                color: c.resultText,
+                maxHeight: 120,
+                overflow: "auto",
+                whiteSpace: "pre-wrap",
+                wordBreak: "break-all",
+                fontFamily: "ui-monospace, monospace",
+              }}>{result}</pre>
             </div>
           )}
         </div>

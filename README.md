@@ -1,8 +1,13 @@
 # 基于 WebMCP 的 OceanMCP 服务
 
+OceanMCP 是一个内置 AI 聊天助手的 SDK，提供了基于浏览器执行逻辑的工具调用机制（Browser-in-the-Loop），以及高度可配置的界面UI（支持 `light`, `dark`, 以及系统级 `auto` 主题切换）。
+
+详细的 SDK 接入指南，请参阅 [SDK 接入文档](./INTEGRATE_ZH.md) 或 [Integration Guide](./INTEGRATE.md)。
+
 ## 本地开发
 
 0. 安装依赖
+
 ```bash
 bun i
 ```

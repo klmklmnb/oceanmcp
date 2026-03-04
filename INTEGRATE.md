@@ -117,32 +117,42 @@ OceanMCPSDK.mount(document.getElementById("chat"));
 
 // Mount with options
 OceanMCPSDK.mount({
-  root: "#my-chat",        // Optional: mount target (string selector or HTMLElement)
-  locale: "zh-CN",         // Optional: "zh-CN" or "en-US"
-  avatar: "/img/bot.png",  // Optional: custom avatar URL for the AI
-  model: {                 // Optional: LLM model configuration
+  root: "#my-chat", // Optional: mount target (string selector or HTMLElement)
+  locale: "zh-CN", // Optional: "zh-CN" or "en-US"
+  avatar: "/img/bot.png", // Optional: custom avatar URL for the AI
+  model: {
+    // Optional: LLM model configuration
     default: "gpt-4o",
     maxTokens: 8192,
   },
-  shadowDOM: true,         // Optional: style isolation (default: true)
-  suggestions: [           // Optional: custom welcome-screen suggestion questions
-    { label: "What's on this page?", text: "Analyze the current page content in detail" },
-    { label: "Help me debug", text: "Look at the console errors and help me fix them" },
-    { label: "What can you do?" },  // text omitted → sends "What can you do?"
+  theme: "auto", // Optional: UI Theme preference ("light", "dark", or "auto")
+  shadowDOM: true, // Optional: style isolation (default: true)
+  suggestions: [
+    // Optional: custom welcome-screen suggestion questions
+    {
+      label: "What's on this page?",
+      text: "Analyze the current page content in detail",
+    },
+    {
+      label: "Help me debug",
+      text: "Look at the console errors and help me fix them",
+    },
+    { label: "What can you do?" }, // text omitted → sends "What can you do?"
   ],
 });
 ```
 
 ### Option Details
 
-| Option | Type | Default | Description |
-|--------|------|---------|-------------|
-| `root` | `string \| HTMLElement` | Auto-created floating div | Where to render the widget. If omitted, creates a `420x600px` floating overlay. If `#ocean-mcp-root` exists in the DOM, it will be used automatically. |
-| `locale` | `"zh-CN" \| "en-US"` | `undefined` | UI language. When set to `zh-CN`, skill and tool names will display their `cnName` if available. |
-| `avatar` | `string` | `undefined` | URL for the AI assistant's avatar image in the chat. |
-| `model` | `ModelConfig` | `undefined` | LLM model configuration. Controls which model and parameters are used for chat requests. See [Model Configuration](#model-configuration) below. |
-| `shadowDOM` | `boolean` | `true` | When `true`, the widget renders inside a Shadow DOM for full CSS isolation — your app's styles won't affect the widget and vice versa. Set to `false` for debugging or in environments where Shadow DOM causes issues. |
-| `suggestions` | `SuggestionItem[]` | `undefined` | Custom suggestion questions displayed on the welcome screen. Each item has a `label` (button display text) and an optional `text` (the message sent when clicked). When provided, replaces the default suggestions entirely. If `text` is omitted, `label` is used as both display and send text. |
+| Option        | Type                          | Default                   | Description                                                                                                                                                                                                                                                                                       |
+| ------------- | ----------------------------- | ------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `root`        | `string \| HTMLElement`       | Auto-created floating div | Where to render the widget. If omitted, creates a `420x600px` floating overlay. If `#ocean-mcp-root` exists in the DOM, it will be used automatically.                                                                                                                                            |
+| `locale`      | `"zh-CN" \| "en-US"`          | `undefined`               | UI language. When set to `zh-CN`, skill and tool names will display their `cnName` if available.                                                                                                                                                                                                  |
+| `avatar`      | `string`                      | `undefined`               | URL for the AI assistant's avatar image in the chat.                                                                                                                                                                                                                                              |
+| `theme`       | `"light" \| "dark" \| "auto"` | `"light"`                 | UI Theme preference. Set to `"light"`, `"dark"`, or `"auto"` (follows system preference).                                                                                                                                                                                                         |
+| `model`       | `ModelConfig`                 | `undefined`               | LLM model configuration. Controls which model and parameters are used for chat requests. See [Model Configuration](#model-configuration) below.                                                                                                                                                   |
+| `shadowDOM`   | `boolean`                     | `true`                    | When `true`, the widget renders inside a Shadow DOM for full CSS isolation — your app's styles won't affect the widget and vice versa. Set to `false` for debugging or in environments where Shadow DOM causes issues.                                                                            |
+| `suggestions` | `SuggestionItem[]`            | `undefined`               | Custom suggestion questions displayed on the welcome screen. Each item has a `label` (button display text) and an optional `text` (the message sent when clicked). When provided, replaces the default suggestions entirely. If `text` is omitted, `label` is used as both display and send text. |
 
 **Tip:** If you want the widget to fill a specific area of your page (like a sidebar), create a container with your desired dimensions and pass it as `root`:
 
@@ -160,20 +170,20 @@ The `model` option lets your app control which LLM model and parameters are used
 ```ts
 OceanMCPSDK.mount({
   model: {
-    default: "gpt-4o",           // Primary model for complex tasks
-    fast: "gpt-4o-mini",         // Lightweight model for simple tasks
-    maxTokens: 16384,            // Maximum output tokens per response
+    default: "gpt-4o", // Primary model for complex tasks
+    fast: "gpt-4o-mini", // Lightweight model for simple tasks
+    maxTokens: 16384, // Maximum output tokens per response
   },
 });
 ```
 
 All fields are optional. When omitted, the server falls back to its own environment variable defaults, then to built-in defaults.
 
-| Field | Type | Default | Description |
-|-------|------|---------|-------------|
-| `default` | `string` | Server's `LLM_MODEL` env var | Primary model ID (e.g., `"gpt-4o"`, `"claude-sonnet-4-20250514"`, `"z-ai/glm-4.6"`). |
-| `fast` | `string` | Server's `LLM_FAST_MODEL` env var | Lightweight model for simpler tasks. Falls back to the default model if not set. |
-| `maxTokens` | `number` | Server's `LLM_MAX_TOKENS` env var | Maximum number of output tokens per response. |
+| Field       | Type     | Default                           | Description                                                                          |
+| ----------- | -------- | --------------------------------- | ------------------------------------------------------------------------------------ |
+| `default`   | `string` | Server's `LLM_MODEL` env var      | Primary model ID (e.g., `"gpt-4o"`, `"claude-sonnet-4-20250514"`, `"z-ai/glm-4.6"`). |
+| `fast`      | `string` | Server's `LLM_FAST_MODEL` env var | Lightweight model for simpler tasks. Falls back to the default model if not set.     |
+| `maxTokens` | `number` | Server's `LLM_MAX_TOKENS` env var | Maximum number of output tokens per response.                                        |
 
 **Examples:**
 
@@ -203,9 +213,15 @@ When provided, custom suggestions **replace** the default i18n suggestions entir
 ```ts
 OceanMCPSDK.mount({
   suggestions: [
-    { label: "What's on this page?", text: "Analyze the current page content in detail" },
-    { label: "Help me debug", text: "Look at the console errors and help me fix them" },
-    { label: "What can you do?" },  // text omitted → sends "What can you do?"
+    {
+      label: "What's on this page?",
+      text: "Analyze the current page content in detail",
+    },
+    {
+      label: "Help me debug",
+      text: "Look at the console errors and help me fix them",
+    },
+    { label: "What can you do?" }, // text omitted → sends "What can you do?"
   ],
 });
 ```
@@ -219,6 +235,7 @@ This is useful when you want the suggestion buttons to show short, user-friendly
 A **skill** is a bundle of related tools + context instructions. It's the recommended way to teach the AI about a specific domain of your application.
 
 When you register a skill:
+
 - Its `name` and `description` appear in the AI's system prompt catalog
 - Its `instructions` are loaded on-demand when the AI decides to use the skill (keeping the context window efficient)
 - Its bundled `tools` are registered for browser-side execution and made available to the AI
@@ -226,9 +243,10 @@ When you register a skill:
 ```ts
 OceanMCPSDK.registerSkill({
   // Required fields
-  name: "inventory-ops",                          // Unique identifier
-  description: "Manage product inventory: "       // When should the AI use this skill?
-    + "stock levels, transfers, and audits.",
+  name: "inventory-ops", // Unique identifier
+  description:
+    "Manage product inventory: " + // When should the AI use this skill?
+    "stock levels, transfers, and audits.",
   instructions: `
 # Inventory Operations
 
@@ -244,43 +262,66 @@ When handling inventory tasks, follow these guidelines:
 `,
 
   // Optional fields
-  cnName: "库存管理",                               // Chinese display name (used when locale is zh-CN)
-  tools: [                                         // Tools bundled with this skill
+  cnName: "库存管理", // Chinese display name (used when locale is zh-CN)
+  tools: [
+    // Tools bundled with this skill
     {
       id: "getStockLevel",
       name: "Get Stock Level",
       cnName: "获取库存",
-      description: "Get current stock level for a product in a specific warehouse",
+      description:
+        "Get current stock level for a product in a specific warehouse",
       type: "executor",
       operationType: "read",
       executor: async (args) => {
-        const res = await fetch(`/api/warehouses/${args.warehouseId}/stock/${args.productId}`);
+        const res = await fetch(
+          `/api/warehouses/${args.warehouseId}/stock/${args.productId}`,
+        );
         return res.json();
       },
       parameters: [
-        { name: "warehouseId", type: "string", description: "Warehouse ID", required: true },
-        { name: "productId", type: "string", description: "Product SKU", required: true },
+        {
+          name: "warehouseId",
+          type: "string",
+          description: "Warehouse ID",
+          required: true,
+        },
+        {
+          name: "productId",
+          type: "string",
+          description: "Product SKU",
+          required: true,
+        },
       ],
     },
     {
       id: "updateStock",
       name: "Update Stock",
       cnName: "更新库存",
-      description: "Adjust stock level for a product (write operation, requires approval)",
+      description:
+        "Adjust stock level for a product (write operation, requires approval)",
       type: "executor",
-      operationType: "write",    // Write operations trigger user approval before execution
+      operationType: "write", // Write operations trigger user approval before execution
       executor: async (args) => {
-        const res = await fetch(`/api/warehouses/${args.warehouseId}/stock/${args.productId}`, {
-          method: "PUT",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ quantity: args.quantity }),
-        });
+        const res = await fetch(
+          `/api/warehouses/${args.warehouseId}/stock/${args.productId}`,
+          {
+            method: "PUT",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ quantity: args.quantity }),
+          },
+        );
         return res.json();
       },
       parameters: [
         { name: "warehouseId", type: "string", required: true },
         { name: "productId", type: "string", required: true },
-        { name: "quantity", type: "number", description: "New stock quantity", required: true },
+        {
+          name: "quantity",
+          type: "number",
+          description: "New stock quantity",
+          required: true,
+        },
       ],
     },
   ],
@@ -289,7 +330,7 @@ When handling inventory tasks, follow these guidelines:
 
 ### Writing Good Instructions
 
-The `instructions` field is a Markdown document that tells the AI *how* to use the skill's tools. Tips:
+The `instructions` field is a Markdown document that tells the AI _how_ to use the skill's tools. Tips:
 
 - Explain the domain context and any business rules
 - Describe the correct order of operations (e.g., "always read before write")
@@ -311,8 +352,8 @@ OceanMCPSDK.registerTool({
   id: "getUserProfile",
   name: "Get User Profile",
   description: "Fetches the profile of the currently logged-in user",
-  type: "executor",          // Optional, defaults to "executor"
-  operationType: "read",     // Optional, defaults to "read"
+  type: "executor", // Optional, defaults to "executor"
+  operationType: "read", // Optional, defaults to "read"
   executor: async (args) => {
     const res = await fetch("/api/me");
     return res.json();
@@ -322,6 +363,7 @@ OceanMCPSDK.registerTool({
 ```
 
 The executor runs **in the user's browser context**, meaning it has access to:
+
 - The user's cookies and authenticated session
 - The full DOM
 - Any JavaScript APIs available on the page
@@ -351,6 +393,7 @@ OceanMCPSDK.registerTool({
 ```
 
 Inside `code` strings, you have access to:
+
 - `args` — the arguments object passed by the AI
 - `window`, `document`, `fetch` — standard browser globals
 
@@ -367,7 +410,7 @@ Each tool declares the parameters it accepts. The AI uses these definitions to c
 parameters: [
   {
     name: "userId",
-    type: "string",           // "string" | "number" | "boolean" | "object" | "array"
+    type: "string", // "string" | "number" | "boolean" | "object" | "array"
     description: "The user's unique ID",
     required: true,
   },
@@ -377,20 +420,20 @@ parameters: [
     description: "Whether to include order history in the response",
     required: false,
   },
-]
+];
 ```
 
 **Advanced parameter options:**
 
-| Field | Type | Description |
-|-------|------|-------------|
-| `name` | `string` | Parameter name (matches the key in `args`) |
-| `type` | `string` | `"string"`, `"number"`, `"boolean"`, `"object"`, `"array"` |
-| `description` | `string` | Tells the AI what this parameter is for |
-| `required` | `boolean` | Whether the AI must provide this parameter |
-| `showName` | `string` | Display name override in the UI (e.g., "User ID" instead of "userId") |
-| `enumMap` | `Record<string, any>` | Maps raw values to display labels (e.g., `{ "prod": "Production" }`) |
-| `columns` | `Record<string, ColumnConfig>` | Column config for array/object params; triggers table rendering in the UI |
+| Field         | Type                           | Description                                                               |
+| ------------- | ------------------------------ | ------------------------------------------------------------------------- |
+| `name`        | `string`                       | Parameter name (matches the key in `args`)                                |
+| `type`        | `string`                       | `"string"`, `"number"`, `"boolean"`, `"object"`, `"array"`                |
+| `description` | `string`                       | Tells the AI what this parameter is for                                   |
+| `required`    | `boolean`                      | Whether the AI must provide this parameter                                |
+| `showName`    | `string`                       | Display name override in the UI (e.g., "User ID" instead of "userId")     |
+| `enumMap`     | `Record<string, any>`          | Maps raw values to display labels (e.g., `{ "prod": "Production" }`)      |
+| `columns`     | `Record<string, ColumnConfig>` | Column config for array/object params; triggers table rendering in the UI |
 
 ---
 
@@ -400,9 +443,12 @@ For skills that are maintained separately or distributed via CDN, you can regist
 
 ```ts
 const skills = await OceanMCPSDK.registerSkillFromZip(
-  "https://cdn.example.com/skills/my-skill-pack.zip"
+  "https://cdn.example.com/skills/my-skill-pack.zip",
 );
-console.log("Registered:", skills.map(s => s.name));
+console.log(
+  "Registered:",
+  skills.map((s) => s.name),
+);
 ```
 
 ### ZIP Format
@@ -427,6 +473,7 @@ description: Extract text and tables from PDF files, fill forms, merge documents
 When the user asks to work with PDF files, use these tools:
 
 ## Extracting Text
+
 ...
 ```
 
@@ -450,10 +497,10 @@ OceanMCPSDK.registerUploader(async (files) => {
 
   // Must return an array of UploadResult objects
   return data.map((item, i) => ({
-    url: item.url,         // Required: URL where the file can be accessed
-    name: files[i].name,   // Required: file name
-    size: files[i].size,   // Optional: file size in bytes
-    type: files[i].type,   // Optional: MIME type
+    url: item.url, // Required: URL where the file can be accessed
+    name: files[i].name, // Required: file name
+    size: files[i].size, // Optional: file size in bytes
+    type: files[i].type, // Optional: MIME type
   }));
 });
 ```
@@ -492,6 +539,7 @@ await OceanMCPSDK.clearMessages();
 ```
 
 This is useful for:
+
 - Creating shortcut buttons that trigger specific AI queries
 - Pre-filling the chat input based on user context
 - Building custom chat UI that wraps the SDK
@@ -535,22 +583,22 @@ const connectionId = OceanMCPSDK.wsClient.currentConnectionId;
 
 ## API Reference
 
-| Method | Returns | Description |
-|--------|---------|-------------|
-| `mount(target?)` | `void` | Mount the chat widget. Accepts a CSS selector, HTMLElement, or options object. |
-| `registerSkill(definition)` | `void` | Register a skill with metadata, instructions, and bundled tools. |
-| `unregisterSkill(name)` | `void` | Remove a skill and its bundled tools. |
-| `registerSkillFromZip(url)` | `Promise<SkillMetadata[]>` | Register skill(s) from a CDN-hosted ZIP file. |
-| `registerTool(definition)` | `void` | Register a standalone tool. |
-| `unregisterTool(id)` | `void` | Remove a standalone tool. |
-| `getTools()` | `FunctionDefinition[]` | Get all registered tools. |
-| `getSkills()` | `SkillDefinition[]` | Get all registered skills. |
-| `registerUploader(handler)` | `() => void` | Register a file upload handler. Returns a cleanup function. |
-| `unregisterUploader()` | `void` | Remove the file upload handler. |
-| `chat(text)` | `Promise<void>` | Send a chat message programmatically. |
-| `setInput(text)` | `Promise<void>` | Set the input box text without sending. |
-| `getMessages()` | `Promise<any[]>` | Get all current chat messages. |
-| `clearMessages()` | `Promise<void>` | Clear all chat messages. |
+| Method                      | Returns                    | Description                                                                    |
+| --------------------------- | -------------------------- | ------------------------------------------------------------------------------ |
+| `mount(target?)`            | `void`                     | Mount the chat widget. Accepts a CSS selector, HTMLElement, or options object. |
+| `registerSkill(definition)` | `void`                     | Register a skill with metadata, instructions, and bundled tools.               |
+| `unregisterSkill(name)`     | `void`                     | Remove a skill and its bundled tools.                                          |
+| `registerSkillFromZip(url)` | `Promise<SkillMetadata[]>` | Register skill(s) from a CDN-hosted ZIP file.                                  |
+| `registerTool(definition)`  | `void`                     | Register a standalone tool.                                                    |
+| `unregisterTool(id)`        | `void`                     | Remove a standalone tool.                                                      |
+| `getTools()`                | `FunctionDefinition[]`     | Get all registered tools.                                                      |
+| `getSkills()`               | `SkillDefinition[]`        | Get all registered skills.                                                     |
+| `registerUploader(handler)` | `() => void`               | Register a file upload handler. Returns a cleanup function.                    |
+| `unregisterUploader()`      | `void`                     | Remove the file upload handler.                                                |
+| `chat(text)`                | `Promise<void>`            | Send a chat message programmatically.                                          |
+| `setInput(text)`            | `Promise<void>`            | Set the input box text without sending.                                        |
+| `getMessages()`             | `Promise<any[]>`           | Get all current chat messages.                                                 |
+| `clearMessages()`           | `Promise<void>`            | Clear all chat messages.                                                       |
 
 ---
 
@@ -560,11 +608,11 @@ const connectionId = OceanMCPSDK.wsClient.currentConnectionId;
 
 ```ts
 interface SkillDefinition {
-  name: string;                    // Unique skill identifier
-  cnName?: string;                 // Chinese display name (for zh-CN locale)
-  description: string;             // When to use this skill (shown in AI catalog)
-  instructions: string;            // Full Markdown instructions (loaded on-demand)
-  tools?: FunctionDefinition[];    // Bundled tool definitions
+  name: string; // Unique skill identifier
+  cnName?: string; // Chinese display name (for zh-CN locale)
+  description: string; // When to use this skill (shown in AI catalog)
+  instructions: string; // Full Markdown instructions (loaded on-demand)
+  tools?: FunctionDefinition[]; // Bundled tool definitions
 }
 ```
 
@@ -604,14 +652,14 @@ interface ParameterDefinition {
   type: "string" | "number" | "boolean" | "object" | "array";
   description?: string;
   required: boolean;
-  showName?: string;                         // Display name in UI
-  enumMap?: Record<string, any>;             // Value → display label mapping
-  columns?: Record<string, ColumnConfig>;    // Table rendering config for array params
+  showName?: string; // Display name in UI
+  enumMap?: Record<string, any>; // Value → display label mapping
+  columns?: Record<string, ColumnConfig>; // Table rendering config for array params
 }
 
 interface ColumnConfig {
-  label?: string;                                            // Column header label
-  render?: (value: any, row: Record<string, any>) => any;   // Custom cell renderer
+  label?: string; // Column header label
+  render?: (value: any, row: Record<string, any>) => any; // Custom cell renderer
 }
 ```
 
@@ -619,10 +667,10 @@ interface ColumnConfig {
 
 ```ts
 interface UploadResult {
-  url: string;       // Required: accessible URL for the uploaded file
-  name: string;      // Required: file name
-  size?: number;     // Optional: size in bytes
-  type?: string;     // Optional: MIME type
+  url: string; // Required: accessible URL for the uploaded file
+  name: string; // Required: file name
+  size?: number; // Optional: size in bytes
+  type?: string; // Optional: MIME type
 }
 ```
 
@@ -630,9 +678,9 @@ interface UploadResult {
 
 ```ts
 interface ModelConfig {
-  default?: string;    // Primary model ID (e.g. "gpt-4o", "claude-sonnet-4-20250514")
-  fast?: string;       // Lightweight model ID for simple tasks
-  maxTokens?: number;  // Maximum output tokens per response
+  default?: string; // Primary model ID (e.g. "gpt-4o", "claude-sonnet-4-20250514")
+  fast?: string; // Lightweight model ID for simple tasks
+  maxTokens?: number; // Maximum output tokens per response
 }
 ```
 
@@ -640,8 +688,8 @@ interface ModelConfig {
 
 ```ts
 interface SuggestionItem {
-  label: string;       // Text displayed on the suggestion button
-  text?: string;       // Message sent to the AI when clicked (defaults to label if omitted)
+  label: string; // Text displayed on the suggestion button
+  text?: string; // Message sent to the AI when clicked (defaults to label if omitted)
 }
 ```
 
@@ -667,6 +715,6 @@ Yes. The SDK is framework-agnostic at the integration level. It mounts its own R
 
 ### What's the difference between a skill and a tool?
 
-A **tool** is a single function the AI can call (e.g., "Get Order List"). A **skill** is a higher-level concept that bundles related tools together with context instructions and metadata. Skills help the AI understand *when* and *how* to use a group of tools.
+A **tool** is a single function the AI can call (e.g., "Get Order List"). A **skill** is a higher-level concept that bundles related tools together with context instructions and metadata. Skills help the AI understand _when_ and _how_ to use a group of tools.
 
 For simple integrations, standalone tools are fine. For complex domains with multiple related operations, use skills.

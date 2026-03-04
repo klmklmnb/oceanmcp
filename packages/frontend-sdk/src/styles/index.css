@@ -3,35 +3,83 @@
 /* ─── OceanMCP SDK Custom Styles ──────────────────────────────────────────── */
 
 @theme {
-  --color-ocean-50: #eff6ff;
-  --color-ocean-100: #dbeafe;
-  --color-ocean-200: #bfdbfe;
-  --color-ocean-300: #93c5fd;
-  --color-ocean-400: #60a5fa;
-  --color-ocean-500: #3b82f6;
-  --color-ocean-600: #2563eb;
-  --color-ocean-700: #1d4ed8;
-  --color-ocean-800: #1e40af;
-  --color-ocean-900: #1e3a8a;
+  --color-ocean-50: var(--ui-ocean-50);
+  --color-ocean-100: var(--ui-ocean-100);
+  --color-ocean-200: var(--ui-ocean-200);
+  --color-ocean-300: var(--ui-ocean-300);
+  --color-ocean-400: var(--ui-ocean-400);
+  --color-ocean-500: var(--ui-ocean-500);
+  --color-ocean-600: var(--ui-ocean-600);
+  --color-ocean-700: var(--ui-ocean-700);
+  --color-ocean-800: var(--ui-ocean-800);
+  --color-ocean-900: var(--ui-ocean-900);
 
-  --color-surface: #ffffff;
-  --color-surface-secondary: #f9fafb;
-  --color-surface-tertiary: #f3f4f6;
-  --color-border: #e5e7eb;
-  --color-text-primary: #111827;
-  --color-text-secondary: #6b7280;
-  --color-text-tertiary: #9ca3af;
+  --color-surface: var(--ui-surface);
+  --color-surface-secondary: var(--ui-surface-secondary);
+  --color-surface-tertiary: var(--ui-surface-tertiary);
+  --color-border: var(--ui-border);
+  --color-text-primary: var(--ui-text-primary);
+  --color-text-secondary: var(--ui-text-secondary);
+  --color-text-tertiary: var(--ui-text-tertiary);
 
   --font-sans: "Inter", ui-sans-serif, system-ui, -apple-system, sans-serif;
   --radius-lg: 1rem;
   --radius-xl: 1.25rem;
   --radius-2xl: 1.5rem;
 
-  --shadow-card:
-    0 1px 3px 0 rgba(0, 0, 0, 0.06), 0 1px 2px -1px rgba(0, 0, 0, 0.06);
-  --shadow-float:
-    0 4px 24px -4px rgba(0, 0, 0, 0.1), 0 2px 8px -2px rgba(0, 0, 0, 0.06);
-  --shadow-glow: 0 0 0 3px rgba(59, 130, 246, 0.15);
+  --shadow-card: var(--ui-shadow-card);
+  --shadow-float: var(--ui-shadow-float);
+  --shadow-glow: var(--ui-shadow-glow);
+}
+
+:root, :host, .light {
+  --ui-ocean-50: #eff6ff;
+  --ui-ocean-100: #dbeafe;
+  --ui-ocean-200: #bfdbfe;
+  --ui-ocean-300: #93c5fd;
+  --ui-ocean-400: #60a5fa;
+  --ui-ocean-500: #3b82f6;
+  --ui-ocean-600: #2563eb;
+  --ui-ocean-700: #1d4ed8;
+  --ui-ocean-800: #1e40af;
+  --ui-ocean-900: #1e3a8a;
+
+  --ui-surface: #ffffff;
+  --ui-surface-secondary: #f9fafb;
+  --ui-surface-tertiary: #f3f4f6;
+  --ui-border: #e5e7eb;
+  --ui-text-primary: #111827;
+  --ui-text-secondary: #6b7280;
+  --ui-text-tertiary: #9ca3af;
+
+  --ui-shadow-card: 0 1px 3px 0 rgba(0, 0, 0, 0.06), 0 1px 2px -1px rgba(0, 0, 0, 0.06);
+  --ui-shadow-float: 0 4px 24px -4px rgba(0, 0, 0, 0.1), 0 2px 8px -2px rgba(0, 0, 0, 0.06);
+  --ui-shadow-glow: 0 0 0 3px rgba(59, 130, 246, 0.15);
+}
+
+.dark, :host(.dark) {
+  --ui-ocean-50: #0a101b;
+  --ui-ocean-100: #111d31;
+  --ui-ocean-200: #1b2e4b;
+  --ui-ocean-300: #26436f;
+  --ui-ocean-400: #315b94;
+  --ui-ocean-500: #3b82f6;
+  --ui-ocean-600: #60a5fa;
+  --ui-ocean-700: #93c5fd;
+  --ui-ocean-800: #bfdbfe;
+  --ui-ocean-900: #dbeafe;
+
+  --ui-surface: #111827;
+  --ui-surface-secondary: #1f2937;
+  --ui-surface-tertiary: #374151;
+  --ui-border: #374151;
+  --ui-text-primary: #f9fafb;
+  --ui-text-secondary: #9ca3af;
+  --ui-text-tertiary: #6b7280;
+
+  --ui-shadow-card: 0 1px 3px 0 rgba(0, 0, 0, 0.3), 0 1px 2px -1px rgba(0, 0, 0, 0.2);
+  --ui-shadow-float: 0 4px 24px -4px rgba(0, 0, 0, 0.5), 0 2px 8px -2px rgba(0, 0, 0, 0.4);
+  --ui-shadow-glow: 0 0 0 3px rgba(96, 165, 250, 0.25);
 }
 
 /* ─── Base ────────────────────────────────────────────────────────────────── */

@@ -2,6 +2,8 @@ import type { ModelConfig } from "@ocean-mcp/shared";
 
 export type SupportedLocale = "zh-CN" | "en-US";
 
+export type Theme = "light" | "dark" | "auto";
+
 /**
  * A suggestion question shown on the chat welcome screen.
  *
@@ -23,6 +25,8 @@ export type SDKConfig = {
   model?: ModelConfig;
   /** Custom welcome-screen suggestion questions. When set, replaces the default i18n suggestions. */
   suggestions?: SuggestionItem[];
+  /** UI Theme preference: "light", "dark", or "auto" (follows system preference). Default is "light". */
+  theme?: Theme;
 };
 
 const config: SDKConfig = {};
@@ -74,6 +78,18 @@ export const sdkConfig = {
 
   set suggestions(value: SuggestionItem[] | undefined) {
     config.suggestions = value;
+  },
+
+  get theme(): Theme | undefined {
+    return config.theme;
+  },
+
+  set theme(value: Theme | undefined) {
+    const prev = config.theme;
+    config.theme = value;
+    if (prev !== value && typeof window !== "undefined") {
+      window.dispatchEvent(new CustomEvent("ocean-mcp:theme-change", { detail: value }));
+    }
   },
 
   /** Resolve display name: returns cnName when locale is zh-CN, otherwise name */
