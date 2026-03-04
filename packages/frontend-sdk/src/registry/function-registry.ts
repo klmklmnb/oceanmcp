@@ -35,6 +35,7 @@ class FunctionRegistry {
       description: fn.description,
       type: fn.type,
       operationType: fn.operationType,
+      ...(fn.autoApprove != null && { autoApprove: fn.autoApprove }),
       parameters: fn.parameters,
     }));
   }

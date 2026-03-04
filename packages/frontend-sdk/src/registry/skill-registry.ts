@@ -77,6 +77,7 @@ class SkillRegistry {
           description: fn.description,
           type: fn.type,
           operationType: fn.operationType,
+          ...(fn.autoApprove != null && { autoApprove: fn.autoApprove }),
           parameters: fn.parameters.map((p) => {
             if (!p.columns) return p;
             const stripped = { ...p, columns: {} as typeof p.columns };

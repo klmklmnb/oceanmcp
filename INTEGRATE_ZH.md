@@ -389,6 +389,35 @@ OceanMCPSDK.registerTool({
 - **`operationType: "read"`** —— 工具只读取数据。AI 调用时会立即执行。
 - **`operationType: "write"`** —— 工具会修改数据。AI 会先向用户展示执行计划，等待审批后再执行。用户会在聊天中看到"批准"/"拒绝"按钮。
 
+#### 写操作的自动审批
+
+如果你希望某个写操作工具无需用户确认就能立即执行（像读操作一样），可以设置 `autoApprove: true`：
+
+```ts
+OceanMCPSDK.registerTool({
+  id: "addLogEntry",
+  name: "Add Log Entry",
+  cnName: "添加日志",
+  description: "向审计日志追加一条记录",
+  type: "executor",
+  operationType: "write",
+  autoApprove: true,   // 跳过审批流程 —— 直接执行
+  executor: async (args) => {
+    const res = await fetch("/api/logs", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ message: args.message }),
+    });
+    return res.json();
+  },
+  parameters: [
+    { name: "message", type: "string", description: "日志消息", required: true },
+  ],
+});
+```
+
+> **请谨慎使用：** `autoApprove` 会绕过通常让用户在执行前审查写操作的安全机制。仅在低风险的修改操作中启用，即用户确认不会带来额外价值的场景。
+
 ### 参数定义
 
 每个工具声明它接受的参数。AI 使用这些定义来构造正确的调用参数：
@@ -614,6 +643,7 @@ interface ExecutorFunctionDefinition {
   description: string;
   type: "executor";
   operationType: "read" | "write";
+  autoApprove?: boolean;          // 为 true 时，写操作工具无需用户审批即可执行
   executor: (args: Record<string, any>) => Promise<any>;
   parameters: ParameterDefinition[];
 }
@@ -626,6 +656,7 @@ interface CodeFunctionDefinition {
   description: string;
   type: "code";
   operationType: "read" | "write";
+  autoApprove?: boolean;          // 为 true 时，写操作工具无需用户审批即可执行
   code: string;
   parameters: ParameterDefinition[];
 }
