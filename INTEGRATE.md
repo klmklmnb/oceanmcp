@@ -83,7 +83,7 @@ Best for: modern apps using Vite, Webpack, or other bundlers.
 
 ```html
 <script type="module">
-  import OceanMCPSDK from "https://your-cdn.com/ocean-mcp/sdk.js";
+  import OceanMCPSDK from "https://your-cdn.com/ocean-mcp/sdk.esm.js";
 
   OceanMCPSDK.mount({ locale: "en-US" });
 </script>
@@ -93,7 +93,7 @@ Or if you host the SDK files locally:
 
 ```js
 // In your app's entry file
-import OceanMCPSDK from "./lib/ocean-mcp/sdk.js";
+import OceanMCPSDK from "./lib/ocean-mcp/sdk.esm.js";
 
 OceanMCPSDK.registerSkill(mySkill);
 OceanMCPSDK.mount({ root: "#chat-container" });

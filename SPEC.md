@@ -224,7 +224,7 @@ export const executePlan = tool({
 
 **Stack:** Vite (Library Mode), React, `@ai-sdk/react` (`useChat`), TailwindCSS.
 
-**Build Output:** A single bundled `sdk.js` and `style.css`.
+**Build Output:** A bundled `sdk.esm.js` (ESM), `sdk.umd.js` (UMD), and demo assets.
 
 **Key Modules:**
 
