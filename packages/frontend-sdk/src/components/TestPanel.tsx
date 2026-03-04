@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from "react";
 import OceanMCPSDK from "../main";
-import { sdkConfig, resolveTheme, THEME, type SupportedLocale, type Theme } from "../runtime/sdk-config";
+import { sdkConfig, THEME, type SupportedLocale, type Theme } from "../runtime/sdk-config";
 
 const btnBase: React.CSSProperties = {
   padding: "8px 0",
@@ -84,17 +84,20 @@ export function TestPanel() {
   const [result, setResult] = useState<string | null>(null);
   const [locale, setLocale] = useState<SupportedLocale | "">(sdkConfig.locale ?? "zh-CN");
   const [theme, setTheme] = useState<Theme>(sdkConfig.theme ?? THEME.AUTO);
+  const [systemDark, setSystemDark] = useState(
+    () => window.matchMedia?.("(prefers-color-scheme: dark)").matches ?? false,
+  );
 
-  const isDark = resolveTheme(theme) === THEME.DARK;
+  const isDark =
+    theme === THEME.DARK || (theme === THEME.AUTO && systemDark);
   const c = isDark ? darkColors : lightColors;
 
   useEffect(() => {
-    if (theme !== THEME.AUTO) return;
     const mq = window.matchMedia("(prefers-color-scheme: dark)");
-    const handler = () => setTheme((prev) => (prev === THEME.AUTO ? THEME.AUTO : prev));
+    const handler = (e: MediaQueryListEvent) => setSystemDark(e.matches);
     mq.addEventListener("change", handler);
     return () => mq.removeEventListener("change", handler);
-  }, [theme]);
+  }, []);
 
   // Sync defaults to sdkConfig on first render
   if (!sdkConfig.locale) {
