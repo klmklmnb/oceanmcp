@@ -68,7 +68,7 @@ export const baseFunctions: CodeFunctionDefinition[] = [
     parameters: [
       {
         name: "selectors",
-        type: PARAMETER_TYPE.ARRAY,
+        type: PARAMETER_TYPE.STRING_ARRAY,
         description:
           "Array of CSS selectors to query (defaults to ['body']). Also accepts a single string.",
         required: false,

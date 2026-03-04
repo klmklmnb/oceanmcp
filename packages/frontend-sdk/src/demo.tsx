@@ -49,7 +49,8 @@ OceanMCPSDK.mount({
     { label: "帮我在米咖点一杯拿铁" },
     { label: "米饭上今天的晚餐是什么？" },
     { label: "你能做什么？" }
-  ]
+  ],
+  model: { default: "gpt-5.2-chat" }
 });
 
 // ─── Mount the test panel ───────────────────────────────────────────────────

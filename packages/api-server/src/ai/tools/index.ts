@@ -103,8 +103,15 @@ export function createZodSchema(parameters: ParameterDefinition[]) {
       case PARAMETER_TYPE.OBJECT:
         schema = z.any();
         break;
-      case PARAMETER_TYPE.ARRAY:
-        schema = z.array(z.any());
+      case PARAMETER_TYPE.ARRAY: // deprecated — falls through to STRING_ARRAY
+      case PARAMETER_TYPE.STRING_ARRAY:
+        schema = z.array(z.string());
+        break;
+      case PARAMETER_TYPE.NUMBER_ARRAY:
+        schema = z.array(z.number());
+        break;
+      case PARAMETER_TYPE.OBJECT_ARRAY:
+        schema = z.array(z.record(z.any()));
         break;
       default:
         schema = z.any();

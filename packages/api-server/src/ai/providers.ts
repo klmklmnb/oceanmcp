@@ -184,7 +184,14 @@ const customFetch = async (input: RequestInfo | URL, init?: RequestInit) => {
 // ── Private / Self-Hosted LLM Adapter ────────────────────────────────────────
 
 const privateLLM = createOpenAICompatible({
-  name: "private-llm",
+  // IMPORTANT: The name MUST be "google" — not a cosmetic choice.
+  // @ai-sdk/openai-compatible uses this name as a key for providerMetadata.
+  // When reconstructing outbound messages, the SDK hardcodes a lookup on
+  // `providerOptions.google.thoughtSignature` to round-trip Gemini's
+  // thought_signature on tool calls (see convert-to-openai-compatible-chat-messages.ts).
+  // Any other name causes the signature to be silently dropped, making
+  // Gemini reject multi-step tool-use requests.
+  name: "google",
   baseURL: process.env.LLM_BASE_URL || "https://api.openai.com/v1",
   apiKey: process.env.LLM_API_KEY,
   headers: {
