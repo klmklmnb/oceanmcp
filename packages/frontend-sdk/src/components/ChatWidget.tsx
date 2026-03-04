@@ -12,7 +12,7 @@ import { MessageRenderer } from "./MessageRenderer";
 import { wsClient } from "../runtime/ws-client";
 import { chatBridge } from "../runtime/chat-bridge";
 import { uploadRegistry } from "../runtime/upload-registry";
-import { sdkConfig, resolveTheme, THEME_CHANGE_EVENT, THEME, type Theme } from "../runtime/sdk-config";
+import { sdkConfig, resolveTheme, LOCALE_CHANGE_EVENT, THEME_CHANGE_EVENT, THEME, type Theme, type SupportedLocale } from "../runtime/sdk-config";
 import { getActiveShadowRoot } from "../shadow-dom";
 import { t } from "../locale";
 import { CHAT_STATUS } from "../constants/chat";
@@ -103,6 +103,21 @@ function useTheme() {
   return theme;
 }
 
+function useLocale(): SupportedLocale {
+  const [locale, setLocale] = useState<SupportedLocale>(sdkConfig.locale ?? "zh-CN");
+
+  useEffect(() => {
+    const onLocaleChange = (e: Event) => {
+      const detail = (e as CustomEvent<SupportedLocale | undefined>).detail;
+      setLocale(detail ?? "zh-CN");
+    };
+    window.addEventListener(LOCALE_CHANGE_EVENT, onLocaleChange);
+    return () => window.removeEventListener(LOCALE_CHANGE_EVENT, onLocaleChange);
+  }, []);
+
+  return locale;
+}
+
 function denyPendingApprovalParts(messages: any[]): {
   messages: any[];
   changed: boolean;
@@ -184,6 +199,7 @@ function AttachIcon() {
  * to the api-server's /api/chat endpoint.
  */
 export function ChatWidget({ avatar }: { avatar?: string }) {
+  useLocale();
   const scrollRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const [input, setInput] = useState("");
