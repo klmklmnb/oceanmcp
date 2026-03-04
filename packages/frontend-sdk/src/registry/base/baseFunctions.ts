@@ -152,4 +152,25 @@ export const baseFunctions: CodeFunctionDefinition[] = [
     }`,
     parameters: [],
   },
+  {
+    id: "updateTitle",
+    name: "Update Page Title",
+    description:
+      "Sets the document title of the current page. " +
+      "This is a write operation with autoApprove enabled, so it executes immediately without user confirmation.",
+    type: FUNCTION_TYPE.CODE,
+    operationType: OPERATION_TYPE.WRITE,
+    autoApprove: true,
+    code: `const prev = document.title;
+    document.title = args.title;
+    return { success: true, previousTitle: prev, newTitle: args.title }`,
+    parameters: [
+      {
+        name: "title",
+        type: PARAMETER_TYPE.STRING,
+        description: "The new page title to set",
+        required: true,
+      },
+    ],
+  },
 ];

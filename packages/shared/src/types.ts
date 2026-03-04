@@ -111,6 +111,15 @@ export interface BaseFunctionDefinition {
   cnName?: string;
   description: string;
   operationType: OperationType;
+  /**
+   * When `true` and `operationType` is `"write"`, the tool can be executed
+   * directly via `browserExecute` without going through the `executePlan`
+   * approval flow.  Has no effect on `"read"` tools (they already execute
+   * immediately).
+   *
+   * @default false
+   */
+  autoApprove?: boolean;
   parameters: ParameterDefinition[];
   /** Custom render for the FlowNodeCard; receives the FlowStep info and should return a valid React node */
   showRender?: (step: FlowStep) => any;
@@ -139,6 +148,8 @@ export interface FunctionSchema {
   description: string;
   type: FunctionType;
   operationType: OperationType;
+  /** @see BaseFunctionDefinition.autoApprove */
+  autoApprove?: boolean;
   parameters: ParameterDefinition[];
 }
 
