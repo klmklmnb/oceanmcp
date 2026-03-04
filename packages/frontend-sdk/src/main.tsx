@@ -8,7 +8,7 @@ import { FUNCTION_TYPE, OPERATION_TYPE, type FunctionDefinition } from "@ocean-m
 import { baseFunctions } from "./registry/base/baseFunctions";
 import { chatBridge } from "./runtime/chat-bridge";
 import { uploadRegistry, type UploadHandler } from "./runtime/upload-registry";
-import { sdkConfig, type SupportedLocale, type SuggestionItem } from "./runtime/sdk-config";
+import { sdkConfig, type SupportedLocale, type SuggestionItem, type Theme } from "./runtime/sdk-config";
 import type { ModelConfig } from "@ocean-mcp/shared";
 import {
   createShadowHost,
@@ -98,6 +98,13 @@ type MountOptions = {
    * ```
    */
   suggestions?: SuggestionItem[];
+  /**
+   * UI Theme preference: "light", "dark", or "auto".
+   * - `light` (default): Uses light mode.
+   * - `dark`: Uses dark mode.
+   * - `auto`: Follows the user's operating system preferences via `prefers-color-scheme`.
+   */
+  theme?: Theme;
 };
 
 /** Cleanup function returned by the Monaco style observer. */
@@ -128,8 +135,8 @@ function mountOceanMCP(target?: MountTarget | MountOptions) {
     if (options.model) {
       sdkConfig.model = options.model;
     }
-    if (options.suggestions) {
-      sdkConfig.suggestions = options.suggestions;
+    if (options.theme) {
+      sdkConfig.theme = options.theme;
     }
     if (options.shadowDOM === false) {
       useShadowDOM = false;

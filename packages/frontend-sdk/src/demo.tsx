@@ -44,6 +44,7 @@ OceanMCPSDK.registerUploader(async (files: File[]) => {
 // OceanMCPSDK.mount({ locale: "zh-CN", model: { default: "z-ai/glm-4.6", maxTokens: 104800 } });
 OceanMCPSDK.mount({
   locale: "zh-CN",
+  theme: "auto",
   suggestions: [
     { label: "这个页面有什么？", text: "详细分析当前页面内容" },
     { label: "帮我在米咖点一杯拿铁" },

@@ -12,7 +12,8 @@ import { MessageRenderer } from "./MessageRenderer";
 import { wsClient } from "../runtime/ws-client";
 import { chatBridge } from "../runtime/chat-bridge";
 import { uploadRegistry } from "../runtime/upload-registry";
-import { sdkConfig } from "../runtime/sdk-config";
+import { sdkConfig, resolveTheme, THEME_CHANGE_EVENT, THEME, type Theme } from "../runtime/sdk-config";
+import { getActiveShadowRoot } from "../shadow-dom";
 import { t } from "../locale";
 import { CHAT_STATUS } from "../constants/chat";
 import { API_URL } from "../config";
@@ -52,6 +53,54 @@ function shouldAutoDeny(part: any): boolean {
       (part.state === TOOL_PART_STATE.APPROVAL_RESPONDED &&
         part.approval?.approved === false))
   );
+}
+
+/**
+ * Apply the `dark` class on the shadow host element so that the
+ * `:host(.dark)` selector fires.  This is necessary because Tailwind's
+ * `@theme` variables (e.g. `--color-surface-secondary`) are defined on
+ * `:host` via `var(--ui-…)` references.  The browser resolves those
+ * references at computed-value time *on the host element*, so overriding
+ * `--ui-…` on a descendant `.dark` div has no effect on the already-
+ * resolved `--color-…` values.  Toggling the class directly on the host
+ * ensures `--ui-…` values are dark *before* `--color-…` variables are
+ * resolved.
+ */
+function applyShadowHostTheme(theme: "light" | "dark") {
+  const shadowRoot = getActiveShadowRoot();
+  const host = shadowRoot?.host;
+  if (!host) return;
+  host.classList.toggle(THEME.DARK, theme === THEME.DARK);
+}
+
+function useTheme() {
+  const [theme, setTheme] = useState<"light" | "dark">(() => resolveTheme(sdkConfig.theme));
+
+  useEffect(() => {
+    const apply = (t: "light" | "dark") => {
+      setTheme(t);
+      applyShadowHostTheme(t);
+    };
+
+    apply(resolveTheme(sdkConfig.theme));
+
+    const mediaQuery = window.matchMedia("(prefers-color-scheme: dark)");
+    const onMediaChange = () => apply(resolveTheme(sdkConfig.theme));
+    mediaQuery.addEventListener("change", onMediaChange);
+
+    const onConfigChange = (e: Event) => {
+      const detail = (e as CustomEvent<Theme | undefined>).detail;
+      apply(resolveTheme(detail));
+    };
+    window.addEventListener(THEME_CHANGE_EVENT, onConfigChange);
+
+    return () => {
+      mediaQuery.removeEventListener("change", onMediaChange);
+      window.removeEventListener(THEME_CHANGE_EVENT, onConfigChange);
+    };
+  }, []);
+
+  return theme;
 }
 
 function denyPendingApprovalParts(messages: any[]): {
@@ -506,10 +555,11 @@ export function ChatWidget({ avatar }: { avatar?: string }) {
 
   const isStreaming = status === CHAT_STATUS.STREAMING;
   const isLoading = status === CHAT_STATUS.SUBMITTED;
+  const currentTheme = useTheme();
 
   return (
     <div 
-      className="flex flex-col h-full bg-surface-secondary relative"
+      className={`flex flex-col h-full bg-surface-secondary relative ${currentTheme === THEME.DARK ? THEME.DARK : ""}`}
       onDragEnter={handleDragEnter}
       onDragLeave={handleDragLeave}
       onDragOver={handleDragOver}
@@ -526,7 +576,7 @@ export function ChatWidget({ avatar }: { avatar?: string }) {
               {avatar ? (
                 <img src={avatar} alt="AI" className="w-16 h-16 object-cover mb-6" />
               ) : (
-                <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-ocean-400 to-ocean-600 flex items-center justify-center shadow-lg mb-6">
+                <div className="w-16 h-16 rounded-2xl bg-linear-to-br from-ocean-400 to-ocean-600 flex items-center justify-center shadow-lg mb-6">
                   <svg width="32" height="32" viewBox="0 0 24 24" fill="none">
                     <path
                       d="M12 2L14.09 8.26L20 9.27L15.5 13.14L16.82 19.02L12 16.09L7.18 19.02L8.5 13.14L4 9.27L9.91 8.26L12 2Z"
@@ -587,9 +637,9 @@ export function ChatWidget({ avatar }: { avatar?: string }) {
           {isLoading && (
             <div className="flex gap-3 ocean-fade-in">
               {avatar ? (
-                <img src={avatar} alt="AI" className="flex-shrink-0 w-8 h-8 object-cover" />
+                <img src={avatar} alt="AI" className="shrink-0 w-8 h-8 object-cover" />
               ) : (
-                <div className="flex-shrink-0 w-8 h-8 rounded-full bg-gradient-to-br from-ocean-400 to-ocean-600 flex items-center justify-center shadow-sm">
+                <div className="shrink-0 w-8 h-8 rounded-full bg-linear-to-br from-ocean-400 to-ocean-600 flex items-center justify-center shadow-sm">
                   <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
                     <path
                       d="M12 2L14.09 8.26L20 9.27L15.5 13.14L16.82 19.02L12 16.09L7.18 19.02L8.5 13.14L4 9.27L9.91 8.26L12 2Z"
@@ -630,7 +680,7 @@ export function ChatWidget({ avatar }: { avatar?: string }) {
                   {pendingFiles.map((pf) => (
                     <div
                       key={pf.id}
-                      className="relative flex-shrink-0 w-[45px] h-[45px] rounded-md border border-border bg-surface-secondary overflow-visible group"
+                      className="relative shrink-0 w-[45px] h-[45px] rounded-md border border-border bg-surface-secondary overflow-visible group"
                     >
                       {pf.status === "uploading" && (
                         <div className="w-full h-full flex items-center justify-center">
