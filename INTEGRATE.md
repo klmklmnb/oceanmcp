@@ -83,7 +83,7 @@ Best for: modern apps using Vite, Webpack, or other bundlers.
 
 ```html
 <script type="module">
-  import OceanMCPSDK from "https://your-cdn.com/ocean-mcp/sdk.js";
+  import OceanMCPSDK from "https://your-cdn.com/ocean-mcp/sdk.esm.js";
 
   OceanMCPSDK.mount({ locale: "en-US" });
 </script>
@@ -93,7 +93,7 @@ Or if you host the SDK files locally:
 
 ```js
 // In your app's entry file
-import OceanMCPSDK from "./lib/ocean-mcp/sdk.js";
+import OceanMCPSDK from "./lib/ocean-mcp/sdk.esm.js";
 
 OceanMCPSDK.registerSkill(mySkill);
 OceanMCPSDK.mount({ root: "#chat-container" });
@@ -434,6 +434,34 @@ Inside `code` strings, you have access to:
 - **`operationType: "read"`** — The tool only reads data. It runs immediately when the AI calls it.
 - **`operationType: "write"`** — The tool modifies data. The AI will present a plan to the user for approval before executing. The user sees an "Approve" / "Deny" button in the chat.
 
+#### Auto-Approve for Write Operations
+
+If you want a write tool to execute immediately without user confirmation (like a read tool), set `autoApprove: true`:
+
+```ts
+OceanMCPSDK.registerTool({
+  id: "addLogEntry",
+  name: "Add Log Entry",
+  description: "Append an entry to the audit log",
+  type: "executor",
+  operationType: "write",
+  autoApprove: true,   // Skips the approval flow — executes directly
+  executor: async (args) => {
+    const res = await fetch("/api/logs", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ message: args.message }),
+    });
+    return res.json();
+  },
+  parameters: [
+    { name: "message", type: "string", description: "Log message", required: true },
+  ],
+});
+```
+
+> **Use with caution:** `autoApprove` bypasses the safety gate that normally lets users review write operations before they run. Only enable it for low-risk mutations where user confirmation adds no value.
+
 ### Parameter Definitions
 
 Each tool declares the parameters it accepts. The AI uses these definitions to construct the correct arguments:
@@ -659,6 +687,7 @@ interface ExecutorFunctionDefinition {
   description: string;
   type: "executor";
   operationType: "read" | "write";
+  autoApprove?: boolean;          // When true, write tools execute without user approval
   executor: (args: Record<string, any>) => Promise<any>;
   parameters: ParameterDefinition[];
 }
@@ -671,6 +700,7 @@ interface CodeFunctionDefinition {
   description: string;
   type: "code";
   operationType: "read" | "write";
+  autoApprove?: boolean;          // When true, write tools execute without user approval
   code: string;
   parameters: ParameterDefinition[];
 }

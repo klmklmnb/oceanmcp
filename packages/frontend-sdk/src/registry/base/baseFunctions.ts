@@ -68,7 +68,7 @@ export const baseFunctions: CodeFunctionDefinition[] = [
     parameters: [
       {
         name: "selectors",
-        type: PARAMETER_TYPE.ARRAY,
+        type: PARAMETER_TYPE.STRING_ARRAY,
         description:
           "Array of CSS selectors to query (defaults to ['body']). Also accepts a single string.",
         required: false,
@@ -151,5 +151,26 @@ export const baseFunctions: CodeFunctionDefinition[] = [
       timezoneOffset: now.getTimezoneOffset(),
     }`,
     parameters: [],
+  },
+  {
+    id: "updateTitle",
+    name: "Update Page Title",
+    description:
+      "Sets the document title of the current page. " +
+      "This is a write operation with autoApprove enabled, so it executes immediately without user confirmation.",
+    type: FUNCTION_TYPE.CODE,
+    operationType: OPERATION_TYPE.WRITE,
+    autoApprove: true,
+    code: `const prev = document.title;
+    document.title = args.title;
+    return { success: true, previousTitle: prev, newTitle: args.title }`,
+    parameters: [
+      {
+        name: "title",
+        type: PARAMETER_TYPE.STRING,
+        description: "The new page title to set",
+        required: true,
+      },
+    ],
   },
 ];

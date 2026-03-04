@@ -11,7 +11,7 @@ import {
   type FileAttachment,
 } from "@ocean-mcp/shared";
 import type { ModelConfig } from "@ocean-mcp/shared";
-import { getLanguageModel, resolveMaxTokens } from "../ai/providers";
+import { getLanguageModel, resolveMaxTokens, resolveThinkingConfig, withThinkingConfig } from "../ai/providers";
 import { getSystemPrompt } from "../ai/prompts";
 import { getMergedTools } from "../ai/tools";
 import { connectionManager } from "../ws/connection-manager";
@@ -185,18 +185,25 @@ export async function handleChatRequest(req: Request): Promise<Response> {
     );
     const modelMessages = await convertToModelMessages(normalizedMessages);
 
-    const result = streamText({
-      // NOTE: Currently only the "default" model is used for all requests.
-      // `modelConfig.fast` is accepted from the frontend but not yet wired
-      // in — it will be consumed once task-level model routing is added
-      // (e.g. using the fast model for intent classification or summaries).
-      model: getLanguageModel(modelConfig?.default),
-      system: getSystemPrompt(connectionId, locale),
-      messages: modelMessages,
-      tools: mergedTools,
-      maxOutputTokens: resolveMaxTokens(modelConfig?.maxTokens),
-      stopWhen: stepCountIs(10),
-    });
+    const resolvedModel = getLanguageModel(modelConfig?.default);
+    const thinkingConfig = resolveThinkingConfig(modelConfig);
+
+    // Wrap in withThinkingConfig so the customFetch interceptor can read
+    // the per-request thinking/reasoning config via AsyncLocalStorage.
+    const result = withThinkingConfig(thinkingConfig, () =>
+      streamText({
+        // NOTE: Currently only the "default" model is used for all requests.
+        // `modelConfig.fast` is accepted from the frontend but not yet wired
+        // in — it will be consumed once task-level model routing is added
+        // (e.g. using the fast model for intent classification or summaries).
+        model: resolvedModel,
+        system: getSystemPrompt(connectionId, locale),
+        messages: modelMessages,
+        tools: mergedTools,
+        maxOutputTokens: resolveMaxTokens(modelConfig?.maxTokens),
+        stopWhen: stepCountIs(10),
+      }),
+    );
 
     return result.toUIMessageStreamResponse({ sendReasoning: true });
   } catch (error) {

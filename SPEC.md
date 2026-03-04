@@ -224,7 +224,7 @@ export const executePlan = tool({
 
 **Stack:** Vite (Library Mode), React, `@ai-sdk/react` (`useChat`), TailwindCSS.
 
-**Build Output:** A single bundled `sdk.js` and `style.css`.
+**Build Output:** A bundled `sdk.esm.js` (ESM), `sdk.umd.js` (UMD), and demo assets.
 
 **Key Modules:**
 
@@ -275,6 +275,7 @@ type CodeFunctionDefinition = {
   description: string;
   type: "code";
   operationType: "read" | "write";
+  autoApprove?: boolean; // When true, write tools execute without user approval
   code: string; // e.g. "return fetch('/api/v1/cluster/' + args.id)"
   parameters: ParameterDefinition[];
 };
@@ -286,6 +287,7 @@ type ExecutorFunctionDefinition = {
   description: string;
   type: "executor";
   operationType: "read" | "write";
+  autoApprove?: boolean; // When true, write tools execute without user approval
   executor: (args: Record<string, any>) => Promise<any>;
   parameters: ParameterDefinition[];
 };

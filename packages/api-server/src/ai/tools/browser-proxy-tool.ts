@@ -70,7 +70,8 @@ export function isServerSideTool(
 /**
  * Browser proxy tool — executes a registered READ function on the browser side
  * via WebSocket. The function runs in the user's authenticated browser session.
- * Write/mutation functions must go through the executePlan tool instead.
+ * Write/mutation functions must go through the executePlan tool instead,
+ * unless the function has `autoApprove: true` set in its schema.
  */
 const browserExecuteParameters = z.object({
   functionId: z
@@ -83,14 +84,15 @@ const browserExecuteParameters = z.object({
 });
 
 /**
- * Browser proxy tool — executes a registered READ function on the browser side
- * via WebSocket. Only read/query operations are allowed here; write/mutation
- * operations must use the executePlan tool which requires user approval.
+ * Browser proxy tool — executes a registered function on the browser side
+ * via WebSocket. Only read/query operations and write operations with
+ * `autoApprove: true` are allowed here; other write/mutation operations
+ * must use the executePlan tool which requires user approval.
  */
 export function createBrowserExecuteTool(connectionId?: string) {
   return tool({
     description:
-      "Execute a registered READ function on the browser side. This runs in the user's authenticated browser session and can access the host web application's APIs, DOM, and state. IMPORTANT: This tool only supports read/query operations. For write/mutation operations, you MUST use the executePlan tool to generate a plan that requires user approval.",
+      "Execute a registered function on the browser side. This runs in the user's authenticated browser session and can access the host web application's APIs, DOM, and state. Supports all READ operations and WRITE operations that have autoApprove enabled. For write/mutation operations without autoApprove, you MUST use the executePlan tool to generate a plan that requires user approval.",
     inputSchema: browserExecuteParameters,
     execute: async ({
       functionId,
@@ -104,10 +106,14 @@ export function createBrowserExecuteTool(connectionId?: string) {
         };
       }
 
-      // Check operationType — block write functions
+      // Check operationType — block write functions unless autoApprove is set
       const toolSchemas = connectionManager.getToolSchemas(connectionId);
       const schema = toolSchemas.find((s) => s.id === functionId);
-      if (schema && schema.operationType === OPERATION_TYPE.WRITE) {
+      if (
+        schema &&
+        schema.operationType === OPERATION_TYPE.WRITE &&
+        !schema.autoApprove
+      ) {
         return {
           error: `Function "${functionId}" is a write/mutation operation and cannot be executed directly via browserExecute. You MUST use the executePlan tool to propose a plan for write operations, which requires user approval before execution.`,
           functionId,
