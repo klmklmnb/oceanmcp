@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from "react";
 import OceanMCPSDK from "../main";
-import { sdkConfig, type SupportedLocale, type Theme } from "../runtime/sdk-config";
+import { sdkConfig, resolveTheme, THEME, type SupportedLocale, type Theme } from "../runtime/sdk-config";
 
 const btnBase: React.CSSProperties = {
   padding: "8px 0",
@@ -77,27 +77,21 @@ const darkColors: PanelColors = {
   unselectedText: "#9ca3af",
 };
 
-function resolveEffectiveTheme(t: Theme): "light" | "dark" {
-  if (t === "dark") return "dark";
-  if (t === "light") return "light";
-  return window.matchMedia?.("(prefers-color-scheme: dark)").matches ? "dark" : "light";
-}
-
 export function TestPanel() {
   const [open, setOpen] = useState(false);
   const [text, setText] = useState("你好，请介绍一下你自己");
   const [loading, setLoading] = useState<string | null>(null);
   const [result, setResult] = useState<string | null>(null);
   const [locale, setLocale] = useState<SupportedLocale | "">(sdkConfig.locale ?? "zh-CN");
-  const [theme, setTheme] = useState<Theme>(sdkConfig.theme ?? "auto");
+  const [theme, setTheme] = useState<Theme>(sdkConfig.theme ?? THEME.AUTO);
 
-  const isDark = resolveEffectiveTheme(theme) === "dark";
+  const isDark = resolveTheme(theme) === THEME.DARK;
   const c = isDark ? darkColors : lightColors;
 
   useEffect(() => {
-    if (theme !== "auto") return;
+    if (theme !== THEME.AUTO) return;
     const mq = window.matchMedia("(prefers-color-scheme: dark)");
-    const handler = () => setTheme((prev) => (prev === "auto" ? "auto" : prev));
+    const handler = () => setTheme((prev) => (prev === THEME.AUTO ? THEME.AUTO : prev));
     mq.addEventListener("change", handler);
     return () => mq.removeEventListener("change", handler);
   }, [theme]);
@@ -218,7 +212,7 @@ export function TestPanel() {
               <code style={{ background: c.codeBg, padding: "1px 4px", borderRadius: 3, fontSize: 10, color: c.label }}>theme</code> 主题切换
             </p>
             <div style={{ display: "flex", gap: 6 }}>
-              {(["light", "dark", "auto"] as const).map((t) => {
+              {([THEME.LIGHT, THEME.DARK, THEME.AUTO] as const).map((t) => {
                 const selected = theme === t;
                 return (
                   <button
@@ -240,7 +234,7 @@ export function TestPanel() {
                       transition: "all 0.15s",
                     }}
                   >
-                    {t === "light" ? "☀️ Light" : t === "dark" ? "🌙 Dark" : "💻 Auto"}
+                    {t === THEME.LIGHT ? "☀️ Light" : t === THEME.DARK ? "🌙 Dark" : "💻 Auto"}
                   </button>
                 );
               })}

@@ -12,7 +12,7 @@ import { MessageRenderer } from "./MessageRenderer";
 import { wsClient } from "../runtime/ws-client";
 import { chatBridge } from "../runtime/chat-bridge";
 import { uploadRegistry } from "../runtime/upload-registry";
-import { sdkConfig } from "../runtime/sdk-config";
+import { sdkConfig, resolveTheme, THEME_CHANGE_EVENT, THEME, type Theme } from "../runtime/sdk-config";
 import { getActiveShadowRoot } from "../shadow-dom";
 import { t } from "../locale";
 import { CHAT_STATUS } from "../constants/chat";
@@ -55,12 +55,6 @@ function shouldAutoDeny(part: any): boolean {
   );
 }
 
-function resolveTheme(configTheme: string | undefined): "light" | "dark" {
-  if (configTheme === "dark") return "dark";
-  if (configTheme === "light") return "light";
-  return window.matchMedia?.("(prefers-color-scheme: dark)").matches ? "dark" : "light";
-}
-
 /**
  * Apply the `dark` class on the shadow host element so that the
  * `:host(.dark)` selector fires.  This is necessary because Tailwind's
@@ -76,7 +70,7 @@ function applyShadowHostTheme(theme: "light" | "dark") {
   const shadowRoot = getActiveShadowRoot();
   const host = shadowRoot?.host;
   if (!host) return;
-  host.classList.toggle("dark", theme === "dark");
+  host.classList.toggle(THEME.DARK, theme === THEME.DARK);
 }
 
 function useTheme() {
@@ -95,14 +89,14 @@ function useTheme() {
     mediaQuery.addEventListener("change", onMediaChange);
 
     const onConfigChange = (e: Event) => {
-      const detail = (e as CustomEvent).detail as string | undefined;
+      const detail = (e as CustomEvent<Theme | undefined>).detail;
       apply(resolveTheme(detail));
     };
-    window.addEventListener("ocean-mcp:theme-change", onConfigChange);
+    window.addEventListener(THEME_CHANGE_EVENT, onConfigChange);
 
     return () => {
       mediaQuery.removeEventListener("change", onMediaChange);
-      window.removeEventListener("ocean-mcp:theme-change", onConfigChange);
+      window.removeEventListener(THEME_CHANGE_EVENT, onConfigChange);
     };
   }, []);
 
@@ -565,7 +559,7 @@ export function ChatWidget({ avatar }: { avatar?: string }) {
 
   return (
     <div 
-      className={`flex flex-col h-full bg-surface-secondary relative ${currentTheme === "dark" ? "dark" : ""}`}
+      className={`flex flex-col h-full bg-surface-secondary relative ${currentTheme === THEME.DARK ? THEME.DARK : ""}`}
       onDragEnter={handleDragEnter}
       onDragLeave={handleDragLeave}
       onDragOver={handleDragOver}

@@ -2,7 +2,13 @@ import type { ModelConfig } from "@ocean-mcp/shared";
 
 export type SupportedLocale = "zh-CN" | "en-US";
 
-export type Theme = "light" | "dark" | "auto";
+export const THEME = {
+  LIGHT: "light",
+  DARK: "dark",
+  AUTO: "auto",
+} as const;
+
+export type Theme = (typeof THEME)[keyof typeof THEME];
 
 /**
  * A suggestion question shown on the chat welcome screen.
@@ -28,6 +34,17 @@ export type SDKConfig = {
   /** UI Theme preference: "light", "dark", or "auto" (follows system preference). Default is "light". */
   theme?: Theme;
 };
+
+export const THEME_CHANGE_EVENT = "ocean-mcp:theme-change";
+
+export function resolveTheme(theme: Theme | undefined): "light" | "dark" {
+  if (theme === THEME.DARK) return THEME.DARK;
+  if (theme === THEME.LIGHT) return THEME.LIGHT;
+  if (typeof window !== "undefined" && window.matchMedia) {
+    return window.matchMedia("(prefers-color-scheme: dark)").matches ? THEME.DARK : THEME.LIGHT;
+  }
+  return THEME.LIGHT;
+}
 
 const config: SDKConfig = {};
 
@@ -88,7 +105,7 @@ export const sdkConfig = {
     const prev = config.theme;
     config.theme = value;
     if (prev !== value && typeof window !== "undefined") {
-      window.dispatchEvent(new CustomEvent("ocean-mcp:theme-change", { detail: value }));
+      window.dispatchEvent(new CustomEvent(THEME_CHANGE_EVENT, { detail: value }));
     }
   },
 
