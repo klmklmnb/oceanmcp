@@ -31,6 +31,40 @@ export interface ModelConfig {
   fast?: string;
   /** Maximum number of output tokens per response. Falls back to env `LLM_MAX_TOKENS` → `16384`. */
   maxTokens?: number;
+
+  // ── Thinking / Reasoning Configuration ───────────────────────────────
+
+  /**
+   * Claude thinking budget in tokens.
+   *
+   * Controls the `thinking.budget_tokens` parameter sent to Claude models
+   * via OpenAI-compatible proxies that require it.
+   *
+   * Falls back to env `LLM_THINKING_BUDGET` → `10240`.
+   * Set to `0` to disable thinking for Claude.
+   */
+  thinkingBudget?: number;
+
+  /**
+   * OpenAI reasoning effort level.
+   *
+   * Controls the `reasoning_effort` parameter sent to OpenAI reasoning
+   * models (e.g. gpt-5.1+, o1, o3, o4).
+   *
+   * Falls back to env `LLM_REASONING_EFFORT` → `"medium"`.
+   * Set to `"disabled"` to skip injection.
+   */
+  reasoningEffort?: "low" | "medium" | "high" | "none" | "disabled";
+
+  /**
+   * GLM thinking toggle.
+   *
+   * Controls the `extra_body.chat_template_kwargs.enable_thinking`
+   * parameter sent to GLM models.
+   *
+   * Falls back to env `LLM_GLM_THINKING` → `true`.
+   */
+  glmThinking?: boolean;
 }
 
 // ─── File Attachment ─────────────────────────────────────────────────────────

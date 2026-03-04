@@ -59,6 +59,21 @@ type MountOptions = {
    *
    * // Only override the default model
    * OceanMCPSDK.mount({ model: { default: "claude-sonnet-4-20250514" } });
+   *
+   * // Claude with custom thinking budget (tokens)
+   * OceanMCPSDK.mount({
+   *   model: { default: "mihoyo.claude-4-6-opus", thinkingBudget: 20480 },
+   * });
+   *
+   * // OpenAI with reasoning effort
+   * OceanMCPSDK.mount({
+   *   model: { default: "gpt-5.1", reasoningEffort: "high" },
+   * });
+   *
+   * // GLM with explicit thinking toggle
+   * OceanMCPSDK.mount({
+   *   model: { default: "mihoyo-glm-4.6", glmThinking: true },
+   * });
    * ```
    */
   model?: ModelConfig;
