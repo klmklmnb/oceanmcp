@@ -142,9 +142,9 @@ OceanMCPSDK.mount({
 | 选项          | 类型                          | 默认值           | 说明                                                                                                                                                                                |
 | ------------- | ----------------------------- | ---------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `root`        | `string \| HTMLElement`       | 自动创建浮动 div | 组件渲染位置。如果不传，会创建一个 `420x600px` 的浮动窗口。如果页面中存在 `#ocean-mcp-root` 元素，会自动使用它。                                                                    |
-| `locale`      | `"zh-CN" \| "en-US"`          | `undefined`      | 界面语言。设为 `zh-CN` 时，技能和工具会优先显示 `cnName`。                                                                                                                          |
+| `locale`      | `"zh-CN" \| "en-US"`          | `undefined`      | 界面语言。设为 `zh-CN` 时，技能和工具会优先显示 `cnName`。**响应式** —— 可通过 `sdkConfig.locale` 运行时动态修改。                                                                    |
 | `avatar`      | `string`                      | `undefined`      | AI 助手在聊天中显示的头像图片 URL。                                                                                                                                                 |
-| `theme`       | `"light" \| "dark" \| "auto"` | `"light"`        | UI 主题偏好。可设置为 `"light"`, `"dark"`, 或 `"auto"`（跟随系统偏好）。                                                                                                            |
+| `theme`       | `"light" \| "dark" \| "auto"` | `"light"`        | UI 主题偏好。可设置为 `"light"`, `"dark"`, 或 `"auto"`（跟随系统偏好）。**响应式** —— 可通过 `sdkConfig.theme` 运行时动态修改。                                                      |
 | `model`       | `ModelConfig`                 | `undefined`      | LLM 模型配置。控制聊天请求使用的模型和参数。详见下方[模型配置](#模型配置)。                                                                                                         |
 | `shadowDOM`   | `boolean`                     | `true`           | 为 `true` 时，组件在 Shadow DOM 内渲染，实现完全的 CSS 隔离——你的应用样式不会影响组件，组件样式也不会影响你的应用。设为 `false` 可用于调试，但要注意样式可能会互相影响。            |
 | `suggestions` | `SuggestionItem[]`            | `undefined`      | 自定义欢迎页建议问题。每个条目包含 `label`（按钮显示文本）和可选的 `text`（点击时实际发送的消息）。设置后会完全替换默认的建议问题。如果省略 `text`，则 `label` 同时用于显示和发送。 |
@@ -216,6 +216,38 @@ OceanMCPSDK.mount({
 ```
 
 这在你希望建议按钮显示简短、用户友好的标签，同时在幕后向 AI 发送更详细或结构化的提示时非常有用。
+
+### 运行时动态变更配置
+
+`theme` 和 `locale` 选项是**响应式**的——挂载后可以随时修改，聊天组件会立即更新，无需重新挂载。
+
+```ts
+// 初始挂载
+OceanMCPSDK.mount({ root: "#chat", locale: "en-US", theme: "light" });
+
+// 之后：切换为中文 —— 整个 UI 立即更新
+sdkConfig.locale = "zh-CN";
+
+// 之后：切换为暗黑模式 —— 组件主题立即变化
+sdkConfig.theme = "dark";
+
+// 切换为跟随系统偏好模式
+sdkConfig.theme = "auto";
+```
+
+要访问 `sdkConfig`，可以从 SDK 模块导入或使用全局引用：
+
+```ts
+// ES Module
+import { sdkConfig } from "@ocean-mcp/frontend-sdk";
+
+// 或者通过全局 SDK（UMD 方式）
+// sdkConfig 作为内部 API 的一部分暴露
+```
+
+底层原理：修改 `theme` 或 `locale` 时，setter 会在 `window` 上派发自定义事件（`ocean-mcp:theme-change` / `ocean-mcp:locale-change`）。聊天组件监听这些事件并自动重渲染。即使 SDK 运行在 Shadow DOM 中存在独立模块实例的情况下，这种跨实例通信机制也能正常工作。
+
+> **注意：** 其他挂载选项（如 `avatar`、`welcomeTitle`、`welcomeDescription`、`suggestions`）目前仅在挂载时读取。挂载后修改 `sdkConfig` 上的这些属性不会更新 UI，直到下一次挂载。`model` 选项会在下一次聊天请求时生效，因为它是延迟读取的。
 
 ---
 

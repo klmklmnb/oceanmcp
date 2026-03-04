@@ -35,6 +35,7 @@ export type SDKConfig = {
   theme?: Theme;
 };
 
+export const LOCALE_CHANGE_EVENT = "ocean-mcp:locale-change";
 export const THEME_CHANGE_EVENT = "ocean-mcp:theme-change";
 
 export function resolveTheme(theme: Theme | undefined): "light" | "dark" {
@@ -54,7 +55,11 @@ export const sdkConfig = {
   },
 
   set locale(value: SupportedLocale | undefined) {
+    const prev = config.locale;
     config.locale = value;
+    if (prev !== value && typeof window !== "undefined") {
+      window.dispatchEvent(new CustomEvent(LOCALE_CHANGE_EVENT, { detail: value }));
+    }
   },
 
   get avatar(): string | undefined {

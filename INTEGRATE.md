@@ -147,9 +147,9 @@ OceanMCPSDK.mount({
 | Option        | Type                          | Default                   | Description                                                                                                                                                                                                                                                                                       |
 | ------------- | ----------------------------- | ------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `root`        | `string \| HTMLElement`       | Auto-created floating div | Where to render the widget. If omitted, creates a `420x600px` floating overlay. If `#ocean-mcp-root` exists in the DOM, it will be used automatically.                                                                                                                                            |
-| `locale`      | `"zh-CN" \| "en-US"`          | `undefined`               | UI language. When set to `zh-CN`, skill and tool names will display their `cnName` if available.                                                                                                                                                                                                  |
+| `locale`      | `"zh-CN" \| "en-US"`          | `undefined`               | UI language. When set to `zh-CN`, skill and tool names will display their `cnName` if available. **Reactive** — can be changed at runtime via `sdkConfig.locale`.                                                                                                                                 |
 | `avatar`      | `string`                      | `undefined`               | URL for the AI assistant's avatar image in the chat.                                                                                                                                                                                                                                              |
-| `theme`       | `"light" \| "dark" \| "auto"` | `"light"`                 | UI Theme preference. Set to `"light"`, `"dark"`, or `"auto"` (follows system preference).                                                                                                                                                                                                         |
+| `theme`       | `"light" \| "dark" \| "auto"` | `"light"`                 | UI Theme preference. Set to `"light"`, `"dark"`, or `"auto"` (follows system preference). **Reactive** — can be changed at runtime via `sdkConfig.theme`.                                                                                                                                         |
 | `model`       | `ModelConfig`                 | `undefined`               | LLM model configuration. Controls which model and parameters are used for chat requests. See [Model Configuration](#model-configuration) below.                                                                                                                                                   |
 | `shadowDOM`   | `boolean`                     | `true`                    | When `true`, the widget renders inside a Shadow DOM for full CSS isolation — your app's styles won't affect the widget and vice versa. Set to `false` for debugging or in environments where Shadow DOM causes issues.                                                                            |
 | `suggestions` | `SuggestionItem[]`            | `undefined`               | Custom suggestion questions displayed on the welcome screen. Each item has a `label` (button display text) and an optional `text` (the message sent when clicked). When provided, replaces the default suggestions entirely. If `text` is omitted, `label` is used as both display and send text. |
@@ -227,6 +227,38 @@ OceanMCPSDK.mount({
 ```
 
 This is useful when you want the suggestion buttons to show short, user-friendly labels while sending more detailed or structured prompts to the AI behind the scenes.
+
+### Runtime Configuration Changes
+
+The `theme` and `locale` options are **reactive** — you can change them at any time after mounting, and the chat widget will update immediately without needing to re-mount.
+
+```ts
+// Initial mount
+OceanMCPSDK.mount({ root: "#chat", locale: "en-US", theme: "light" });
+
+// Later: switch to Chinese — the entire UI updates instantly
+sdkConfig.locale = "zh-CN";
+
+// Later: switch to dark mode — the widget theme changes instantly
+sdkConfig.theme = "dark";
+
+// Switch to system-preference-following mode
+sdkConfig.theme = "auto";
+```
+
+To access `sdkConfig`, import it from the SDK module or use the global reference:
+
+```ts
+// ES Module
+import { sdkConfig } from "@ocean-mcp/frontend-sdk";
+
+// Or via the global SDK (UMD)
+// sdkConfig is exposed as part of the internal API
+```
+
+Under the hood, changing `theme` or `locale` dispatches a custom event (`ocean-mcp:theme-change` / `ocean-mcp:locale-change`) on `window`. The chat widget listens for these events and re-renders automatically. This means the update works even when the SDK runs inside a Shadow DOM with a separate module instance.
+
+> **Note:** Other mount options (such as `avatar`, `welcomeTitle`, `welcomeDescription`, `suggestions`) are currently read only at mount time. Changing them on `sdkConfig` after mounting will not update the UI until the next mount. The `model` option takes effect on the next chat request since it is read lazily.
 
 ---
 
