@@ -80,9 +80,7 @@ async function downloadAndExtract(url: string): Promise<string> {
   // ── 1. Fetch the zip ────────────────────────────────────────────────
   const response = await fetch(url);
   if (!response.ok) {
-    throw new Error(
-      `Failed to download skill zip: HTTP ${response.status} from ${url}`,
-    );
+    throw new Error(`Failed to download skill zip: HTTP ${response.status} from ${url}`);
   }
 
   const zipBuffer = await response.arrayBuffer();
@@ -98,19 +96,14 @@ async function downloadAndExtract(url: string): Promise<string> {
   // ── 3. Extract using system `unzip` ─────────────────────────────────
   const proc = Bun.spawn(["unzip", "-o", "-q", zipPath, "-d", extractDir], {
     stdout: "pipe",
-    stderr: "pipe",
+    stderr: "pipe"
   });
 
-  const [, stderr] = await Promise.all([
-    new Response(proc.stdout).text(),
-    new Response(proc.stderr).text(),
-  ]);
+  const [, stderr] = await Promise.all([new Response(proc.stdout).text(), new Response(proc.stderr).text()]);
 
   const exitCode = await proc.exited;
   if (exitCode !== 0) {
-    throw new Error(
-      `Failed to extract skill zip (exit code ${exitCode}): ${stderr.trim() || "unknown error"}`,
-    );
+    throw new Error(`Failed to extract skill zip (exit code ${exitCode}): ${stderr.trim() || "unknown error"}`);
   }
 
   // ── 4. Delete the zip file — no longer needed after extraction ──────
@@ -153,10 +146,7 @@ async function downloadAndExtract(url: string): Promise<string> {
  * // extractDir = '/tmp/ocean-mcp-skills/<uuid>'
  * ```
  */
-export async function loadSkillsFromZip(
-  sandbox: Sandbox,
-  url: string,
-): Promise<ZipLoadResult> {
+export async function loadSkillsFromZip(sandbox: Sandbox, url: string): Promise<ZipLoadResult> {
   const extractDir = await downloadAndExtract(url);
 
   // ── Check for root-level SKILL.md ─────────────────────────────────
@@ -172,7 +162,7 @@ export async function loadSkillsFromZip(
     const skill: DiscoveredSkill = {
       name: frontmatter.name,
       description: frontmatter.description,
-      path: extractDir,
+      path: extractDir
     };
 
     return { skills: [skill], extractDir };
@@ -186,7 +176,7 @@ export async function loadSkillsFromZip(
   if (skills.length === 0) {
     throw new Error(
       `No skills found in zip from ${url}. ` +
-        `Expected either a root-level SKILL.md or subdirectories containing SKILL.md files.`,
+        `Expected either a root-level SKILL.md or subdirectories containing SKILL.md files.`
     );
   }
 

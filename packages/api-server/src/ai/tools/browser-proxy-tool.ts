@@ -108,7 +108,14 @@ export function createBrowserExecuteTool(connectionId?: string) {
 
       // Check operationType — block write functions unless autoApprove is set
       const toolSchemas = connectionManager.getToolSchemas(connectionId);
-      const schema = toolSchemas.find((s) => s.id === functionId);
+      let schema = toolSchemas.find((s) => s.id === functionId);
+      if (!schema) {
+        const skillSchemas = connectionManager.getSkillSchemas(connectionId);
+        for (const skill of skillSchemas) {
+          schema = skill.tools?.find((t) => t.id === functionId);
+          if (schema) break;
+        }
+      }
       if (
         schema &&
         schema.operationType === OPERATION_TYPE.WRITE &&
