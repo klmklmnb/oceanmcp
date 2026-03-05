@@ -1,8 +1,8 @@
 import type { ModelConfig } from "@ocean-mcp/shared";
 
-export type SupportedLocale = "zh-CN" | "en-US";
-
-const VALID_LOCALES: ReadonlySet<string> = new Set<SupportedLocale>(["zh-CN", "en-US"]);
+const LOCALES = ["zh-CN", "en-US"] as const;
+export type SupportedLocale = (typeof LOCALES)[number];
+const VALID_LOCALES: ReadonlySet<string> = new Set(LOCALES);
 
 export const THEME = {
   LIGHT: "light",
@@ -12,7 +12,7 @@ export const THEME = {
 
 export type Theme = (typeof THEME)[keyof typeof THEME];
 
-const VALID_THEMES: ReadonlySet<string> = new Set<Theme>([THEME.LIGHT, THEME.DARK, THEME.AUTO]);
+const VALID_THEMES: ReadonlySet<string> = new Set(Object.values(THEME));
 
 /**
  * A suggestion question shown on the chat welcome screen.
