@@ -25,4 +25,17 @@ export {
 } from "./discover";
 export type { DiscoveredSkill } from "./discover";
 export { buildSkillsPrompt, createLoadSkillTool } from "./loader";
-export { loadSkillsFromZip, type ZipLoadResult } from "./zip-loader";
+export {
+  loadSkillsFromZip,
+  clearZipCache,
+  parseCacheControl,
+  computeDirSize,
+  loadCacheManifest,
+  saveCacheManifest,
+  evictIfNeeded,
+  ZIP_SKILLS_BASE,
+  type ZipLoadResult,
+  type ZipCacheEntry,
+  type ZipCacheManifest,
+  type CacheControlDirectives,
+} from "./zip-loader";

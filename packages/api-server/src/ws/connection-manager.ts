@@ -7,7 +7,6 @@ import {
   type FunctionSchema,
   type SkillSchema,
 } from "@ocean-mcp/shared";
-import { rm } from "fs/promises";
 import type { DiscoveredSkill } from "../ai/skills/discover";
 
 type PendingRequest = {
@@ -108,8 +107,12 @@ class ConnectionManager {
    * Register zip-loaded skills for a connection, keyed by the source URL.
    *
    * If the same URL was previously registered on this connection, the old
-   * entry's extraction directory is cleaned up (rm -rf) and its skills are
-   * replaced with the new ones. Skills from other URLs are untouched.
+   * entry's skills are replaced with the new ones. Skills from other URLs
+   * are untouched.
+   *
+   * NOTE: Extraction directories are NOT deleted here — they are managed
+   * by the zip-loader disk cache (FIFO eviction by total size). This
+   * allows cached extractions to be reused across sessions/connections.
    *
    * @param connectionId - The WS connection that owns these skills
    * @param url - The CDN URL the zip was downloaded from (used as the key)
@@ -128,15 +131,8 @@ class ConnectionManager {
       this.zipSkillsByUrl.set(connectionId, urlMap);
     }
 
-    // If this URL was previously registered, clean up old extraction dir
     const existing = urlMap.get(url);
     if (existing) {
-      rm(existing.extractDir, { recursive: true, force: true }).catch((err) =>
-        console.error(
-          `[WS] Failed to clean up replaced zip skill dir: ${existing.extractDir}`,
-          err,
-        ),
-      );
       console.log(
         `[WS] Replacing zip skills for URL: ${url} (connection ${connectionId})`,
       );
@@ -171,24 +167,19 @@ class ConnectionManager {
   }
 
   /**
-   * Clean up all zip skill extraction directories for a connection.
-   * Called on disconnect to free temp disk space.
+   * Remove per-connection zip skill references on disconnect.
+   *
+   * NOTE: Extraction directories are NOT deleted — they are managed by the
+   * zip-loader disk cache and may be reused by future connections. The
+   * cache handles eviction based on total disk size (FIFO).
    */
   private cleanupAllZipSkills(connectionId: string): void {
     const urlMap = this.zipSkillsByUrl.get(connectionId);
     if (!urlMap) return;
 
-    for (const [url, entry] of urlMap.entries()) {
-      rm(entry.extractDir, { recursive: true, force: true }).catch((err) =>
-        console.error(
-          `[WS] Failed to clean up zip skill dir on disconnect: ${entry.extractDir}`,
-          err,
-        ),
-      );
-    }
     this.zipSkillsByUrl.delete(connectionId);
     console.log(
-      `[WS] Cleaned up ${urlMap.size} zip skill set(s) for disconnected connection ${connectionId}`,
+      `[WS] Released ${urlMap.size} zip skill set(s) for disconnected connection ${connectionId}`,
     );
   }
 
