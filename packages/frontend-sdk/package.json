@@ -1,8 +1,29 @@
 {
   "name": "@ocean-mcp/frontend-sdk",
-  "version": "0.1.0",
-  "private": true,
+  "version": "0.1.6",
   "type": "module",
+  "main": "./dist/sdk.umd.js",
+  "module": "./dist/sdk.esm.js",
+  "types": "./dist/sdk.esm.d.ts",
+  "exports": {
+    ".": {
+      "import": {
+        "types": "./dist/sdk.esm.d.ts",
+        "default": "./dist/sdk.esm.js"
+      },
+      "require": {
+        "types": "./dist/sdk.umd.d.ts",
+        "default": "./dist/sdk.umd.js"
+      }
+    },
+    "./sdk.umd": {
+      "types": "./dist/sdk.umd.d.ts"
+    }
+  },
+  "files": [
+    "dist/",
+    "sdk.umd.d.ts"
+  ],
   "scripts": {
     "dev": "vite --port 3000 --host",
     "build": "vite build && vite build --config vite.config.lib.ts && vite build --config vite.config.umd.ts",
@@ -12,7 +33,8 @@
     "build:watch": "vite build --watch",
     "serve:local": "bun run build:watch & bun run serve:dist",
     "serve:dist": "bunx serve dist -l 3001 --cors --no-clipboard",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "prepublishOnly": "bun run build"
   },
   "dependencies": {
     "@ai-sdk/react": "3.0.39",
@@ -32,6 +54,7 @@
     "tailwindcss": "^4.1.13",
     "typescript": "^5.6.3",
     "vite": "^6.1.0",
-    "vite-plugin-css-injected-by-js": "^4.0.1"
+    "vite-plugin-css-injected-by-js": "^4.0.1",
+    "vite-plugin-dts": "^4.5.4"
   }
 }

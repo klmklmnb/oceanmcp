@@ -2,13 +2,26 @@ import { resolve } from "path";
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 import tailwindcss from "@tailwindcss/vite";
+import dts from "vite-plugin-dts";
 
 /**
  * ESM library build for direct module import:
  *   import OceanMCPSDK from "./lib/ocean-mcp/sdk.esm.js"
+ *
+ * Also generates a bundled `sdk.esm.d.ts` declaration file so ESM
+ * consumers get full TypeScript support out of the box.
  */
 export default defineConfig({
-  plugins: [react(), tailwindcss()],
+  plugins: [
+    react(),
+    tailwindcss(),
+    dts({
+      rollupTypes: true,
+      tsconfigPath: resolve(__dirname, "tsconfig.json"),
+      include: ["src/**/*"],
+      exclude: ["src/**/*.test.*", "src/**/*.spec.*"],
+    }),
+  ],
   build: {
     cssCodeSplit: false,
     cssMinify: true,

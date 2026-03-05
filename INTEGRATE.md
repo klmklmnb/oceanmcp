@@ -25,6 +25,9 @@ This guide walks you through integrating the OceanMCP frontend SDK into your own
 - [Advanced Usage](#advanced-usage)
 - [API Reference](#api-reference)
 - [Type Reference](#type-reference)
+- [TypeScript Support](#typescript-support)
+  - [ESM (Bundler Projects)](#esm-bundler-projects)
+  - [UMD (Script Tag Projects)](#umd-script-tag-projects)
 - [FAQ](#faq)
 
 ---
@@ -79,7 +82,7 @@ The UMD build (`sdk.umd.js`) is a single self-contained file — CSS is embedded
 
 ### 2. ES Module Import
 
-Best for: modern apps using Vite, Webpack, or other bundlers.
+Best for: modern apps using Vite, Webpack, or other bundlers. TypeScript types are included automatically — see [TypeScript Support](#typescript-support).
 
 ```html
 <script type="module">
@@ -753,6 +756,88 @@ interface SuggestionItem {
   label: string; // Text displayed on the suggestion button
   text?: string; // Message sent to the AI when clicked (defaults to label if omitted)
 }
+```
+
+---
+
+## TypeScript Support
+
+The SDK ships with built-in TypeScript declarations — no `@types/` package needed.
+
+### ESM (Bundler Projects)
+
+If you import the SDK as an ES module, TypeScript picks up types automatically via the `types` field in `package.json`:
+
+```ts
+import OceanMCPSDK from "@ocean-mcp/frontend-sdk";
+
+// Full IntelliSense — mount options, tool definitions, etc.
+OceanMCPSDK.mount({ locale: "zh-CN", theme: "dark" });
+OceanMCPSDK.registerTool({
+  id: "getOrders",
+  name: "Get Orders",
+  description: "Fetch orders",
+  operationType: "read",
+  executor: async () => fetch("/api/orders").then((r) => r.json()),
+  parameters: [],
+});
+```
+
+You can also import individual types for use in your own code:
+
+```ts
+import type {
+  MountOptions,
+  FunctionDefinition,
+  SkillDefinition,
+  ParameterDefinition,
+  UploadResult,
+  ModelConfig,
+} from "@ocean-mcp/frontend-sdk";
+
+const myTool: FunctionDefinition = {
+  id: "myTool",
+  name: "My Tool",
+  description: "Does things",
+  type: "executor",
+  operationType: "read",
+  executor: async (args) => ({ result: args.input }),
+  parameters: [
+    { name: "input", type: "string", description: "Input value", required: true },
+  ],
+};
+```
+
+> **Note:** The ESM `.d.ts` imports types from `@ocean-mcp/shared`. If you install `@ocean-mcp/frontend-sdk` via npm/pnpm, the shared package is pulled in as a dependency automatically — no extra steps needed.
+
+### UMD (Script Tag Projects)
+
+When loading the SDK via a `<script>` tag, `OceanMCPSDK` is attached to `window`. To get type safety for the global variable, add a triple-slash reference in any `.ts` or `.d.ts` file (e.g., your project's `typings.d.ts`):
+
+```ts
+/// <reference types="@ocean-mcp/frontend-sdk/sdk.umd" />
+
+// Now TypeScript knows about the global `OceanMCPSDK`
+OceanMCPSDK.mount(); // ✓ typed
+window.OceanMCPSDK.registerTool({ ... }); // ✓ typed
+```
+
+Or add it to your `tsconfig.json`:
+
+```jsonc
+{
+  "compilerOptions": {
+    "types": ["@ocean-mcp/frontend-sdk/sdk.umd"]
+  }
+}
+```
+
+
+The UMD declaration file also re-exports all public types, so you can reference them in JSDoc or type annotations without an ESM import:
+
+```ts
+/** @type {import("@ocean-mcp/frontend-sdk/sdk.umd").MountOptions} */
+const options = { locale: "en-US", theme: "auto" };
 ```
 
 ---

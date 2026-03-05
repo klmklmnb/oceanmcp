@@ -2,14 +2,12 @@ import React from "react";
 import { createRoot } from "react-dom/client";
 import { ChatWidget } from "./components/ChatWidget";
 import { functionRegistry, skillRegistry } from "./registry";
-import type { SkillDefinition } from "./registry";
 import { wsClient } from "./runtime/ws-client";
-import { FUNCTION_TYPE, OPERATION_TYPE, type FunctionDefinition } from "@ocean-mcp/shared";
+import { FUNCTION_TYPE, OPERATION_TYPE } from "@ocean-mcp/shared";
 import { baseFunctions } from "./registry/base/baseFunctions";
 import { chatBridge } from "./runtime/chat-bridge";
-import { uploadRegistry, type UploadHandler } from "./runtime/upload-registry";
-import { sdkConfig, type SupportedLocale, type SuggestionItem, type Theme } from "./runtime/sdk-config";
-import type { ModelConfig } from "@ocean-mcp/shared";
+import { uploadRegistry } from "./runtime/upload-registry";
+import { sdkConfig } from "./runtime/sdk-config";
 import {
   createShadowHost,
   injectStyles,
@@ -17,6 +15,13 @@ import {
   patchCssForShadowDom,
   hoistPropertyRulesToDocument
 } from "./shadow-dom";
+
+// ─── Public types (single source of truth) ───────────────────────────────────
+import type {
+  OceanMCPSDKType,
+  MountTarget,
+  MountOptions,
+} from "./types";
 
 // Import CSS as a raw string (Vite `?inline` suffix) so we can inject it
 // into the Shadow DOM instead of the document <head>.
@@ -34,93 +39,7 @@ for (const fn of baseFunctions) {
 wsClient.connect();
 
 // ─── Mount the Chat Widget ──────────────────────────────────────────────────
-type MountTarget = string | HTMLElement;
-
-type MountOptions = {
-  root?: MountTarget;
-  locale?: SupportedLocale;
-  avatar?: string;
-  welcomeTitle?: string;
-  welcomeDescription?: string;
-  /**
-   * LLM model configuration for chat requests.
-   *
-   * When set, the config is sent in every `/api/chat` request, allowing the
-   * host app to control which models and parameters are used. Any field
-   * omitted here falls back to the api-server's `LLM_*` environment
-   * variables, then to built-in defaults.
-   *
-   * @example
-   * ```ts
-   * // Use a specific model with token limit
-   * OceanMCPSDK.mount({
-   *   model: { default: "gpt-4o", fast: "gpt-4o-mini", maxTokens: 8192 },
-   * });
-   *
-   * // Only override the default model
-   * OceanMCPSDK.mount({ model: { default: "claude-sonnet-4-20250514" } });
-   *
-   * // Claude with custom thinking budget (tokens)
-   * OceanMCPSDK.mount({
-   *   model: { default: "mihoyo.claude-4-6-opus", thinkingBudget: 20480 },
-   * });
-   *
-   * // OpenAI with reasoning effort
-   * OceanMCPSDK.mount({
-   *   model: { default: "gpt-5.1", reasoningEffort: "high" },
-   * });
-   *
-   * // GLM with explicit thinking toggle
-   * OceanMCPSDK.mount({
-   *   model: { default: "mihoyo-glm-4.6", glmThinking: true },
-   * });
-   * ```
-   */
-  model?: ModelConfig;
-  /**
-   * Whether to render the SDK inside a Shadow DOM for full style isolation.
-   *
-   * - `true` (default): The widget renders inside a shadow root. Host-page
-   *   styles cannot leak in and SDK styles cannot leak out. Tailwind v4
-   *   `@property` rules are automatically patched for compatibility.
-   * - `false`: The widget renders directly in the light DOM. Useful for
-   *   development, debugging, or environments where Shadow DOM causes issues
-   *   (e.g. certain browser extensions or test frameworks). Note that SDK
-   *   styles **will** be injected into the document `<head>` and may
-   *   interact with host-page styles.
-   */
-  shadowDOM?: boolean;
-  /**
-   * Custom suggestion questions displayed on the chat welcome screen.
-   *
-   * Each item has a `label` (button display text) and an optional `text`
-   * (the message actually sent when clicked). If `text` is omitted, `label`
-   * is used as both display and send text.
-   *
-   * When provided, these suggestions **replace** the default i18n
-   * suggestions entirely. If not provided, the built-in default suggestions
-   * are shown.
-   *
-   * @example
-   * ```ts
-   * OceanMCPSDK.mount({
-   *   suggestions: [
-   *     { label: "What's on this page?", text: "Analyze the current page content in detail" },
-   *     { label: "Help me debug", text: "Look at the console errors and help me fix them" },
-   *     { label: "What can you do?" }, // text omitted → sends "What can you do?"
-   *   ],
-   * });
-   * ```
-   */
-  suggestions?: SuggestionItem[];
-  /**
-   * UI Theme preference: "light", "dark", or "auto".
-   * - `light` (default): Uses light mode.
-   * - `dark`: Uses dark mode.
-   * - `auto`: Follows the user's operating system preferences via `prefers-color-scheme`.
-   */
-  theme?: Theme;
-};
+// MountTarget and MountOptions are defined in src/types.ts (single source of truth).
 
 /** Cleanup function returned by the Monaco style observer. */
 let _cleanupMonacoObserver: (() => void) | null = null;
@@ -245,20 +164,20 @@ function mountOceanMCP(target?: MountTarget | MountOptions) {
 }
 
 // ─── Expose Global SDK API ───────────────────────────────────────────────────
-const OceanMCPSDK = {
+const sdk: OceanMCPSDKType = {
   /** Reactive locale — proxied to sdkConfig so the setter dispatches change events. */
-  get locale(): SupportedLocale | undefined {
+  get locale() {
     return sdkConfig.locale;
   },
-  set locale(value: SupportedLocale | undefined) {
+  set locale(value) {
     sdkConfig.locale = value;
   },
 
   /** Reactive theme — proxied to sdkConfig so the setter dispatches change events. */
-  get theme(): Theme | undefined {
+  get theme() {
     return sdkConfig.theme;
   },
-  set theme(value: Theme | undefined) {
+  set theme(value) {
     sdkConfig.theme = value;
   },
 
@@ -284,7 +203,7 @@ const OceanMCPSDK = {
    * });
    * ```
    */
-  registerSkill(definition: SkillDefinition) {
+  registerSkill(definition) {
     skillRegistry.register(definition);
 
     // Also register bundled tools into the function registry for browser-side execution
@@ -360,15 +279,15 @@ const OceanMCPSDK = {
    * Register a standalone tool dynamically from the host application.
    * Supports both 'code' and 'executor' type definitions.
    */
-  registerTool(definition: Partial<FunctionDefinition> & { id: string }) {
-    const fn: FunctionDefinition = {
+  registerTool(definition) {
+    const fn = {
       type: FUNCTION_TYPE.EXECUTOR,
       operationType: OPERATION_TYPE.READ,
       parameters: [],
       name: definition.id,
       description: "",
       ...definition
-    } as FunctionDefinition;
+    } as import("@ocean-mcp/shared").FunctionDefinition;
 
     functionRegistry.register(fn);
 
@@ -466,7 +385,7 @@ const OceanMCPSDK = {
    * });
    * ```
    */
-  registerUploader(handler: UploadHandler) {
+  registerUploader(handler) {
     uploadRegistry.register(handler);
     console.log("[OceanMCP] Upload handler registered");
     return () => this.unregisterUploader();
@@ -532,10 +451,37 @@ const OceanMCPSDK = {
 
 // Attach to window
 if (typeof window !== "undefined") {
-  (window as any).OceanMCPSDK = OceanMCPSDK;
+  (window as any).OceanMCPSDK = sdk;
 }
 
 // In production/SDK usage, call OceanMCPSDK.mount() explicitly
 
-export default OceanMCPSDK;
-export type { SuggestionItem };
+export default sdk;
+
+// Re-export all public types from the single source of truth.
+// ESM consumers can do: import type { MountOptions, SkillDefinition } from "./sdk.esm.js"
+export type {
+  OceanMCPSDKType,
+  MountTarget,
+  MountOptions,
+  ModelConfig,
+  FunctionDefinition,
+  CodeFunctionDefinition,
+  ExecutorFunctionDefinition,
+  BaseFunctionDefinition,
+  ParameterDefinition,
+  ColumnConfig,
+  FunctionSchema,
+  FileAttachment,
+  FlowPlan,
+  FlowStep,
+  FunctionType,
+  OperationType,
+  ParameterType,
+  SkillDefinition,
+  UploadHandler,
+  UploadResult,
+  SupportedLocale,
+  SuggestionItem,
+  Theme,
+} from "./types";
