@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef, useCallback } from "react";
 import OceanMCPSDK from "../main";
 import { sdkConfig, THEME, type SupportedLocale, type Theme } from "../runtime/sdk-config";
 
@@ -88,6 +88,142 @@ export function TestPanel() {
     () => window.matchMedia?.("(prefers-color-scheme: dark)").matches ?? false,
   );
 
+  // ---- Drag-and-drop state for the toggle button ----
+  const BUTTON_SIZE = 36;
+  const EDGE_MARGIN = 16;
+
+  const [btnPos, setBtnPos] = useState<{ x: number; y: number }>({
+    x: window.innerWidth - BUTTON_SIZE - EDGE_MARGIN,
+    y: EDGE_MARGIN,
+  });
+  const draggingRef = useRef(false);
+  const hasDraggedRef = useRef(false);
+  const dragOffsetRef = useRef({ x: 0, y: 0 });
+  const btnRef = useRef<HTMLButtonElement>(null);
+
+  /** Snap the button position to the nearest window edge (left/right/top/bottom). */
+  const snapToEdge = useCallback(
+    (x: number, y: number): { x: number; y: number } => {
+      const vw = window.innerWidth;
+      const vh = window.innerHeight;
+      const cx = x + BUTTON_SIZE / 2;
+      const cy = y + BUTTON_SIZE / 2;
+
+      // Distances to each edge
+      const dLeft = cx;
+      const dRight = vw - cx;
+      const dTop = cy;
+      const dBottom = vh - cy;
+      const minDist = Math.min(dLeft, dRight, dTop, dBottom);
+
+      // Clamp helpers
+      const clampX = (v: number) =>
+        Math.max(EDGE_MARGIN, Math.min(v, vw - BUTTON_SIZE - EDGE_MARGIN));
+      const clampY = (v: number) =>
+        Math.max(EDGE_MARGIN, Math.min(v, vh - BUTTON_SIZE - EDGE_MARGIN));
+
+      if (minDist === dLeft) return { x: EDGE_MARGIN, y: clampY(y) };
+      if (minDist === dRight) return { x: vw - BUTTON_SIZE - EDGE_MARGIN, y: clampY(y) };
+      if (minDist === dTop) return { x: clampX(x), y: EDGE_MARGIN };
+      return { x: clampX(x), y: vh - BUTTON_SIZE - EDGE_MARGIN };
+    },
+    [],
+  );
+
+  const handlePointerDown = useCallback(
+    (e: React.PointerEvent<HTMLButtonElement>) => {
+      draggingRef.current = true;
+      hasDraggedRef.current = false;
+      dragOffsetRef.current = {
+        x: e.clientX - btnPos.x,
+        y: e.clientY - btnPos.y,
+      };
+      (e.target as HTMLElement).setPointerCapture(e.pointerId);
+    },
+    [btnPos],
+  );
+
+  const handlePointerMove = useCallback(
+    (e: React.PointerEvent<HTMLButtonElement>) => {
+      if (!draggingRef.current) return;
+      hasDraggedRef.current = true;
+      const newX = e.clientX - dragOffsetRef.current.x;
+      const newY = e.clientY - dragOffsetRef.current.y;
+      setBtnPos({ x: newX, y: newY });
+    },
+    [],
+  );
+
+  const handlePointerUp = useCallback(
+    (e: React.PointerEvent<HTMLButtonElement>) => {
+      if (!draggingRef.current) return;
+      draggingRef.current = false;
+      (e.target as HTMLElement).releasePointerCapture(e.pointerId);
+
+      // Snap to nearest edge with a smooth transition
+      const snapped = snapToEdge(btnPos.x, btnPos.y);
+      setBtnPos(snapped);
+    },
+    [btnPos, snapToEdge],
+  );
+
+  const handleClick = useCallback(() => {
+    // Only toggle if the user didn't drag
+    if (!hasDraggedRef.current) {
+      setOpen((v) => !v);
+    }
+  }, []);
+
+  // Keep the button within bounds when the window resizes
+  useEffect(() => {
+    const onResize = () => {
+      setBtnPos((prev) => snapToEdge(prev.x, prev.y));
+    };
+    window.addEventListener("resize", onResize);
+    return () => window.removeEventListener("resize", onResize);
+  }, [snapToEdge]);
+
+  // ---- Compute panel position relative to toggle button ----
+  const computePanelStyle = (): React.CSSProperties => {
+    const vw = window.innerWidth;
+    const vh = window.innerHeight;
+    const panelWidth = 320;
+    const panelGap = 8;
+
+    // Decide horizontal placement: open toward center
+    let left: number;
+    if (btnPos.x + BUTTON_SIZE / 2 < vw / 2) {
+      // Button is on left half -> panel to the right
+      left = btnPos.x;
+    } else {
+      // Button is on right half -> panel to the left
+      left = btnPos.x + BUTTON_SIZE - panelWidth;
+    }
+    // Clamp so panel stays on-screen
+    left = Math.max(EDGE_MARGIN, Math.min(left, vw - panelWidth - EDGE_MARGIN));
+
+    // Decide vertical placement: below or above the button
+    let top = btnPos.y + BUTTON_SIZE + panelGap;
+    const maxPanelH = vh - 80;
+    if (top + maxPanelH > vh - EDGE_MARGIN) {
+      // Not enough room below → try above
+      top = btnPos.y - panelGap - Math.min(maxPanelH, btnPos.y - EDGE_MARGIN);
+      if (top < EDGE_MARGIN) top = EDGE_MARGIN;
+    }
+
+    return {
+      position: "fixed",
+      top,
+      left,
+      zIndex: 100000,
+      width: panelWidth,
+      padding: 20,
+      borderRadius: 14,
+      maxHeight: `calc(100vh - ${top + EDGE_MARGIN}px)`,
+      overflow: "auto",
+    };
+  };
+
   const isDark =
     theme === THEME.DARK || (theme === THEME.AUTO && systemDark);
   const c = isDark ? darkColors : lightColors;
@@ -123,26 +259,32 @@ export function TestPanel() {
 
   return (
     <>
-      {/* Toggle button */}
+      {/* Toggle button – draggable, snaps to nearest edge */}
       <button
-        onClick={() => setOpen((v) => !v)}
+        ref={btnRef}
+        onClick={handleClick}
+        onPointerDown={handlePointerDown}
+        onPointerMove={handlePointerMove}
+        onPointerUp={handlePointerUp}
         style={{
           position: "fixed",
-          top: 16,
-          right: 16,
+          left: btnPos.x,
+          top: btnPos.y,
           zIndex: 100000,
-          width: 36,
-          height: 36,
+          width: BUTTON_SIZE,
+          height: BUTTON_SIZE,
           borderRadius: 10,
           border: "none",
           background: open ? "#ef4444" : "#3b82f6",
           color: "#fff",
-          cursor: "pointer",
+          cursor: draggingRef.current ? "grabbing" : "grab",
           display: "flex",
           alignItems: "center",
           justifyContent: "center",
           boxShadow: "0 2px 8px rgba(0,0,0,0.15)",
-          transition: "background 0.15s",
+          transition: draggingRef.current ? "none" : "left 0.3s ease, top 0.3s ease, background 0.15s",
+          touchAction: "none",
+          userSelect: "none",
         }}
         title="Toggle Test Panel"
       >
@@ -157,13 +299,7 @@ export function TestPanel() {
       {open && (
         <div
           style={{
-            position: "fixed",
-            top: 60,
-            right: 16,
-            zIndex: 100000,
-            width: 320,
-            padding: 20,
-            borderRadius: 14,
+            ...computePanelStyle(),
             background: c.bg,
             border: `1px solid ${c.border}`,
             boxShadow: c.shadow,
@@ -171,8 +307,6 @@ export function TestPanel() {
             flexDirection: "column",
             gap: 12,
             fontFamily: "system-ui, sans-serif",
-            maxHeight: "calc(100vh - 80px)",
-            overflow: "auto",
             transition: "background 0.2s, border-color 0.2s",
           }}
         >
