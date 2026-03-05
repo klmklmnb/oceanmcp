@@ -13,6 +13,7 @@ This guide walks you through integrating the OceanMCP frontend SDK into your own
   - [UMD Script Tag (Easiest)](#1-umd-script-tag-easiest)
   - [ES Module Import](#2-es-module-import)
 - [Mount Options](#mount-options)
+- [Server URL Configuration](#server-url-configuration)
 - [Registering Skills](#registering-skills)
 - [Registering Standalone Tools](#registering-standalone-tools)
   - [Executor Type (Recommended)](#executor-type-recommended)
@@ -262,6 +263,67 @@ import { sdkConfig } from "@ocean-mcp/frontend-sdk";
 Under the hood, changing `theme` or `locale` dispatches a custom event (`ocean-mcp:theme-change` / `ocean-mcp:locale-change`) on `window`. The chat widget listens for these events and re-renders automatically. This means the update works even when the SDK runs inside a Shadow DOM with a separate module instance.
 
 > **Note:** Other mount options (such as `avatar`, `welcomeTitle`, `welcomeDescription`, `suggestions`) are currently read only at mount time. Changing them on `sdkConfig` after mounting will not update the UI until the next mount. The `model` option takes effect on the next chat request since it is read lazily.
+
+---
+
+## Server URL Configuration
+
+By default, the SDK connects to the OceanMCP API server at `http://localhost:4000`. In production or staging environments, you need to point the SDK to your actual server.
+
+The server URL is resolved in the following order:
+
+1. **Runtime override** — `window.__OCEAN_MCP_SERVER_URL__` (highest priority)
+2. **Build-time env** — `VITE_API_URL` (baked in during the Vite build)
+3. **Fallback** — `http://localhost:4000`
+
+### Setting the Server URL at Runtime
+
+Set `window.__OCEAN_MCP_SERVER_URL__` **before** loading the SDK script. This is the recommended approach for host applications, since it doesn't require rebuilding the SDK:
+
+```html
+<script>
+  // Point the SDK to your OceanMCP API server (no trailing slash)
+  window.__OCEAN_MCP_SERVER_URL__ = "https://ocean-mcp-api.example.com";
+</script>
+
+<!-- Then load and mount the SDK -->
+<script src="https://your-cdn.com/ocean-mcp/sdk.umd.js"></script>
+<script>
+  OceanMCPSDK.mount();
+</script>
+```
+
+For ES Module usage:
+
+```html
+<script>
+  window.__OCEAN_MCP_SERVER_URL__ = "https://ocean-mcp-api.example.com";
+</script>
+<script type="module">
+  import OceanMCPSDK from "https://your-cdn.com/ocean-mcp/sdk.esm.js";
+  OceanMCPSDK.mount();
+</script>
+```
+
+### Setting the Server URL at Build Time
+
+If you are building the SDK from source (e.g., during development or a custom build), you can set the `VITE_API_URL` environment variable instead. This is typically done via `.env` files:
+
+```bash
+# .env.production
+VITE_API_URL=https://ocean-mcp-api.example.com
+
+# .env.development (default for local dev)
+VITE_API_URL=http://localhost:4000
+```
+
+The build-time value is baked into the bundle and used when no runtime override is present.
+
+### How It Works
+
+The SDK uses the resolved URL for both HTTP API requests (e.g., `/api/chat`) and WebSocket connections (the `http(s)://` scheme is automatically converted to `ws(s)://` for the `/connect` endpoint). This means a single URL configuration covers both communication channels.
+
+> **Important:** Always omit the trailing slash. For example, use `https://ocean-mcp-api.example.com` instead of `https://ocean-mcp-api.example.com/`.
 
 ---
 

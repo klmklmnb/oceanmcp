@@ -13,6 +13,7 @@ OceanMCP 是一个 **Browser-in-the-Loop**（浏览器参与的）AI 智能体 S
   - [UMD 脚本标签（最简单）](#1-umd-脚本标签最简单)
   - [ES Module 导入](#2-es-module-导入)
 - [挂载选项](#挂载选项)
+- [服务器地址配置](#服务器地址配置)
 - [注册技能（Skill）](#注册技能skill)
 - [注册独立工具（Tool）](#注册独立工具tool)
   - [Executor 类型（推荐）](#executor-类型推荐)
@@ -251,6 +252,67 @@ import { sdkConfig } from "@ocean-mcp/frontend-sdk";
 底层原理：修改 `theme` 或 `locale` 时，setter 会在 `window` 上派发自定义事件（`ocean-mcp:theme-change` / `ocean-mcp:locale-change`）。聊天组件监听这些事件并自动重渲染。即使 SDK 运行在 Shadow DOM 中存在独立模块实例的情况下，这种跨实例通信机制也能正常工作。
 
 > **注意：** 其他挂载选项（如 `avatar`、`welcomeTitle`、`welcomeDescription`、`suggestions`）目前仅在挂载时读取。挂载后修改 `sdkConfig` 上的这些属性不会更新 UI，直到下一次挂载。`model` 选项会在下一次聊天请求时生效，因为它是延迟读取的。
+
+---
+
+## 服务器地址配置
+
+默认情况下，SDK 连接到 `http://localhost:4000` 上的 OceanMCP API 服务器。在生产或测试环境中，你需要将 SDK 指向你实际部署的服务器地址。
+
+服务器地址按以下优先级解析：
+
+1. **运行时覆盖** — `window.__OCEAN_MCP_SERVER_URL__`（最高优先级）
+2. **构建时环境变量** — `VITE_API_URL`（Vite 构建时写入）
+3. **兜底默认值** — `http://localhost:4000`
+
+### 运行时设置服务器地址
+
+在加载 SDK 脚本**之前**设置 `window.__OCEAN_MCP_SERVER_URL__`。这是宿主应用推荐的方式，因为不需要重新构建 SDK：
+
+```html
+<script>
+  // 将 SDK 指向你的 OceanMCP API 服务器（不要带尾部斜杠）
+  window.__OCEAN_MCP_SERVER_URL__ = "https://ocean-mcp-api.example.com";
+</script>
+
+<!-- 然后加载并挂载 SDK -->
+<script src="https://your-cdn.com/ocean-mcp/sdk.umd.js"></script>
+<script>
+  OceanMCPSDK.mount();
+</script>
+```
+
+ES Module 方式：
+
+```html
+<script>
+  window.__OCEAN_MCP_SERVER_URL__ = "https://ocean-mcp-api.example.com";
+</script>
+<script type="module">
+  import OceanMCPSDK from "https://your-cdn.com/ocean-mcp/sdk.esm.js";
+  OceanMCPSDK.mount();
+</script>
+```
+
+### 构建时设置服务器地址
+
+如果你从源码构建 SDK（比如开发阶段或自定义构建），可以通过 `VITE_API_URL` 环境变量来设置。通常通过 `.env` 文件配置：
+
+```bash
+# .env.production
+VITE_API_URL=https://ocean-mcp-api.example.com
+
+# .env.development（本地开发默认值）
+VITE_API_URL=http://localhost:4000
+```
+
+构建时的值会写入到打包产物中，在没有运行时覆盖的情况下使用。
+
+### 工作原理
+
+SDK 使用解析后的地址进行 HTTP API 请求（如 `/api/chat`）和 WebSocket 连接（`http(s)://` 协议会自动转换为 `ws(s)://`，连接到 `/connect` 端点）。也就是说，只需配置一个 URL 就能同时覆盖两种通信方式。
+
+> **注意：** 地址末尾不要加斜杠。例如，使用 `https://ocean-mcp-api.example.com` 而不是 `https://ocean-mcp-api.example.com/`。
 
 ---
 
