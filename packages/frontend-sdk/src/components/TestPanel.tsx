@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback } from "react";
 import OceanMCPSDK from "../main";
-import { sdkConfig, THEME, type SupportedLocale, type Theme } from "../runtime/sdk-config";
+import { sdkConfig, THEME, resolveTheme, type SupportedLocale, type Theme } from "../runtime/sdk-config";
 
 const btnBase: React.CSSProperties = {
   padding: "8px 0",
@@ -83,7 +83,7 @@ export function TestPanel() {
   const [loading, setLoading] = useState<string | null>(null);
   const [result, setResult] = useState<string | null>(null);
   const [locale, setLocale] = useState<SupportedLocale | "">(sdkConfig.locale ?? "zh-CN");
-  const [theme, setTheme] = useState<Theme>(sdkConfig.theme ?? THEME.AUTO);
+  const [theme, setTheme] = useState<Theme | undefined>(sdkConfig.theme);
   const [systemDark, setSystemDark] = useState(
     () => window.matchMedia?.("(prefers-color-scheme: dark)").matches ?? false,
   );
@@ -224,8 +224,7 @@ export function TestPanel() {
     };
   };
 
-  const isDark =
-    theme === THEME.DARK || (theme === THEME.AUTO && systemDark);
+  const isDark = resolveTheme(theme) === THEME.DARK;
   const c = isDark ? darkColors : lightColors;
 
   useEffect(() => {
@@ -349,11 +348,12 @@ export function TestPanel() {
               <code style={{ background: c.codeBg, padding: "1px 4px", borderRadius: 3, fontSize: 10, color: c.label }}>theme</code> 主题切换
             </p>
             <div style={{ display: "flex", gap: 6 }}>
-              {([THEME.LIGHT, THEME.DARK, THEME.AUTO] as const).map((t) => {
+              {([undefined, THEME.LIGHT, THEME.DARK, THEME.AUTO] as const).map((t) => {
                 const selected = theme === t;
+                const label = t === undefined ? "🚫 undefined" : t === THEME.LIGHT ? "☀️ Light" : t === THEME.DARK ? "🌙 Dark" : "💻 Auto";
                 return (
                   <button
-                    key={t}
+                    key={t ?? "undefined"}
                     onClick={() => {
                       setTheme(t);
                       sdkConfig.theme = t;
@@ -371,7 +371,7 @@ export function TestPanel() {
                       transition: "all 0.15s",
                     }}
                   >
-                    {t === THEME.LIGHT ? "☀️ Light" : t === THEME.DARK ? "🌙 Dark" : "💻 Auto"}
+                    {label}
                   </button>
                 );
               })}

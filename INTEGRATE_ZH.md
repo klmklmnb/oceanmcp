@@ -148,7 +148,7 @@ OceanMCPSDK.mount({
 | `root`        | `string \| HTMLElement`       | 自动创建浮动 div | 组件渲染位置。如果不传，会创建一个 `420x600px` 的浮动窗口。如果页面中存在 `#ocean-mcp-root` 元素，会自动使用它。                                                                    |
 | `locale`      | `"zh-CN" \| "en-US"`          | `undefined`      | 界面语言。设为 `zh-CN` 时，技能和工具会优先显示 `cnName`。**响应式** —— 可通过 `sdkConfig.locale` 运行时动态修改。                                                                    |
 | `avatar`      | `string`                      | `undefined`      | AI 助手在聊天中显示的头像图片 URL。                                                                                                                                                 |
-| `theme`       | `"light" \| "dark" \| "auto"` | `"light"`        | UI 主题偏好。可设置为 `"light"`, `"dark"`, 或 `"auto"`（跟随系统偏好）。**响应式** —— 可通过 `sdkConfig.theme` 运行时动态修改。                                                      |
+| `theme`       | `"light" \| "dark" \| "auto"` | `undefined`      | UI 主题偏好。可设置为 `"light"`、`"dark"` 或 `"auto"`（跟随系统偏好）。未设置（`undefined`）时默认使用浅色主题。**响应式** —— 可通过 `sdkConfig.theme` 运行时动态修改。              |
 | `model`       | `ModelConfig`                 | `undefined`      | LLM 模型配置。控制聊天请求使用的模型和参数。详见下方[模型配置](#模型配置)。                                                                                                         |
 | `shadowDOM`   | `boolean`                     | `true`           | 为 `true` 时，组件在 Shadow DOM 内渲染，实现完全的 CSS 隔离——你的应用样式不会影响组件，组件样式也不会影响你的应用。设为 `false` 可用于调试，但要注意样式可能会互相影响。            |
 | `suggestions` | `SuggestionItem[]`            | `undefined`      | 自定义欢迎页建议问题。每个条目包含 `label`（按钮显示文本）和可选的 `text`（点击时实际发送的消息）。设置后会完全替换默认的建议问题。如果省略 `text`，则 `label` 同时用于显示和发送。 |

@@ -45,8 +45,10 @@ export const THEME_CHANGE_EVENT = "ocean-mcp:theme-change";
 export function resolveTheme(theme: Theme | undefined): "light" | "dark" {
   if (theme === THEME.DARK) return THEME.DARK;
   if (theme === THEME.LIGHT) return THEME.LIGHT;
-  if (typeof window !== "undefined" && window.matchMedia) {
-    return window.matchMedia("(prefers-color-scheme: dark)").matches ? THEME.DARK : THEME.LIGHT;
+  if (theme === THEME.AUTO) {
+    if (typeof window !== "undefined" && window.matchMedia) {
+      return window.matchMedia("(prefers-color-scheme: dark)").matches ? THEME.DARK : THEME.LIGHT;
+    }
   }
   return THEME.LIGHT;
 }
