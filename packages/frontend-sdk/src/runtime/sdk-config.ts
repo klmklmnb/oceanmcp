@@ -2,6 +2,8 @@ import type { ModelConfig } from "@ocean-mcp/shared";
 
 export type SupportedLocale = "zh-CN" | "en-US";
 
+const VALID_LOCALES: ReadonlySet<string> = new Set<SupportedLocale>(["zh-CN", "en-US"]);
+
 export const THEME = {
   LIGHT: "light",
   DARK: "dark",
@@ -9,6 +11,8 @@ export const THEME = {
 } as const;
 
 export type Theme = (typeof THEME)[keyof typeof THEME];
+
+const VALID_THEMES: ReadonlySet<string> = new Set<Theme>([THEME.LIGHT, THEME.DARK, THEME.AUTO]);
 
 /**
  * A suggestion question shown on the chat welcome screen.
@@ -55,6 +59,10 @@ export const sdkConfig = {
   },
 
   set locale(value: SupportedLocale | undefined) {
+    if (value != null && !VALID_LOCALES.has(value)) {
+      console.warn(`[OceanMCP] Invalid locale "${value}", expected one of: ${[...VALID_LOCALES].join(", ")}`);
+      return;
+    }
     const prev = config.locale;
     config.locale = value;
     if (prev !== value && typeof window !== "undefined") {
@@ -107,6 +115,10 @@ export const sdkConfig = {
   },
 
   set theme(value: Theme | undefined) {
+    if (value != null && !VALID_THEMES.has(value)) {
+      console.warn(`[OceanMCP] Invalid theme "${value}", expected one of: ${[...VALID_THEMES].join(", ")}`);
+      return;
+    }
     const prev = config.theme;
     config.theme = value;
     if (prev !== value && typeof window !== "undefined") {
