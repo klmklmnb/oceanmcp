@@ -246,6 +246,22 @@ function mountOceanMCP(target?: MountTarget | MountOptions) {
 
 // ─── Expose Global SDK API ───────────────────────────────────────────────────
 const OceanMCPSDK = {
+  /** Reactive locale — proxied to sdkConfig so the setter dispatches change events. */
+  get locale(): SupportedLocale | undefined {
+    return sdkConfig.locale;
+  },
+  set locale(value: SupportedLocale | undefined) {
+    sdkConfig.locale = value;
+  },
+
+  /** Reactive theme — proxied to sdkConfig so the setter dispatches change events. */
+  get theme(): Theme | undefined {
+    return sdkConfig.theme;
+  },
+  set theme(value: Theme | undefined) {
+    sdkConfig.theme = value;
+  },
+
   /**
    * Register a skill with bundled tools from the host application.
    *
