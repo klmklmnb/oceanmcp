@@ -25,6 +25,7 @@ ci-frontend-test:
   variables:
     LANGUAGE: vue
   script:
+    - cd packages/shared && bun run build && cd ../..
     - cd packages/frontend-sdk
     - bun run build:test
     - DIST_PATH=$CI_PROJECT_DIR/packages/frontend-sdk/dist typhon-ng pack
@@ -45,6 +46,7 @@ ci-frontend-prod:
   variables:
     LANGUAGE: vue
   script:
+    - cd packages/shared && bun run build && cd ../..
     - export APP_VERSION="${CI_COMMIT_TAG:-dev}"
     - cd packages/frontend-sdk
     - bun run build:prod
