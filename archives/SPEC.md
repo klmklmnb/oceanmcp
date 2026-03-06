@@ -346,6 +346,114 @@ window.OceanMCPSDK.registerTool({
 4. Server executes the steps → results stream back as tool output parts.
 5. Each step's status updates in-line: `pending → running → success / failed`.
 
+#### D. Built-in Monitoring (Internal Sentry Integration)
+
+The frontend SDK includes a built-in Sentry monitoring layer, but this is an **internal SDK implementation detail**, not part of the host application's public integration surface.
+
+**Design constraints:**
+
+- Host pages do **not** configure Sentry at runtime.
+- No public Sentry configuration globals are exposed.
+- The SDK may keep internal singleton state on `window.__OCEAN_MCP_SENTRY__`, but that key is an implementation detail and not part of the supported host-page API.
+- No public SDK API is provided for Sentry setup or overrides.
+- The monitoring layer must coexist safely with any monitoring solution already present on the host page.
+
+**Runtime architecture:**
+
+- The implementation lives in `packages/frontend-sdk/src/runtime/sentry.ts`.
+- Initialization starts from `packages/frontend-sdk/src/main.tsx` before `wsClient.connect()`, so startup and connection failures are observable.
+- The SDK loads Mihoyo's browser Sentry bundle inside a hidden `iframe`, rather than attaching directly to the host page global:
+  - default base: `https://webstatic.mihoyo.com/neone-resources/scripts`
+  - default version: `8.13.0`
+  - file: `bundle.min.js`
+- The isolated iframe prevents the SDK's Sentry client from interfering with any host-page Sentry instance or global handler setup.
+
+**Internal configuration:**
+
+- The runtime is configured entirely by SDK-internal constants and does not expose host-app or build-time override knobs for Sentry.
+- The Mihoyo browser bundle URL and integrity are hardcoded inside the SDK source.
+- If the internal DSN constant is empty, monitoring is disabled.
+- Missing-DSN warnings are emitted in development only, so host applications do not see internal configuration prompts in production.
+
+**Data safety policy:**
+
+- The SDK only reports metadata needed for debugging SDK/runtime failures.
+- The SDK does **not** report:
+  - chat body text
+  - file contents
+  - raw tool argument payloads
+  - full message-part payloads
+- All events pass through a sanitization layer before upload:
+  - strings are truncated
+  - arrays/objects are size-limited
+  - nested objects are depth-limited
+  - `user`, request payloads, extras, contexts, and breadcrumb data are scrubbed
+
+**Tagging and context:**
+
+- Each event is enriched with SDK metadata:
+  - `sdk_version`
+  - `sdk_build`
+  - `api_host`
+- Runtime tags also include location-derived context:
+  - `origin`
+  - `pathname`
+  - `href` (`origin + pathname`, without query string)
+- Additional internal runtime tags can be set by SDK modules via `setSdkTags()` for values like:
+  - `shadow_dom`
+  - `locale`
+  - `theme`
+
+**Integration strategy:**
+
+- The SDK filters out noisy/default automatic integrations from the browser bundle:
+  - `Breadcrumbs`
+  - `GlobalHandlers`
+  - `BrowserApiErrors`
+  - `BrowserSession`
+- Instead of relying on automatic browser breadcrumbs, the SDK records a curated set of breadcrumbs manually through `addSdkBreadcrumb()`.
+
+**Capture surface inside the SDK:**
+
+- Mount/startup failures:
+  - mount target not found
+  - Shadow DOM mount failure
+  - Light DOM mount failure
+  - root render failure
+- React boundary failures:
+  - message part render failures
+  - diff viewer / Monaco initialization failures
+- Runtime communication failures:
+  - WebSocket creation/connect failure
+  - `onerror`
+  - message parsing/dispatch failure
+  - wait-for-connection timeout
+  - zip skill registration timeout/failure
+  - browser tool execution failure
+- High-signal interaction breadcrumbs:
+  - SDK initialization
+  - successful mount
+  - send message
+  - tool approve / deny
+
+**Internal helper surface:**
+
+The monitoring module exposes internal helpers for other SDK modules:
+
+- `initSentryOnce()`
+- `captureException()`
+- `captureSdkEvent()`
+- `addSdkBreadcrumb()`
+- `setSdkTags()`
+
+Lower-level initialization/scope helpers stay private inside the Sentry module and are not part of the documented host-app API.
+
+**Build and sourcemaps:**
+
+- All `frontend-sdk` builds emit sourcemaps.
+- The SDK does not currently perform automatic Sentry artifact or sourcemap upload during build.
+- `sdk.esm.js` also emits sourcemaps, but if a consuming application rebundles the SDK, the final production sourcemap strategy remains the responsibility of that consuming application.
+
 ## 4. Data Models (Shared)
 
 ```ts
@@ -429,5 +537,12 @@ Integration:
    - Implement the Function Registry supporting both `code` and `executor` types.
    - Expose `window.OceanMCPSDK.registerTool()` for dynamic tool registration.
    - Implement the Execution Engine (code string runner + executor invoker).
+   - Implement the internal Sentry monitoring runtime:
+     - initialize before WebSocket connect
+     - load Mihoyo's browser bundle in an isolated iframe
+     - keep runtime configuration internal to the SDK source
+     - sanitize events and breadcrumbs
+     - capture mount, render, WebSocket, upload, and tool-execution failures
+     - upload sourcemaps for deployable builds in CI
 
 4. **Connect:** Wire up WebSocket flow – server sends `EXECUTE_TOOL` to browser → browser executes → sends `TOOL_RESULT` back → server returns tool result to LLM.

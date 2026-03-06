@@ -8,6 +8,7 @@ import {
 import { functionRegistry, skillRegistry } from "../registry";
 import { executeFunction } from "./executor";
 import { API_URL } from "../config";
+import { addSdkBreadcrumb, captureException } from "./sentry";
 
 // ─── Pending Zip Request ─────────────────────────────────────────────────────
 
@@ -40,6 +41,17 @@ class WSClient {
     this.serverUrl = serverUrl;
   }
 
+  private addConnectionBreadcrumb(
+    message: string,
+    data?: Record<string, unknown>,
+  ): void {
+    addSdkBreadcrumb(message, {
+      connectionId: this.connectionId ?? undefined,
+      readyState: this.ws?.readyState ?? undefined,
+      ...data,
+    });
+  }
+
   connect(): void {
     if (
       this.ws?.readyState === WebSocket.OPEN ||
@@ -51,11 +63,15 @@ class WSClient {
     try {
       const wsUrl = this.serverUrl.replace(/^http/, "ws") + "/connect";
       this.ws = new WebSocket(wsUrl);
+      this.addConnectionBreadcrumb("ws.connect_attempt", {
+        hasExistingConnectionId: Boolean(this.connectionId),
+      });
 
       this.ws.onopen = () => {
         console.log("[OceanMCP] WebSocket connected");
         this.reconnectDelay = 1_000; // Reset on successful connection
         this.startPing();
+        this.addConnectionBreadcrumb("ws.connected");
         // Resolve any callers waiting for the connection
         this.flushPendingConnection(true);
         // Register all current tool schemas and skill schemas with the server
@@ -69,6 +85,9 @@ class WSClient {
           switch (msg.type) {
             case WSMessageType.CAPABILITIES_REGISTERED:
               this.connectionId = msg.payload.connectionId;
+              this.addConnectionBreadcrumb("ws.capabilities_registered", {
+                connectionId: msg.payload.connectionId,
+              });
               break;
 
             case WSMessageType.EXECUTE_TOOL:
@@ -88,22 +107,52 @@ class WSClient {
           }
         } catch (err) {
           console.error("[OceanMCP] Failed to handle message:", err);
+          captureException(err, {
+            tags: {
+              stage: "ws_message",
+            },
+            extras: {
+              hasPayload: event.data != null,
+              payloadType: typeof event.data,
+              connectionId: this.connectionId,
+              readyState: this.ws?.readyState ?? null,
+            },
+          });
         }
       };
 
       this.ws.onclose = () => {
         console.log("[OceanMCP] WebSocket disconnected, will reconnect...");
+        this.addConnectionBreadcrumb("ws.disconnected");
         this.ws = null;
         this.connectionId = null;
         this.stopPing();
         this.scheduleReconnect();
       };
 
-      this.ws.onerror = (err) => {
-        console.error("[OceanMCP] WebSocket error:", err);
+      this.ws.onerror = (event) => {
+        console.error("[OceanMCP] WebSocket error:", event);
+        captureException(new Error("[OceanMCP] WebSocket error"), {
+          tags: {
+            stage: "ws_error",
+          },
+          extras: {
+            connectionId: this.connectionId,
+            readyState: this.ws?.readyState ?? null,
+            eventType: event.type,
+          },
+        });
       };
     } catch (err) {
       console.error("[OceanMCP] Failed to create WebSocket:", err);
+      captureException(err, {
+        tags: {
+          stage: "ws_connect",
+        },
+        extras: {
+          connectionId: this.connectionId,
+        },
+      });
       this.scheduleReconnect();
     }
   }
@@ -137,6 +186,21 @@ class WSClient {
         // Remove from pending list on timeout
         this.pendingConnection = this.pendingConnection.filter(
           (p) => p.resolve !== resolve,
+        );
+        captureException(
+          new Error(
+            `[OceanMCP] WebSocket connection timed out after ${timeoutMs}ms`,
+          ),
+          {
+            tags: {
+              stage: "ws_wait_for_connection",
+            },
+            extras: {
+              timeoutMs,
+              pendingCount: this.pendingConnection.length,
+              connectionId: this.connectionId,
+            },
+          },
         );
         reject(
           new Error(
@@ -180,6 +244,10 @@ class WSClient {
 
     const tools = functionRegistry.getAllSchemas();
     const skills = skillRegistry.getAllSchemas();
+    this.addConnectionBreadcrumb("ws.register_capabilities", {
+      toolCount: tools.length,
+      skillCount: skills.length,
+    });
 
     this.ws.send(
       createWSMessage({
@@ -228,6 +296,21 @@ class WSClient {
     return new Promise<SkillMetadata[]>((resolve, reject) => {
       const timer = setTimeout(() => {
         this.pendingZipRequests.delete(requestId);
+        captureException(
+          new Error(
+            `[OceanMCP] Zip skill registration timed out after ${timeoutMs}ms`,
+          ),
+          {
+            tags: {
+              stage: "register_skill_zip",
+            },
+            extras: {
+              requestId,
+              timeoutMs,
+              connectionId: this.connectionId,
+            },
+          },
+        );
         reject(
           new Error(
             `[OceanMCP] Zip skill registration timed out after ${timeoutMs}ms: ${url}`,
@@ -263,6 +346,15 @@ class WSClient {
 
     clearTimeout(pending.timer);
     this.pendingZipRequests.delete(requestId);
+    captureException(new Error(error), {
+      tags: {
+        stage: "register_skill_zip",
+      },
+      extras: {
+        requestId,
+        connectionId: this.connectionId,
+      },
+    });
     pending.reject(new Error(error));
   }
 
@@ -283,6 +375,16 @@ class WSClient {
         }),
       );
     } catch (error) {
+      captureException(error, {
+        tags: {
+          stage: "execute_tool",
+          functionId: request.functionId,
+        },
+        extras: {
+          requestId: request.requestId,
+          connectionId: this.connectionId,
+        },
+      });
       this.ws?.send(
         createWSMessage({
           type: WSMessageType.TOOL_RESULT,
@@ -298,6 +400,10 @@ class WSClient {
 
   private scheduleReconnect(): void {
     if (this.reconnectTimer) return;
+    this.addConnectionBreadcrumb("ws.schedule_reconnect", {
+      reconnectDelay: this.reconnectDelay,
+      maxReconnectDelay: this.maxReconnectDelay,
+    });
     this.reconnectTimer = setTimeout(() => {
       this.reconnectTimer = null;
       this.reconnectDelay = Math.min(

@@ -9,6 +9,13 @@ import { chatBridge } from "./runtime/chat-bridge";
 import { uploadRegistry } from "./runtime/upload-registry";
 import { sdkConfig } from "./runtime/sdk-config";
 import {
+  addSdkBreadcrumb,
+  captureException,
+  captureSdkEvent,
+  initSentryOnce,
+  setSdkTags,
+} from "./runtime/sentry";
+import {
   createShadowHost,
   injectStyles,
   observeMonacoStyles,
@@ -33,10 +40,17 @@ for (const fn of baseFunctions) {
   functionRegistry.register(fn);
 }
 
-// ─── Connect WebSocket to server ─────────────────────────────────────────────
-// SDK connects to the backend so it can send registered capabilities (skills/tools)
-// and receive function execution requests.
-wsClient.connect();
+// Initialize the SDK's built-in Sentry client before opening the WebSocket.
+void initSentryOnce()
+  .then(() => {
+    addSdkBreadcrumb("sdk.module_initialized", { build: __SDK_BUILD__ });
+    captureSdkEvent("sdk.module_initialized", {
+      data: { build: __SDK_BUILD__ },
+    });
+  })
+  .finally(() => {
+    wsClient.connect();
+  });
 
 // ─── Mount the Chat Widget ──────────────────────────────────────────────────
 // MountTarget and MountOptions are defined in src/types.ts (single source of truth).
@@ -44,7 +58,25 @@ wsClient.connect();
 /** Cleanup function returned by the Monaco style observer. */
 let _cleanupMonacoObserver: (() => void) | null = null;
 
+function captureRootError(
+  kind: "uncaught" | "recoverable",
+  error: unknown,
+  errorInfo?: { componentStack?: string },
+) {
+  captureException(error, {
+    tags: {
+      stage: "react_root",
+      react_root_error_type: kind,
+    },
+    extras: {
+      componentStack: errorInfo?.componentStack,
+    },
+  });
+}
+
 function mountOceanMCP(target?: MountTarget | MountOptions) {
+  void initSentryOnce();
+
   let container: HTMLElement | null = null;
   let useShadowDOM = true; // default: shadow DOM enabled
 
@@ -78,6 +110,10 @@ function mountOceanMCP(target?: MountTarget | MountOptions) {
     target = options.root;
   }
 
+  setSdkTags({
+    shadow_dom: useShadowDOM,
+  });
+
   if (typeof target === "string") {
     container = document.getElementById(target);
   } else if (target instanceof HTMLElement) {
@@ -109,58 +145,126 @@ function mountOceanMCP(target?: MountTarget | MountOptions) {
 
   if (!container) {
     console.error("[OceanMCP] Mount target not found:", target);
+    captureException(new Error("[OceanMCP] Mount target not found"), {
+      tags: {
+        stage: "mount",
+        target_type: typeof target === "string" ? "selector" : "unknown",
+      },
+      extras: {
+        target: typeof target === "string" ? target : undefined,
+      },
+    });
     return;
   }
 
   let mountPoint: HTMLElement;
 
   if (useShadowDOM) {
-    // ─── Shadow DOM isolation ────────────────────────────────────────────
-    // All SDK UI renders inside a Shadow DOM so host-page styles cannot
-    // leak in and SDK styles cannot leak out.
-    const result = createShadowHost(container);
-    mountPoint = result.mountPoint;
+    try {
+      // ─── Shadow DOM isolation ──────────────────────────────────────────
+      // All SDK UI renders inside a Shadow DOM so host-page styles cannot
+      // leak in and SDK styles cannot leak out.
+      const result = createShadowHost(container);
+      mountPoint = result.mountPoint;
 
-    // Patch Tailwind v4 CSS for Shadow DOM compatibility:
-    // 1. Strip the @supports guard so --tw-* fallback variables always apply.
-    // 2. Hoist @property rules to the document so typed initial values and
-    //    animation interpolation still work (e.g. animating box-shadow).
-    const patchedStyles = patchCssForShadowDom(sdkStyles);
-    hoistPropertyRulesToDocument(sdkStyles);
+      // Patch Tailwind v4 CSS for Shadow DOM compatibility:
+      // 1. Strip the @supports guard so --tw-* fallback variables always apply.
+      // 2. Hoist @property rules to the document so typed initial values and
+      //    animation interpolation still work (e.g. animating box-shadow).
+      const patchedStyles = patchCssForShadowDom(sdkStyles);
+      hoistPropertyRulesToDocument(sdkStyles);
 
-    // Inject the (patched) SDK stylesheet into the shadow root.
-    injectStyles(result.shadowRoot, patchedStyles);
+      // Inject the (patched) SDK stylesheet into the shadow root.
+      injectStyles(result.shadowRoot, patchedStyles);
 
-    // Observe document.head for Monaco Editor's dynamically-injected <style>
-    // tags and clone them into the shadow root.
-    _cleanupMonacoObserver?.();
-    _cleanupMonacoObserver = observeMonacoStyles(result.shadowRoot);
+      // Observe document.head for Monaco Editor's dynamically-injected <style>
+      // tags and clone them into the shadow root.
+      _cleanupMonacoObserver?.();
+      _cleanupMonacoObserver = observeMonacoStyles(result.shadowRoot);
+    } catch (error) {
+      captureException(error, {
+        tags: {
+          stage: "mount_shadow_dom",
+        },
+        extras: {
+          containerId: container.id || undefined,
+        },
+      });
+      console.error("[OceanMCP] Failed to mount with Shadow DOM:", error);
+      return;
+    }
   } else {
-    // ─── Light DOM mode (no Shadow DOM) ──────────────────────────────────
-    // Render directly into the container. Styles are injected into the
-    // document <head>. Useful for development or environments where
-    // Shadow DOM is problematic.
-    mountPoint = document.createElement("div");
-    mountPoint.id = "ocean-mcp-inner";
-    mountPoint.style.height = "100%";
-    container.appendChild(mountPoint);
+    try {
+      // ─── Light DOM mode (no Shadow DOM) ────────────────────────────────
+      // Render directly into the container. Styles are injected into the
+      // document <head>. Useful for development or environments where
+      // Shadow DOM is problematic.
+      mountPoint = document.createElement("div");
+      mountPoint.id = "ocean-mcp-inner";
+      mountPoint.style.height = "100%";
+      container.appendChild(mountPoint);
 
-    // Inject SDK styles into <head> (skip if already present)
-    const STYLE_ID = "ocean-mcp-styles";
-    if (!document.getElementById(STYLE_ID)) {
-      const style = document.createElement("style");
-      style.id = STYLE_ID;
-      style.textContent = sdkStyles;
-      document.head.appendChild(style);
+      // Inject SDK styles into <head> (skip if already present)
+      const STYLE_ID = "ocean-mcp-styles";
+      if (!document.getElementById(STYLE_ID)) {
+        const style = document.createElement("style");
+        style.id = STYLE_ID;
+        style.textContent = sdkStyles;
+        document.head.appendChild(style);
+      }
+    } catch (error) {
+      captureException(error, {
+        tags: {
+          stage: "mount_light_dom",
+        },
+        extras: {
+          containerId: container.id || undefined,
+        },
+      });
+      console.error("[OceanMCP] Failed to mount without Shadow DOM:", error);
+      return;
     }
   }
 
-  const root = createRoot(mountPoint);
-  root.render(
-    <React.StrictMode>
-      <ChatWidget avatar={sdkConfig.avatar} />
-    </React.StrictMode>
-  );
+  try {
+    const root = createRoot(mountPoint, {
+      onUncaughtError: (error, errorInfo) => captureRootError("uncaught", error, errorInfo),
+      onRecoverableError: (error, errorInfo) =>
+        captureRootError("recoverable", error, errorInfo),
+    });
+
+    root.render(
+      <React.StrictMode>
+        <ChatWidget avatar={sdkConfig.avatar} />
+      </React.StrictMode>
+    );
+
+    const mountData = {
+      shadowDOM: useShadowDOM,
+      targetType:
+        typeof target === "string"
+          ? "selector"
+          : target instanceof HTMLElement
+            ? "element"
+            : "auto",
+      containerId: container.id || undefined,
+    };
+    addSdkBreadcrumb("sdk.mount_success", mountData);
+    captureSdkEvent("sdk.mount_success", {
+      data: mountData,
+    });
+  } catch (error) {
+    captureException(error, {
+      tags: {
+        stage: "mount_render",
+      },
+      extras: {
+        shadowDOM: useShadowDOM,
+        containerId: container.id || undefined,
+      },
+    });
+    console.error("[OceanMCP] Failed to render chat widget:", error);
+  }
 }
 
 // ─── Expose Global SDK API ───────────────────────────────────────────────────
