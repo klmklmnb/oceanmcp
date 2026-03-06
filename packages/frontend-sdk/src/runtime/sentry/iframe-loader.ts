@@ -2,6 +2,7 @@ import { sentryState } from "./state";
 import type { OceanWindow, RuntimeConfig, SentryModule } from "./types";
 
 const MAX_EXISTING_SCRIPT_WAIT_MS = 5_000;
+const SENTRY_IFRAME_ID = "ocean-mcp-sentry-frame";
 
 async function getIframeContainer(): Promise<HTMLElement | null> {
   if (typeof document === "undefined") {
@@ -27,12 +28,21 @@ async function getSentryIframe(): Promise<HTMLIFrameElement> {
     return sentryState.iframe;
   }
 
+  sentryState.iframe = undefined;
+
   const container = await getIframeContainer();
   if (!container) {
     throw new Error("[OceanMCP] Failed to resolve a DOM container for the Sentry iframe.");
   }
 
+  const existingIframe = document.getElementById(SENTRY_IFRAME_ID);
+  if (existingIframe instanceof HTMLIFrameElement && existingIframe.isConnected) {
+    sentryState.iframe = existingIframe;
+    return existingIframe;
+  }
+
   const iframe = document.createElement("iframe");
+  iframe.id = SENTRY_IFRAME_ID;
   iframe.style.display = "none";
   iframe.setAttribute("aria-hidden", "true");
   container.appendChild(iframe);

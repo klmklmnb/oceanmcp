@@ -29,6 +29,18 @@ describe("sanitize helpers", () => {
     });
   });
 
+  it("marks circular references instead of expanding them repeatedly", () => {
+    const value: Record<string, unknown> = {
+      name: "loop",
+    };
+    value.self = value;
+
+    expect(sanitizeValue(value)).toEqual({
+      name: "loop",
+      self: "[Circular]",
+    });
+  });
+
   it("normalizes tags and drops empty values", () => {
     const tags = normalizeTags({
       locale: "zh-CN",

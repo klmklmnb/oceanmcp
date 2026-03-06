@@ -40,17 +40,15 @@ for (const fn of baseFunctions) {
   functionRegistry.register(fn);
 }
 
-// Initialize the SDK's built-in Sentry client before opening the WebSocket.
-void initSentryOnce()
-  .then(() => {
-    addSdkBreadcrumb("sdk.module_initialized", { build: __SDK_BUILD__ });
-    captureSdkEvent("sdk.module_initialized", {
-      data: { build: __SDK_BUILD__ },
-    });
-  })
-  .finally(() => {
-    wsClient.connect();
+// Initialize the SDK's built-in Sentry client in parallel with the WebSocket.
+void initSentryOnce().then(() => {
+  addSdkBreadcrumb("sdk.module_initialized", { build: __SDK_BUILD__ });
+  captureSdkEvent("sdk.module_initialized", {
+    data: { build: __SDK_BUILD__ },
   });
+});
+
+wsClient.connect();
 
 // ─── Mount the Chat Widget ──────────────────────────────────────────────────
 // MountTarget and MountOptions are defined in src/types.ts (single source of truth).

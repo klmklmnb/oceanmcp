@@ -14,7 +14,11 @@ export function truncateString(value: string): string {
   return `${value.slice(0, MAX_STRING_LENGTH - 3)}...`;
 }
 
-export function sanitizeValue(value: unknown, depth = 0): unknown {
+export function sanitizeValue(
+  value: unknown,
+  depth = 0,
+  visited = new Set<unknown>(),
+): unknown {
   if (value == null) {
     return value;
   }
@@ -35,6 +39,13 @@ export function sanitizeValue(value: unknown, depth = 0): unknown {
     return value.origin + value.pathname;
   }
 
+  if (typeof value === "object") {
+    if (visited.has(value)) {
+      return "[Circular]";
+    }
+    visited.add(value);
+  }
+
   if (depth >= MAX_DEPTH) {
     return "[Truncated]";
   }
@@ -42,14 +53,17 @@ export function sanitizeValue(value: unknown, depth = 0): unknown {
   if (Array.isArray(value)) {
     return value
       .slice(0, MAX_ARRAY_LENGTH)
-      .map((item) => sanitizeValue(item, depth + 1));
+      .map((item) => sanitizeValue(item, depth + 1, new Set(visited)));
   }
 
   if (typeof value === "object") {
     return Object.fromEntries(
       Object.entries(value as Record<string, unknown>)
         .slice(0, MAX_OBJECT_KEYS)
-        .map(([key, item]) => [key, sanitizeValue(item, depth + 1)]),
+        .map(([key, item]) => [
+          key,
+          sanitizeValue(item, depth + 1, new Set(visited)),
+        ]),
     );
   }
 
