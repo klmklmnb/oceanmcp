@@ -116,8 +116,18 @@ export function createBrowserExecuteTool(connectionId?: string) {
           if (schema) break;
         }
       }
+
+      // Fail-closed: if no schema is found, we cannot verify the operation
+      // type, so reject early rather than allowing potential write operations
+      // to slip through unguarded.
+      if (!schema) {
+        return {
+          error: `Function "${functionId}" has no registered schema and its operation type cannot be verified. Register the tool before calling it via browserExecute.`,
+          functionId,
+        };
+      }
+
       if (
-        schema &&
         schema.operationType === OPERATION_TYPE.WRITE &&
         !schema.autoApprove
       ) {
