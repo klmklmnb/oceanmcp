@@ -547,6 +547,10 @@ export function MessageRenderer({
         : typeof part.details?.text === "string"
           ? part.details.text
           : "";
+      // Skip empty reasoning blocks that are not actively streaming
+      if (!reasoningText.trim() && part.state !== MESSAGE_PART_STATE.STREAMING) {
+        return null;
+      }
       return (
         <MessageReasoning
           key={`reasoning-${index}`}
@@ -605,6 +609,12 @@ export function MessageRenderer({
         // The thinking content
         const thinkContent = match[1];
         const isUnfinished = !match[0].endsWith("</think>");
+
+        // Skip empty think blocks that are finished
+        if (!thinkContent.trim() && !isUnfinished) {
+          lastIndex = thinkRegex.lastIndex;
+          continue;
+        }
 
         parts.push(
           <MessageReasoning
