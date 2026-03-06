@@ -185,7 +185,7 @@ All fields are optional. When omitted, the server falls back to its own environm
 
 | Field       | Type     | Default                           | Description                                                                          |
 | ----------- | -------- | --------------------------------- | ------------------------------------------------------------------------------------ |
-| `default`   | `string` | Server's `LLM_MODEL` env var      | Primary model ID (e.g., `"gpt-4o"`, `"claude-sonnet-4-20250514"`, `"z-ai/glm-4.6"`). |
+| `default`   | `string` | Server's `LLM_MODEL` env var      | Primary model ID (e.g., `"gpt-4o"`, `"claude-sonnet-4-20250514"`, `"mihoyo-glm-4.6"`). |
 | `fast`      | `string` | Server's `LLM_FAST_MODEL` env var | Lightweight model for simpler tasks. Falls back to the default model if not set.     |
 | `maxTokens` | `number` | Server's `LLM_MAX_TOKENS` env var | Maximum number of output tokens per response.                                        |
 
@@ -194,7 +194,7 @@ All fields are optional. When omitted, the server falls back to its own environm
 ```ts
 // Use a specific model with a token limit
 OceanMCPSDK.mount({
-  model: { default: "z-ai/glm-4.6", maxTokens: 104800 },
+  model: { default: "mihoyo-glm-4.6", maxTokens: 104800 },
 });
 
 // Use different models for different task complexities
