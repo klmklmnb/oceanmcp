@@ -99,6 +99,8 @@ export function TestPanel() {
   const draggingRef = useRef(false);
   const hasDraggedRef = useRef(false);
   const dragOffsetRef = useRef({ x: 0, y: 0 });
+  const dragStartRef = useRef({ x: 0, y: 0 });
+  const DRAG_THRESHOLD = 5;
   const btnRef = useRef<HTMLButtonElement>(null);
 
   /** Snap the button position to the nearest window edge (left/right/top/bottom). */
@@ -134,6 +136,7 @@ export function TestPanel() {
     (e: React.PointerEvent<HTMLButtonElement>) => {
       draggingRef.current = true;
       hasDraggedRef.current = false;
+      dragStartRef.current = { x: e.clientX, y: e.clientY };
       dragOffsetRef.current = {
         x: e.clientX - btnPos.x,
         y: e.clientY - btnPos.y,
@@ -146,9 +149,13 @@ export function TestPanel() {
   const handlePointerMove = useCallback(
     (e: React.PointerEvent<HTMLButtonElement>) => {
       if (!draggingRef.current) return;
+      const dx = e.clientX - dragStartRef.current.x;
+      const dy = e.clientY - dragStartRef.current.y;
+      // Only start moving after exceeding the drag threshold
+      if (!hasDraggedRef.current && dx * dx + dy * dy < DRAG_THRESHOLD * DRAG_THRESHOLD) return;
       hasDraggedRef.current = true;
-      const newX = e.clientX - dragOffsetRef.current.x;
-      const newY = e.clientY - dragOffsetRef.current.y;
+      const newX = Math.max(0, Math.min(e.clientX - dragOffsetRef.current.x, window.innerWidth - BUTTON_SIZE));
+      const newY = Math.max(0, Math.min(e.clientY - dragOffsetRef.current.y, window.innerHeight - BUTTON_SIZE));
       setBtnPos({ x: newX, y: newY });
     },
     [],
@@ -160,11 +167,12 @@ export function TestPanel() {
       draggingRef.current = false;
       (e.target as HTMLElement).releasePointerCapture(e.pointerId);
 
-      // Snap to nearest edge with a smooth transition
-      const snapped = snapToEdge(btnPos.x, btnPos.y);
-      setBtnPos(snapped);
+      // Only snap to edge if the user actually dragged
+      if (hasDraggedRef.current) {
+        setBtnPos((prev) => snapToEdge(prev.x, prev.y));
+      }
     },
-    [btnPos, snapToEdge],
+    [snapToEdge],
   );
 
   const handleClick = useCallback(() => {
@@ -203,24 +211,28 @@ export function TestPanel() {
     left = Math.max(EDGE_MARGIN, Math.min(left, vw - panelWidth - EDGE_MARGIN));
 
     // Decide vertical placement: below or above the button
-    let top = btnPos.y + BUTTON_SIZE + panelGap;
-    const maxPanelH = vh - 80;
-    if (top + maxPanelH > vh - EDGE_MARGIN) {
-      // Not enough room below → try above
-      top = btnPos.y - panelGap - Math.min(maxPanelH, btnPos.y - EDGE_MARGIN);
-      if (top < EDGE_MARGIN) top = EDGE_MARGIN;
-    }
+    const spaceBelow = vh - (btnPos.y + BUTTON_SIZE + panelGap) - EDGE_MARGIN;
+    const spaceAbove = btnPos.y - panelGap - EDGE_MARGIN;
+    const openBelow = spaceBelow >= spaceAbove;
 
     return {
       position: "fixed",
-      top,
       left,
       zIndex: 100000,
       width: panelWidth,
+      boxSizing: "border-box" as const,
       padding: 20,
       borderRadius: 14,
-      maxHeight: `calc(100vh - ${top + EDGE_MARGIN}px)`,
       overflow: "auto",
+      ...(openBelow
+        ? {
+            top: btnPos.y + BUTTON_SIZE + panelGap,
+            maxHeight: Math.max(spaceBelow, 0),
+          }
+        : {
+            bottom: vh - btnPos.y + panelGap,
+            maxHeight: Math.max(spaceAbove, 0),
+          }),
     };
   };
 
