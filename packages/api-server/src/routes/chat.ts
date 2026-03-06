@@ -6,8 +6,6 @@ import {
 import {
   MESSAGE_PART_TYPE,
   MESSAGE_ROLE,
-  TOOL_PART_STATE,
-  TOOL_PART_TYPE_PREFIX,
   type FileAttachment,
 } from "@ocean-mcp/shared";
 import type { ModelConfig } from "@ocean-mcp/shared";
@@ -16,69 +14,7 @@ import { getSystemPrompt } from "../ai/prompts";
 import { getMergedTools } from "../ai/tools";
 import { connectionManager } from "../ws/connection-manager";
 import { deduplicateAssistantParts } from "./deduplicate-parts";
-
-const AUTO_DENY_REASON =
-  "User sent a new message instead of responding to approval.";
-
-function isToolPart(part: any): boolean {
-  return (
-    typeof part?.type === "string" &&
-    part.type.startsWith(TOOL_PART_TYPE_PREFIX)
-  );
-}
-
-function shouldAutoDeny(part: any): boolean {
-  return (
-    isToolPart(part) &&
-    part.state === TOOL_PART_STATE.APPROVAL_RESPONDED &&
-    part.approval?.approved === false
-  );
-}
-
-/**
- * OpenAI-compatible chat completions require a tool result message for each
- * prior tool call before the next user turn. Approval-only parts do not satisfy
- * that requirement, so we convert stale approval waits (when user already moved
- * on) and explicit denied approvals into `output-denied` to emit a proper
- * tool result.
- */
-function normalizeStaleApprovals(messages: any[]): any[] {
-  return messages.map((message, index) => {
-    if (
-      message.role !== MESSAGE_ROLE.ASSISTANT ||
-      !Array.isArray(message.parts)
-    ) {
-      return message;
-    }
-
-    const hasLaterUserMessage = messages
-      .slice(index + 1)
-      .some((m) => m?.role === MESSAGE_ROLE.USER);
-
-    let changed = false;
-    const parts = message.parts.map((part: any) => {
-      const denyBecauseMovedOn =
-        isToolPart(part) &&
-        part.state === TOOL_PART_STATE.APPROVAL_REQUESTED &&
-        hasLaterUserMessage;
-
-      if (!denyBecauseMovedOn && !shouldAutoDeny(part)) return part;
-      changed = true;
-
-      return {
-        ...part,
-        state: TOOL_PART_STATE.OUTPUT_DENIED,
-        approval: {
-          id: part.approval?.id ?? `auto-deny-${part.toolCallId ?? index}`,
-          approved: false,
-          reason: part.approval?.reason ?? AUTO_DENY_REASON,
-        },
-      };
-    });
-
-    return changed ? { ...message, parts } : message;
-  });
-}
+import { normalizeStaleInteractions } from "./normalize-stale-interactions";
 
 function formatFileSize(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;
@@ -181,7 +117,7 @@ export async function handleChatRequest(req: Request): Promise<Response> {
     const mergedTools = getMergedTools(dynamicSchemas, connectionId);
 
     const normalizedMessages = materialiseFileAttachments(
-      deduplicateAssistantParts(normalizeStaleApprovals(messages)),
+      deduplicateAssistantParts(normalizeStaleInteractions(messages)),
     );
     const modelMessages = await convertToModelMessages(normalizedMessages);
 

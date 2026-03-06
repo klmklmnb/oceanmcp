@@ -30,6 +30,7 @@ type UserSelectCardProps = {
   state: string;
   errorText?: string;
   onSubmit: (toolCallId: string, output: UserSelectOutput) => void;
+  onDeny: (toolCallId: string) => void;
 };
 
 type SelectOption = {
@@ -134,6 +135,7 @@ export function UserSelectCard({
   state,
   errorText,
   onSubmit,
+  onDeny,
 }: UserSelectCardProps) {
   const paramDef = React.useMemo(() => {
     if (!input?.functionId || !input?.parameterName) return undefined;
@@ -185,15 +187,27 @@ export function UserSelectCard({
     (option) => option.id === selectedOptionId,
   );
 
-  const statusLabel =
-    state === TOOL_PART_STATE.OUTPUT_AVAILABLE
+  // When the user clicks the explicit Deny button, addToolResult sets the
+  // state to "output-available" but the output carries { denied: true }.
+  // Treat this the same as OUTPUT_DENIED for rendering purposes.
+  const isDenied =
+    state === TOOL_PART_STATE.OUTPUT_DENIED ||
+    (state === TOOL_PART_STATE.OUTPUT_AVAILABLE &&
+      output != null &&
+      typeof output === "object" &&
+      (output as any).denied === true);
+
+  const statusLabel = isDenied
+    ? t("select.status.denied")
+    : state === TOOL_PART_STATE.OUTPUT_AVAILABLE
       ? t("select.status.complete")
       : state === TOOL_PART_STATE.OUTPUT_ERROR
         ? t("select.status.error")
         : t("select.status.pending");
 
-  const statusColor =
-    state === TOOL_PART_STATE.OUTPUT_AVAILABLE
+  const statusColor = isDenied
+    ? "text-gray-500"
+    : state === TOOL_PART_STATE.OUTPUT_AVAILABLE
       ? "text-emerald-600"
       : state === TOOL_PART_STATE.OUTPUT_ERROR
         ? "text-red-500"
@@ -239,7 +253,11 @@ export function UserSelectCard({
         <span className={`ml-auto text-xs ${statusColor}`}>{statusLabel}</span>
       </div>
 
-      {state === TOOL_PART_STATE.OUTPUT_AVAILABLE ? (
+      {isDenied ? (
+        <div className="p-4 text-sm text-text-tertiary">
+          {t("select.deniedMessage")}
+        </div>
+      ) : state === TOOL_PART_STATE.OUTPUT_AVAILABLE ? (
         <div className="p-4 text-sm text-text-secondary">
           <div>{t("select.selected")} {chosenLabel}</div>
           {selectedValueText && selectedValueText !== chosenLabel && (
@@ -260,17 +278,27 @@ export function UserSelectCard({
             </p>
 
             {isBinaryOptions ? (
-              <div className="mt-3 grid grid-cols-2 gap-2">
-                {finalOptions.map((option) => (
+              <>
+                <div className="mt-3 grid grid-cols-2 gap-2">
+                  {finalOptions.map((option) => (
+                    <button
+                      key={option.id}
+                      onClick={() => submitOption(option)}
+                      className="px-3 py-2 text-sm font-medium text-text-primary bg-surface-tertiary hover:bg-surface border border-border rounded-lg transition-colors cursor-pointer"
+                    >
+                      {option.label}
+                    </button>
+                  ))}
+                </div>
+                <div className="mt-2 flex justify-center">
                   <button
-                    key={option.id}
-                    onClick={() => submitOption(option)}
-                    className="px-3 py-2 text-sm font-medium text-text-primary bg-surface-tertiary hover:bg-surface border border-border rounded-lg transition-colors cursor-pointer"
+                    onClick={() => onDeny(toolCallId)}
+                    className="px-4 py-1.5 text-xs font-medium text-text-tertiary hover:text-text-primary hover:bg-surface-tertiary rounded-lg transition-colors cursor-pointer"
                   >
-                    {option.label}
+                    {t("select.deny")}
                   </button>
-                ))}
-              </div>
+                </div>
+              </>
             ) : finalOptions.length > 0 ? (
               <>
                 <select
@@ -307,7 +335,13 @@ export function UserSelectCard({
           </div>
 
           {!isBinaryOptions && (
-            <div className="px-4 py-3 border-t border-border flex justify-end">
+            <div className="px-4 py-3 border-t border-border flex justify-end gap-2">
+              <button
+                onClick={() => onDeny(toolCallId)}
+                className="px-4 py-2 text-sm font-medium text-text-secondary hover:text-text-primary hover:bg-surface-tertiary rounded-lg transition-colors cursor-pointer"
+              >
+                {t("select.deny")}
+              </button>
               <button
                 onClick={() => {
                   if (selectedOption) {

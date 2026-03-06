@@ -54,6 +54,9 @@ const zhCN = {
   "select.noOptions": "没有找到预定义选项，请手动输入。",
   "select.inputPlaceholder": "输入值",
   "select.confirm": "确认",
+  "select.deny": "取消",
+  "select.status.denied": "已取消",
+  "select.deniedMessage": "选择已取消。",
 };
 
 export default zhCN;

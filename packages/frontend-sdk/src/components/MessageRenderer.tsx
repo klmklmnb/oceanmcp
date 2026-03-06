@@ -198,6 +198,7 @@ type MessageRendererProps = {
   ) => void;
   onDeny: (toolCallId: string, toolName: string, approvalId?: string) => void;
   onUserSelect: (toolCallId: string, output: Record<string, any>) => void;
+  onDenySelect: (toolCallId: string) => void;
   avatar?: string;
 };
 
@@ -404,6 +405,7 @@ export function MessageRenderer({
   onApprove,
   onDeny,
   onUserSelect,
+  onDenySelect,
   avatar,
 }: MessageRendererProps) {
   const isUser = message.role === MESSAGE_ROLE.USER;
@@ -464,6 +466,7 @@ export function MessageRenderer({
                 state={state}
                 errorText={errorText}
                 onSubmit={onUserSelect}
+                onDeny={onDenySelect}
               />
             )}
           </div>

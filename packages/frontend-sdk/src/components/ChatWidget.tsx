@@ -55,6 +55,14 @@ function shouldAutoDeny(part: any): boolean {
   );
 }
 
+function isPendingUserSelect(part: any): boolean {
+  return (
+    isToolPart(part) &&
+    getToolName(part) === "userSelect" &&
+    part.state === TOOL_PART_STATE.INPUT_AVAILABLE
+  );
+}
+
 /**
  * Apply the `dark` class on the shadow host element so that the
  * `:host(.dark)` selector fires.  This is necessary because Tailwind's
@@ -118,7 +126,10 @@ function useLocale(): SupportedLocale {
   return locale;
 }
 
-function denyPendingApprovalParts(messages: any[]): {
+const USER_SELECT_DENY_REASON =
+  "User sent a new message instead of responding to selection";
+
+function denyPendingInteractions(messages: any[]): {
   messages: any[];
   changed: boolean;
 } {
@@ -134,20 +145,43 @@ function denyPendingApprovalParts(messages: any[]): {
 
     let messageChanged = false;
     const nextParts = message.parts.map((part: any) => {
-      if (!shouldAutoDeny(part)) return part;
+      // Handle pending approval parts (existing behavior)
+      if (shouldAutoDeny(part)) {
+        messageChanged = true;
+        changed = true;
 
-      messageChanged = true;
-      changed = true;
+        return {
+          ...part,
+          state: TOOL_PART_STATE.OUTPUT_DENIED,
+          approval: {
+            id: part.approval?.id ?? `auto-deny-${part.toolCallId ?? index}`,
+            approved: false,
+            reason: part.approval?.reason ?? AUTO_DENY_REASON,
+          },
+        };
+      }
 
-      return {
-        ...part,
-        state: TOOL_PART_STATE.OUTPUT_DENIED,
-        approval: {
-          id: part.approval?.id ?? `auto-deny-${part.toolCallId ?? index}`,
-          approved: false,
-          reason: part.approval?.reason ?? AUTO_DENY_REASON,
-        },
-      };
+      // Handle pending userSelect parts
+      if (isPendingUserSelect(part)) {
+        messageChanged = true;
+        changed = true;
+
+        return {
+          ...part,
+          state: TOOL_PART_STATE.OUTPUT_DENIED,
+          output: { denied: true, reason: USER_SELECT_DENY_REASON },
+          // AI SDK v6 unconditionally reads `approval.reason` when
+          // converting OUTPUT_DENIED parts to model messages, so we
+          // must provide an approval object even for userSelect parts.
+          approval: {
+            id: `auto-deny-select-${part.toolCallId ?? index}`,
+            approved: false,
+            reason: USER_SELECT_DENY_REASON,
+          },
+        };
+      }
+
+      return part;
     });
 
     return messageChanged ? { ...message, parts: nextParts } : message;
@@ -320,8 +354,14 @@ export function ChatWidget({ avatar }: { avatar?: string }) {
   const sendUserText = async (text: string) => {
     if (!text.trim()) return;
 
-    const normalized = denyPendingApprovalParts(messages as any[]);
+    const normalized = denyPendingInteractions(messages as any[]);
     if (normalized.changed) {
+      // Only update visual state here. The server-side
+      // normalizeStaleInteractions converts stale userSelect / approval
+      // parts into OUTPUT_DENIED with a proper tool result before the
+      // next LLM call, so we do NOT call addToolResult for auto-denied
+      // selects (doing so would set the state to output-available and
+      // cause "已选择: undefined" rendering).
       setMessages(normalized.messages as any);
     }
 
@@ -343,7 +383,7 @@ export function ChatWidget({ avatar }: { avatar?: string }) {
     setInput("");
     setPendingFiles([]);
 
-    const normalized = denyPendingApprovalParts(messages as any[]);
+    const normalized = denyPendingInteractions(messages as any[]);
     if (normalized.changed) {
       setMessages(normalized.messages as any);
     }
@@ -562,6 +602,14 @@ export function ChatWidget({ avatar }: { avatar?: string }) {
     });
   };
 
+  const handleDenySelect = (toolCallId: string) => {
+    addToolResult({
+      toolCallId,
+      tool: "userSelect",
+      output: { denied: true, reason: "User denied the selection" },
+    });
+  };
+
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) {
       e.preventDefault();
@@ -645,6 +693,7 @@ export function ChatWidget({ avatar }: { avatar?: string }) {
               onApprove={handleApprove}
               onDeny={handleDeny}
               onUserSelect={handleUserSelect}
+              onDenySelect={handleDenySelect}
               avatar={avatar}
             />
           ))}

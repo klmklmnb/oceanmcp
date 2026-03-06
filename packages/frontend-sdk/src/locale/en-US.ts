@@ -54,6 +54,9 @@ const enUS = {
   "select.noOptions": "No predefined options were found. Enter a value manually.",
   "select.inputPlaceholder": "Enter value",
   "select.confirm": "Confirm",
+  "select.deny": "Deny",
+  "select.status.denied": "Denied",
+  "select.deniedMessage": "Selection was cancelled.",
 };
 
 export default enUS;
