@@ -12,6 +12,7 @@ const zhCN = {
   "chat.dragdrop.title": "拖放文件到这里",
   "chat.dragdrop.description": "松开鼠标即可上传",
   "chat.error.label": "错误：",
+  "chat.stop.title": "停止生成",
 
   // MessageRenderer
   "tool.status.complete": "已完成",

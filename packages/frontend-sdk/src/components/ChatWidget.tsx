@@ -209,6 +209,21 @@ function SendIcon() {
   );
 }
 
+/** Stop icon (square — standard "stop generating" symbol) */
+function StopIcon() {
+  return (
+    <svg
+      width="16"
+      height="16"
+      viewBox="0 0 24 24"
+      fill="currentColor"
+      stroke="none"
+    >
+      <rect x="6" y="6" width="12" height="12" rx="2" />
+    </svg>
+  );
+}
+
 /** Paperclip icon for upload */
 function AttachIcon() {
   return (
@@ -342,6 +357,7 @@ export function ChatWidget({ avatar }: { avatar?: string }) {
     setMessages,
     status,
     error,
+    stop,
     addToolResult,
     addToolApprovalResponse,
     sendMessage,
@@ -521,6 +537,8 @@ export function ChatWidget({ avatar }: { avatar?: string }) {
   // Bridge: expose widget capabilities to OceanMCPSDK.*() methods
   const sendUserTextRef = useRef(sendUserText);
   sendUserTextRef.current = sendUserText;
+  const stopRef = useRef(stop);
+  stopRef.current = stop;
 
   useEffect(() => {
     chatBridge.register("chat", async (text: string) => {
@@ -538,6 +556,10 @@ export function ChatWidget({ avatar }: { avatar?: string }) {
 
     chatBridge.register("clearMessages", () => {
       setMessages([]);
+    });
+
+    chatBridge.register("stop", () => {
+      stopRef.current();
     });
 
     return () => chatBridge.unregisterAll();
@@ -818,25 +840,32 @@ export function ChatWidget({ avatar }: { avatar?: string }) {
                   </button>
                 )}
               </div>
-              <button
-                type="submit"
-                disabled={
-                  (!input.trim() && pendingFiles.filter(f => f.status === "ready").length === 0) ||
-                  isStreaming ||
-                  isLoading ||
-                  pendingFiles.some(f => f.status === "uploading")
-                }
-                className={`w-8 h-8 rounded-lg flex items-center justify-center transition-all cursor-pointer ${
-                  (input.trim() || pendingFiles.some(f => f.status === "ready")) &&
-                  !isStreaming &&
-                  !isLoading &&
-                  !pendingFiles.some(f => f.status === "uploading")
-                    ? "bg-ocean-600 text-white hover:bg-ocean-700 shadow-sm"
-                    : "bg-surface-tertiary text-text-tertiary"
-                }`}
-              >
-                <SendIcon />
-              </button>
+              {isStreaming || isLoading ? (
+                <button
+                  type="button"
+                  onClick={() => stop()}
+                  className="w-8 h-8 rounded-lg flex items-center justify-center transition-all cursor-pointer bg-ocean-600 text-white hover:bg-ocean-700 shadow-sm"
+                  title={t("chat.stop.title")}
+                >
+                  <StopIcon />
+                </button>
+              ) : (
+                <button
+                  type="submit"
+                  disabled={
+                    (!input.trim() && pendingFiles.filter(f => f.status === "ready").length === 0) ||
+                    pendingFiles.some(f => f.status === "uploading")
+                  }
+                  className={`w-8 h-8 rounded-lg flex items-center justify-center transition-all cursor-pointer ${
+                    (input.trim() || pendingFiles.some(f => f.status === "ready")) &&
+                    !pendingFiles.some(f => f.status === "uploading")
+                      ? "bg-ocean-600 text-white hover:bg-ocean-700 shadow-sm"
+                      : "bg-surface-tertiary text-text-tertiary"
+                  }`}
+                >
+                  <SendIcon />
+                </button>
+              )}
             </div>
           </form>
         </div>

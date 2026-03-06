@@ -12,6 +12,7 @@ const enUS = {
   "chat.dragdrop.title": "Drop files here",
   "chat.dragdrop.description": "Release to upload",
   "chat.error.label": "Error:",
+  "chat.stop.title": "Stop generating",
 
   // MessageRenderer
   "tool.status.complete": "Complete",
