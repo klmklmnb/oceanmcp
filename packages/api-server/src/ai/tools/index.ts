@@ -3,6 +3,7 @@ import { createBrowserExecuteTool } from "./browser-proxy-tool";
 import { createExecutePlanTool } from "./execute-plan-tool";
 import { userSelect } from "./user-select-tool";
 import {
+  OPERATION_TYPE,
   PARAMETER_TYPE,
   type FunctionSchema,
   type ParameterDefinition,
@@ -154,14 +155,24 @@ export function createZodSchema(parameters: ParameterDefinition[]) {
 /**
  * Create a browser-proxy tool wrapper for a given tool schema.
  * The tool's `execute` sends the call to the browser via WebSocket.
+ *
+ * For WRITE tools without `autoApprove`, the tool is created with
+ * `needsApproval: true` so the Vercel AI SDK pauses for user approval
+ * before executing. This prevents the LLM from directly invoking
+ * write/mutation operations when the tool is registered as a native
+ * tool (bypassing the `browserExecute` write guard).
  */
-function createBrowserProxyToolFromSchema(
+export function createBrowserProxyToolFromSchema(
   schema: FunctionSchema,
   connectionId?: string,
 ): Tool<any, any> {
+  const requiresApproval =
+    schema.operationType === OPERATION_TYPE.WRITE && !schema.autoApprove;
+
   return tool({
     description: schema.description,
     inputSchema: createZodSchema(schema.parameters),
+    ...(requiresApproval && { needsApproval: true }),
     execute: async (args) => {
       return connectionManager.executeBrowserTool(
         schema.id,

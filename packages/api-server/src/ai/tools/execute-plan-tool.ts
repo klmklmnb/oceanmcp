@@ -13,6 +13,27 @@ type Step = {
 };
 
 /**
+ * Look up a tool schema by functionId across both standalone tools and
+ * skill-bundled tools, mirroring the same fallback logic used by the
+ * browserExecute write guard.
+ */
+function findToolSchema(
+  functionId: string,
+  connectionId?: string,
+): import("@ocean-mcp/shared").FunctionSchema | undefined {
+  const toolSchemas = connectionManager.getToolSchemas(connectionId);
+  let schema = toolSchemas.find((s) => s.id === functionId);
+  if (!schema) {
+    const skillSchemas = connectionManager.getSkillSchemas(connectionId);
+    for (const skill of skillSchemas) {
+      schema = skill.tools?.find((t) => t.id === functionId);
+      if (schema) break;
+    }
+  }
+  return schema;
+}
+
+/**
  * Validate all steps' arguments against their registered Zod schemas.
  * Steps whose arguments contain $N variable references are skipped because
  * their actual values are only known at execution time.
@@ -20,8 +41,6 @@ type Step = {
  * string on first failure.
  */
 function validateSteps(steps: Step[], connectionId?: string): string | null {
-  const toolSchemas = connectionManager.getToolSchemas(connectionId);
-
   for (let i = 0; i < steps.length; i++) {
     const step = steps[i];
 
@@ -37,7 +56,8 @@ function validateSteps(steps: Step[], connectionId?: string): string | null {
       continue;
     }
 
-    const schema = toolSchemas.find((s) => s.id === step.functionId);
+    // Search both standalone and skill-bundled tool registries
+    const schema = findToolSchema(step.functionId, connectionId);
     if (schema && schema.parameters.length > 0) {
       const zodSchema = createZodSchema(schema.parameters);
       const parseResult = zodSchema.safeParse(step.arguments);

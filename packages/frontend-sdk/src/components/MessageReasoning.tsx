@@ -10,7 +10,12 @@ export function MessageReasoning({
   reasoning,
   isLoading,
 }: MessageReasoningProps) {
-  const [isOpen, setIsOpen] = useState(true);
+  // Don't render empty reasoning blocks
+  if (!reasoning.trim() && !isLoading) {
+    return null;
+  }
+
+  const [isOpen, setIsOpen] = useState(false);
   const [duration, setDuration] = useState(0);
   const [startTime] = useState<number>(Date.now());
 

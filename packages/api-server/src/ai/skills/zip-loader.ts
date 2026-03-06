@@ -3,6 +3,64 @@
  * temporary directory, and discovers skills using the same pipeline as
  * file-based server skills.
  *
+ * ## Skill Discovery Rules
+ *
+ * The core principle: **a directory containing SKILL.md is a skill**.
+ * Everything else in that directory (sibling folders like `references/`,
+ * `_node-lib/`, `assets/`) is treated as **bundled resources** that the
+ * LLM can load on-demand via the `loadSkill` tool's `resourcePath` param.
+ *
+ * Discovery proceeds as follows:
+ *
+ *   1. **Unwrap wrappers** — Starting from the extraction root, if the
+ *      directory contains only a single real subdirectory (ignoring
+ *      `__MACOSX`, `.DS_Store`, dotfiles), descend into it automatically.
+ *      Repeat up to 3 levels. This handles zip tools that wrap all content
+ *      in a top-level folder.
+ *
+ *   2. **Check for root-level SKILL.md** — If `SKILL.md` exists at the
+ *      resolved root, the entire directory is treated as **one skill**.
+ *      Sibling directories are bundled resources, NOT separate skills.
+ *      Subdirectory scanning is skipped entirely.
+ *
+ *   3. **Scan immediate subdirectories** — If no root `SKILL.md` exists,
+ *      each immediate subdirectory containing a `SKILL.md` becomes a
+ *      separate skill. Directories without `SKILL.md` are silently
+ *      ignored. Each skill's own subdirectories are its resources.
+ *
+ * ## Supported zip directory structures
+ *
+ *   ── Case 1: Root-level SKILL.md (single skill) ──────────────────────
+ *   zip/
+ *   ├── SKILL.md          → The skill (name + description in frontmatter)
+ *   ├── references/       → Bundled resource (loaded dynamically)
+ *   ├── _node-lib/        → Bundled resource (loaded dynamically)
+ *   └── assets/           → Bundled resource (loaded dynamically)
+ *
+ *   ── Case 2: Subdirectory skills (one or more) ──────────────────────
+ *   zip/
+ *   ├── skill-a/
+ *   │   ├── SKILL.md      → Skill A
+ *   │   └── _node-lib/    → Skill A's resource
+ *   └── skill-b/
+ *       └── SKILL.md      → Skill B
+ *
+ *   ── Case 3: Wrapper directory (auto-unwrapped) ─────────────────────
+ *   zip/
+ *   └── some-wrapper/           → Unwrapped automatically (single child dir)
+ *       ├── skill-a/
+ *       │   └── SKILL.md        → Skill A
+ *       └── skill-b/
+ *           └── SKILL.md        → Skill B
+ *
+ *   Also handles __MACOSX siblings and double-nested wrappers:
+ *   zip/
+ *   ├── __MACOSX/               → Ignored
+ *   └── outer/
+ *       └── inner/              → Both unwrapped (2 levels)
+ *           └── my-skill/
+ *               └── SKILL.md    → Discovered skill
+ *
  * ## Caching
  *
  * Downloaded zips are cached on disk so that subsequent requests (e.g. new
@@ -23,28 +81,16 @@
  *   - **Stale-on-error**: if a conditional GET returns 5xx and a valid
  *     cached extraction exists, the stale cache is served.
  *
- * ## Supported zip directory structures
+ * ## Resource Loading (progressive disclosure)
  *
- *   ── Case 1: Root-level SKILL.md (single skill) ──────────────────────
- *   zip/
- *   ├── SKILL.md          → Treated as a single skill
- *   ├── references/       → Bundled resources accessible via skillDirectory
- *   └── assets/           → More resources
- *
- *   When SKILL.md exists at the root, the entire extraction directory is
- *   the skill. Subdirectories are NOT scanned for additional skills.
- *
- *   ── Case 2: Subdirectory skills (one or more) ──────────────────────
- *   zip/
- *   ├── skill-a/
- *   │   ├── SKILL.md      → Skill A
- *   │   └── references/
- *   └── skill-b/
- *       └── SKILL.md      → Skill B
- *
- *   When no root SKILL.md exists, each subdirectory containing a SKILL.md
- *   is discovered as a separate skill (via the standard `discoverSkills`
- *   pipeline).
+ * Skills follow a "progressive disclosure" pattern:
+ *   1. At startup / registration, only name + description are exposed
+ *      (lightweight catalog in the system prompt).
+ *   2. When the LLM calls `loadSkill(name)`, it gets the full SKILL.md
+ *      instructions, the `skillDirectory` path, and a flat listing of
+ *      all available resource files.
+ *   3. The LLM can then call `loadSkill(name, resourcePath)` to read
+ *      any specific resource file on demand — no upfront loading needed.
  *
  * Extraction uses the system `unzip` binary (available on macOS / Linux).
  * No additional npm dependencies are required.
@@ -573,6 +619,74 @@ async function _downloadAndExtractCachedImpl(
   return { extractDir: result.extractDir, cacheEntry: newEntry };
 }
 
+// ─── Wrapper Directory Unwrapping ────────────────────────────────────────────
+
+/** Directory names to ignore when detecting single-directory wrappers */
+const IGNORED_WRAPPER_NAMES = new Set(["__MACOSX", ".DS_Store"]);
+
+/**
+ * Resolve the effective skill root by unwrapping single-directory wrappers.
+ *
+ * Many zip tools (and macOS Finder) wrap the actual content inside a single
+ * top-level directory. This function detects that pattern and descends into
+ * the wrapper, repeating up to `maxDepth` times.
+ *
+ * A directory is considered a "wrapper" when it contains exactly one real
+ * subdirectory (ignoring entries like `__MACOSX`, `.DS_Store`). If a
+ * `SKILL.md` file exists at any level, unwrapping stops — that level is
+ * the skill root.
+ *
+ * @param sandbox - Filesystem abstraction
+ * @param dir - Starting directory (e.g. the extraction root)
+ * @param maxDepth - Maximum number of wrapper levels to unwrap (default: 3)
+ * @returns The resolved skill root directory
+ */
+async function resolveSkillRoot(
+  sandbox: Sandbox,
+  dir: string,
+  maxDepth = 3,
+): Promise<string> {
+  let current = dir;
+
+  for (let depth = 0; depth < maxDepth; depth++) {
+    // If SKILL.md exists here, this is the skill root — stop unwrapping
+    try {
+      await access(join(current, "SKILL.md"));
+      return current;
+    } catch {
+      // No SKILL.md at this level — continue checking
+    }
+
+    // Read directory entries, ignoring junk
+    let entries;
+    try {
+      entries = await sandbox.readdir(current, { withFileTypes: true });
+    } catch {
+      return current;
+    }
+
+    const realDirs = entries.filter(
+      (e) => e.isDirectory() && !IGNORED_WRAPPER_NAMES.has(e.name) && !e.name.startsWith("."),
+    );
+
+    // If there's exactly one real subdirectory and no other real files
+    // (besides junk), this is a wrapper — descend into it.
+    const realFiles = entries.filter(
+      (e) => !e.isDirectory() && !IGNORED_WRAPPER_NAMES.has(e.name) && !e.name.startsWith("."),
+    );
+
+    if (realDirs.length === 1 && realFiles.length === 0) {
+      current = join(current, realDirs[0].name);
+      continue;
+    }
+
+    // Multiple dirs or files present — this is the actual content root
+    return current;
+  }
+
+  return current;
+}
+
 // ─── Discover Skills from Extracted Zip ──────────────────────────────────────
 
 /**
@@ -584,11 +698,16 @@ async function _downloadAndExtractCachedImpl(
  * extracted directories on disk for reuse across sessions.
  *
  * Directory structure rules:
- *   - If `SKILL.md` exists at the extraction root → treat the entire
- *     directory as a single skill. Subdirectories are NOT scanned.
+ *   - If `SKILL.md` exists at the extraction root (or after unwrapping
+ *     single-directory wrappers) → treat the entire directory as a single
+ *     skill. Subdirectories are NOT scanned.
  *   - Otherwise → scan subdirectories for `SKILL.md` files (standard
  *     `discoverSkills` behavior). Each subdirectory with a valid
  *     `SKILL.md` becomes a separate skill.
+ *   - Wrapper directories (a single subdirectory with no sibling files,
+ *     ignoring `__MACOSX`/`.DS_Store`) are automatically unwrapped up to
+ *     3 levels deep. This handles zip files that wrap content in a
+ *     top-level folder.
  *
  * @param sandbox - Filesystem abstraction for reading extracted files
  * @param url - CDN URL pointing to the .zip file
@@ -612,8 +731,11 @@ export async function loadSkillsFromZip(
 ): Promise<ZipLoadResult> {
   const { extractDir } = await downloadAndExtractCached(url);
 
+  // ── Unwrap single-directory wrappers ──────────────────────────────
+  const skillRoot = await resolveSkillRoot(sandbox, extractDir);
+
   // ── Check for root-level SKILL.md ─────────────────────────────────
-  const rootSkillPath = join(extractDir, "SKILL.md");
+  const rootSkillPath = join(skillRoot, "SKILL.md");
 
   try {
     await access(rootSkillPath);
@@ -625,7 +747,7 @@ export async function loadSkillsFromZip(
     const skill: DiscoveredSkill = {
       name: frontmatter.name,
       description: frontmatter.description,
-      path: extractDir,
+      path: skillRoot,
     };
 
     return { skills: [skill], extractDir };
@@ -634,7 +756,7 @@ export async function loadSkillsFromZip(
   }
 
   // ── Scan subdirectories (standard discoverSkills pipeline) ────────
-  const skills = await discoverSkills(sandbox, [extractDir]);
+  const skills = await discoverSkills(sandbox, [skillRoot]);
 
   if (skills.length === 0) {
     throw new Error(

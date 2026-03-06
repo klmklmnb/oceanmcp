@@ -256,4 +256,49 @@ describe("createBrowserExecuteTool — write operation guard", () => {
     expect(result.error).toContain("server-side tool");
     expect(result.error).toContain("loadSkill");
   });
+
+  // ── Fail-closed guard: unknown / unregistered tools ────────────────────
+  //
+  // Bug #2: When the schema for a functionId is not found in ANY registry
+  // (standalone tools or skill-bundled tools), the guard used to silently
+  // pass through and attempt execution via WebSocket (where
+  // connectionManager might catch it). The guard should block early with
+  // a specific message mentioning "cannot verify" / "operation type",
+  // rather than delegating rejection to the WS layer.
+
+  test("guard rejects unregistered tool before reaching WebSocket layer (fail-closed)", async () => {
+    // Register NO tools and NO skills — "ghostTool" has no schema at all
+    connectionManager.registerTools(CONN_ID, []);
+    connectionManager.registerSkills(CONN_ID, []);
+    const result = await callBrowserExecute("ghostTool");
+    expect(result.error).toBeDefined();
+    expect(result.error).toContain("ghostTool");
+    // The guard-level rejection must mention "operation type" to prove it
+    // came from the write-guard, not the connection manager.
+    expect(result.error).toContain("operation type");
+  });
+
+  test("guard rejects tool from different connection before reaching WebSocket layer", async () => {
+    const OTHER_CONN = "other-connection";
+    connectionManager.addConnection(OTHER_CONN, createMockWs());
+    try {
+      // Register a WRITE tool on OTHER_CONN, but NOT on CONN_ID
+      connectionManager.registerTools(OTHER_CONN, [
+        makeFunctionSchema({
+          id: "dangerousAction",
+          operationType: OPERATION_TYPE.WRITE,
+        }),
+      ]);
+      connectionManager.registerTools(CONN_ID, []);
+      connectionManager.registerSkills(CONN_ID, []);
+
+      // browserExecute is scoped to CONN_ID — guard should fail-closed
+      const result = await callBrowserExecute("dangerousAction");
+      expect(result.error).toBeDefined();
+      expect(result.error).toContain("dangerousAction");
+      expect(result.error).toContain("operation type");
+    } finally {
+      connectionManager.removeConnection(OTHER_CONN);
+    }
+  });
 });

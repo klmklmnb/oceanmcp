@@ -642,6 +642,162 @@ description: Test paths.
 });
 
 // ═════════════════════════════════════════════════════════════════════════════
+// Case 3: Nested / wrapper directory (3+ levels deep)
+// ═════════════════════════════════════════════════════════════════════════════
+
+describe("loadSkillsFromZip — nested wrapper directories", () => {
+  beforeEach(async () => {
+    await clearZipCache();
+  });
+
+  test("discovers skills inside a single wrapper directory", async () => {
+    // Common pattern: zip tool wraps everything in a single root dir
+    // wrapper/
+    //   skill-a/
+    //     SKILL.md
+    //   skill-b/
+    //     SKILL.md
+    const zipPath = await createTestZip("wrapper-single", {
+      "wrapper/skill-a/SKILL.md": `---
+name: wrapped-a
+description: Wrapped skill A.
+---
+
+# Wrapped A
+`,
+      "wrapper/skill-b/SKILL.md": `---
+name: wrapped-b
+description: Wrapped skill B.
+---
+
+# Wrapped B
+`,
+    });
+
+    const { url, stop } = serveFile(zipPath);
+    try {
+      const { skills } = await loadSkillsFromZip(sandbox, url);
+
+      expect(skills).toHaveLength(2);
+      const names = skills.map((s) => s.name).sort();
+      expect(names).toEqual(["wrapped-a", "wrapped-b"]);
+    } finally {
+      stop();
+    }
+  });
+
+  test("discovers single skill with SKILL.md inside a wrapper directory", async () => {
+    // wrapper/
+    //   SKILL.md
+    //   references/
+    //     guide.md
+    const zipPath = await createTestZip("wrapper-root-skill", {
+      "wrapper/SKILL.md": `---
+name: wrapped-root
+description: Root skill inside a wrapper.
+---
+
+# Wrapped Root Skill
+`,
+      "wrapper/references/guide.md": "# Guide",
+    });
+
+    const { url, stop } = serveFile(zipPath);
+    try {
+      const { skills } = await loadSkillsFromZip(sandbox, url);
+
+      expect(skills).toHaveLength(1);
+      expect(skills[0].name).toBe("wrapped-root");
+    } finally {
+      stop();
+    }
+  });
+
+  test("handles double-nested wrapper directories", async () => {
+    // outer/inner/
+    //   skill-a/
+    //     SKILL.md
+    const zipPath = await createTestZip("wrapper-double", {
+      "outer/inner/skill-a/SKILL.md": `---
+name: deep-skill
+description: Deeply nested skill.
+---
+
+# Deep Skill
+`,
+    });
+
+    const { url, stop } = serveFile(zipPath);
+    try {
+      const { skills } = await loadSkillsFromZip(sandbox, url);
+
+      expect(skills).toHaveLength(1);
+      expect(skills[0].name).toBe("deep-skill");
+    } finally {
+      stop();
+    }
+  });
+
+  test("wrapper with __MACOSX is unwrapped correctly", async () => {
+    // Many macOS-created zips have a __MACOSX sibling alongside the real content dir.
+    // The wrapper detection should ignore __MACOSX.
+    // __MACOSX/
+    //   ...
+    // real-content/
+    //   skill-a/
+    //     SKILL.md
+    const zipPath = await createTestZip("wrapper-macosx", {
+      "__MACOSX/._skill-a": "binary resource fork junk",
+      "real-content/skill-a/SKILL.md": `---
+name: macosx-wrapped
+description: Skill in a zip with __MACOSX junk.
+---
+
+# macOS Wrapped Skill
+`,
+    });
+
+    const { url, stop } = serveFile(zipPath);
+    try {
+      const { skills } = await loadSkillsFromZip(sandbox, url);
+
+      expect(skills).toHaveLength(1);
+      expect(skills[0].name).toBe("macosx-wrapped");
+    } finally {
+      stop();
+    }
+  });
+
+  test("does NOT unwrap when multiple real directories exist at root", async () => {
+    // If there are multiple real dirs at root (not __MACOSX), these ARE the skill dirs.
+    // No unwrapping should happen — this is standard Case 2.
+    const zipPath = await createTestZip("no-unwrap-multi", {
+      "skill-a/SKILL.md": `---
+name: no-unwrap-a
+description: Skill A at root.
+---
+`,
+      "skill-b/SKILL.md": `---
+name: no-unwrap-b
+description: Skill B at root.
+---
+`,
+    });
+
+    const { url, stop } = serveFile(zipPath);
+    try {
+      const { skills } = await loadSkillsFromZip(sandbox, url);
+
+      expect(skills).toHaveLength(2);
+      const names = skills.map((s) => s.name).sort();
+      expect(names).toEqual(["no-unwrap-a", "no-unwrap-b"]);
+    } finally {
+      stop();
+    }
+  });
+});
+
+// ═════════════════════════════════════════════════════════════════════════════
 // Error cases
 // ═════════════════════════════════════════════════════════════════════════════
 
@@ -829,6 +985,94 @@ Read _node-lib/INDEX.md for the index.
     } finally {
       stop();
     }
+  });
+});
+
+// ═════════════════════════════════════════════════════════════════════════════
+// Real-world CDN zip (integration smoke test)
+// ═════════════════════════════════════════════════════════════════════════════
+
+const REAL_CDN_ZIP_URL =
+  "https://fastcdn.mihoyo.com/static-resource-v2/2026/02/27/7cc1ae17ed278759a3ba318dafcecf27_7974366858840692508.zip";
+
+describe("loadSkillsFromZip — real-world CDN zip", () => {
+  beforeEach(async () => {
+    await clearZipCache();
+  });
+
+  test("discovers multiple subdirectory skills from CDN zip", async () => {
+    const { skills, extractDir } = await loadSkillsFromZip(sandbox, REAL_CDN_ZIP_URL);
+
+    // This zip contains 3 skill subdirectories
+    expect(skills.length).toBe(3);
+
+    const names = skills.map((s) => s.name).sort();
+    expect(names).toEqual([
+      "ai-copy-delete-paste-flow",
+      "ai-create-flow",
+      "flow-sdk-resource-id",
+    ]);
+
+    // Each skill should have a valid description
+    for (const skill of skills) {
+      expect(skill.description).toBeTruthy();
+      expect(typeof skill.description).toBe("string");
+    }
+
+    // Each skill path should be a subdirectory of extractDir
+    for (const skill of skills) {
+      expect(skill.path).toContain(extractDir);
+    }
+  });
+
+  test("second call reuses cache via conditional GET", async () => {
+    // First call: full download
+    const result1 = await loadSkillsFromZip(sandbox, REAL_CDN_ZIP_URL);
+    expect(result1.skills.length).toBe(3);
+
+    // Second call: should reuse cache (304 via ETag/Last-Modified)
+    const result2 = await loadSkillsFromZip(sandbox, REAL_CDN_ZIP_URL);
+    expect(result2.skills.length).toBe(3);
+
+    // Same extractDir reused (cache hit)
+    expect(result2.extractDir).toBe(result1.extractDir);
+
+    // Cache entry should have ETag and Last-Modified from CDN
+    const manifest = await loadCacheManifest();
+    const entry = manifest.entries.find((e) => e.url === REAL_CDN_ZIP_URL);
+    expect(entry).toBeDefined();
+    expect(entry!.etag).toBeTruthy();
+    expect(entry!.lastModified).toBeTruthy();
+    expect(entry!.maxAge).toBe(31536000); // CDN returns max-age=31536000 (1 year)
+  });
+
+  test("CDN skill resources are readable via loadSkill tool", async () => {
+    const { createLoadSkillTool } = await import("../src/ai/skills/loader");
+
+    const { skills } = await loadSkillsFromZip(sandbox, REAL_CDN_ZIP_URL);
+    const tool = createLoadSkillTool(sandbox, skills, []);
+
+    // Load ai-create-flow skill — should have _node-lib/ resources
+    const result = await tool.execute!(
+      { name: "ai-create-flow" },
+      { toolCallId: "test", messages: [] } as any,
+    );
+
+    expect(result).not.toHaveProperty("error");
+    expect((result as any).content).toBeTruthy();
+    expect((result as any).skillDirectory).toBeTruthy();
+
+    const resources: string[] = (result as any).resources;
+    expect(resources).toContain("_node-lib/");
+    expect(resources).toContain("_node-lib/INDEX.md");
+
+    // Read a specific resource file
+    const indexResult = await tool.execute!(
+      { name: "ai-create-flow", resourcePath: "_node-lib/INDEX.md" },
+      { toolCallId: "test", messages: [] } as any,
+    );
+    expect(indexResult).not.toHaveProperty("error");
+    expect((indexResult as any).content).toBeTruthy();
   });
 });
 

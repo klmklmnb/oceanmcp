@@ -37,6 +37,20 @@ class ConnectionManager {
   private pendingRequests = new Map<string, PendingRequest>();
 
   /**
+   * Reverse index: toolId → connectionId for O(1) lookup.
+   *
+   * Maintained as a derived index — rebuilt whenever `toolSchemas` or
+   * `skillSchemas` change for a connection, and cleared on disconnect.
+   * Covers both standalone tools and tools bundled inside skills.
+   *
+   * If two connections register the same toolId, the last registration wins.
+   * This mirrors the previous linear-scan behaviour (which returned the
+   * first match by insertion order) and is acceptable because the primary
+   * lookup path uses `preferredConnectionId` for scoped resolution.
+   */
+  private toolToConnection = new Map<string, string>();
+
+  /**
    * Per-connection zip skill storage, keyed by URL.
    *
    * Structure: connectionId → (url → ZipSkillEntry)
@@ -52,7 +66,60 @@ class ConnectionManager {
     this.connections.set(id, ws);
   }
 
+  /**
+   * Rebuild the reverse tool→connection index for a single connection.
+   *
+   * Removes all stale entries for `connectionId`, then re-indexes both
+   * standalone tools (`toolSchemas`) and skill-bundled tools (`skillSchemas`).
+   *
+   * Called after every `registerTools()` or `registerSkills()` mutation.
+   * Cost: O(I + T + S) where I = current index size, T = standalone tools
+   * for this connection, S = skill-bundled tools for this connection.
+   */
+  private rebuildToolIndex(connectionId: string): void {
+    // Remove stale entries for this connection
+    for (const [toolId, connId] of this.toolToConnection) {
+      if (connId === connectionId) {
+        this.toolToConnection.delete(toolId);
+      }
+    }
+
+    // Index standalone tools
+    const tools = this.toolSchemas.get(connectionId);
+    if (tools) {
+      for (const tool of tools) {
+        this.toolToConnection.set(tool.id, connectionId);
+      }
+    }
+
+    // Index skill-bundled tools
+    const skills = this.skillSchemas.get(connectionId);
+    if (skills) {
+      for (const skill of skills) {
+        if (skill.tools) {
+          for (const tool of skill.tools) {
+            this.toolToConnection.set(tool.id, connectionId);
+          }
+        }
+      }
+    }
+  }
+
+  /**
+   * Remove all reverse-index entries belonging to a connection.
+   *
+   * Used during disconnect cleanup, before the primary Maps are cleared.
+   */
+  private clearToolIndex(connectionId: string): void {
+    for (const [toolId, connId] of this.toolToConnection) {
+      if (connId === connectionId) {
+        this.toolToConnection.delete(toolId);
+      }
+    }
+  }
+
   removeConnection(id: string) {
+    this.clearToolIndex(id);
     this.connections.delete(id);
     this.toolSchemas.delete(id);
     this.skillSchemas.delete(id);
@@ -61,10 +128,12 @@ class ConnectionManager {
 
   registerTools(connectionId: string, tools: FunctionSchema[]) {
     this.toolSchemas.set(connectionId, tools);
+    this.rebuildToolIndex(connectionId);
   }
 
   registerSkills(connectionId: string, skills: SkillSchema[]) {
     this.skillSchemas.set(connectionId, skills);
+    this.rebuildToolIndex(connectionId);
   }
 
   /**
@@ -187,22 +256,9 @@ class ConnectionManager {
     return this.connections.has(connectionId);
   }
 
-  /** Find which connection has a tool with the given function ID */
+  /** Find which connection has a tool with the given function ID (O(1) via reverse index) */
   private findConnectionForTool(functionId: string): string | undefined {
-    for (const [connId, tools] of this.toolSchemas.entries()) {
-      if (tools.some((t) => t.id === functionId)) {
-        return connId;
-      }
-    }
-    // Also check tools bundled inside frontend-registered skills
-    for (const [connId, skills] of this.skillSchemas.entries()) {
-      for (const skill of skills) {
-        if (skill.tools?.some((t) => t.id === functionId)) {
-          return connId;
-        }
-      }
-    }
-    return undefined;
+    return this.toolToConnection.get(functionId);
   }
 
   /** Send an EXECUTE_TOOL request to the browser and wait for the result */

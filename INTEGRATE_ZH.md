@@ -180,7 +180,7 @@ OceanMCPSDK.mount({
 
 | 字段        | 类型     | 默认值                           | 说明                                                                         |
 | ----------- | -------- | -------------------------------- | ---------------------------------------------------------------------------- |
-| `default`   | `string` | 服务器 `LLM_MODEL` 环境变量      | 主模型 ID（如 `"gpt-4o"`、`"claude-sonnet-4-20250514"`、`"z-ai/glm-4.6"`）。 |
+| `default`   | `string` | 服务器 `LLM_MODEL` 环境变量      | 主模型 ID（如 `"gpt-4o"`、`"claude-sonnet-4-20250514"`、`"mihoyo-glm-4.6"`）。 |
 | `fast`      | `string` | 服务器 `LLM_FAST_MODEL` 环境变量 | 轻量模型，用于较简单的任务。未设置时回退到默认模型。                         |
 | `maxTokens` | `number` | 服务器 `LLM_MAX_TOKENS` 环境变量 | 每次响应的最大输出 token 数。                                                |
 
@@ -189,7 +189,7 @@ OceanMCPSDK.mount({
 ```ts
 // 使用指定模型并设置 token 上限
 OceanMCPSDK.mount({
-  model: { default: "z-ai/glm-4.6", maxTokens: 104800 },
+  model: { default: "mihoyo-glm-4.6", maxTokens: 104800 },
 });
 
 // 对不同复杂度的任务使用不同模型
