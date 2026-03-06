@@ -3,6 +3,7 @@ import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 import tailwindcss from "@tailwindcss/vite";
 import { readFileSync, writeFileSync, existsSync } from "fs";
+import packageJson from "./package.json";
 
 /**
  * Separate build config for the UMD bundle.
@@ -14,68 +15,73 @@ import { readFileSync, writeFileSync, existsSync } from "fs";
  *
  * Run after the ESM lib build.
  */
-export default defineConfig({
-  define: {
-    "process.env.NODE_ENV": JSON.stringify("production"),
-  },
-  plugins: [
-    react(),
-    tailwindcss(),
-    {
-      name: "generate-umd-dts",
-      closeBundle() {
-        const esmDtsPath = resolve(__dirname, "dist/sdk.esm.d.ts");
-        const umdDtsPath = resolve(__dirname, "dist/sdk.umd.d.ts");
+export default defineConfig(() => {
+  return {
+    define: {
+      "process.env.NODE_ENV": JSON.stringify("production"),
+      __SDK_VERSION__: JSON.stringify(packageJson.version),
+      __SDK_BUILD__: JSON.stringify("umd"),
+    },
+    plugins: [
+      react(),
+      tailwindcss(),
+      {
+        name: "generate-umd-dts",
+        closeBundle() {
+          const esmDtsPath = resolve(__dirname, "dist/sdk.esm.d.ts");
+          const umdDtsPath = resolve(__dirname, "dist/sdk.umd.d.ts");
 
-        if (!existsSync(esmDtsPath)) {
-          console.warn("[generate-umd-dts] sdk.esm.d.ts not found — run the lib build first.");
-          return;
-        }
+          if (!existsSync(esmDtsPath)) {
+            console.warn("[generate-umd-dts] sdk.esm.d.ts not found — run the lib build first.");
+            return;
+          }
 
-        const esmDts = readFileSync(esmDtsPath, "utf-8");
+          const esmDts = readFileSync(esmDtsPath, "utf-8");
 
-        let sdkTypeName = "OceanMCPSDKType";
-        if (!esmDts.includes(`interface ${sdkTypeName}`)) {
-          const m = esmDts.match(/declare const \w+:\s*(\w+)/);
-          if (m) sdkTypeName = m[1];
-        }
+          let sdkTypeName = "OceanMCPSDKType";
+          if (!esmDts.includes(`interface ${sdkTypeName}`)) {
+            const m = esmDts.match(/declare const \w+:\s*(\w+)/);
+            if (m) sdkTypeName = m[1];
+          }
 
-        const umdDts = [
-          "// Auto-generated UMD type declarations for @ocean-mcp/frontend-sdk",
-          "// Usage:",
-          '//   1. tsconfig.json: "types": ["@ocean-mcp/frontend-sdk/sdk.umd"]',
-          '//   2. Triple-slash:  /// <reference types="@ocean-mcp/frontend-sdk/sdk.umd" />',
-          "",
-          esmDts,
-          "",
-          `declare global {`,
-          `  const OceanMCPSDK: ${sdkTypeName};`,
-          `  interface Window {`,
-          `    OceanMCPSDK: ${sdkTypeName};`,
-          `  }`,
-          `}`,
-          "",
-        ].join("\n");
+          const umdDts = [
+            "// Auto-generated UMD type declarations for @ocean-mcp/frontend-sdk",
+            "// Usage:",
+            '//   1. tsconfig.json: "types": ["@ocean-mcp/frontend-sdk/sdk.umd"]',
+            '//   2. Triple-slash:  /// <reference types="@ocean-mcp/frontend-sdk/sdk.umd" />',
+            "",
+            esmDts,
+            "",
+            `declare global {`,
+            `  const OceanMCPSDK: ${sdkTypeName};`,
+            `  interface Window {`,
+            `    OceanMCPSDK: ${sdkTypeName};`,
+            `  }`,
+            `}`,
+            "",
+          ].join("\n");
 
-        writeFileSync(umdDtsPath, umdDts, "utf-8");
-        console.log(`[generate-umd-dts] Generated dist/sdk.umd.d.ts`);
+          writeFileSync(umdDtsPath, umdDts, "utf-8");
+          console.log(`[generate-umd-dts] Generated dist/sdk.umd.d.ts`);
+        },
+      },
+    ],
+    build: {
+      cssCodeSplit: false,
+      cssMinify: true,
+      emptyOutDir: false,
+      sourcemap: true,
+      lib: {
+        entry: resolve(__dirname, "src/main.tsx"),
+        name: "OceanMCPSDK",
+        formats: ["umd"],
+        fileName: () => "sdk.umd.js",
+      },
+      rollupOptions: {
+        output: {
+          assetFileNames: "sdk.[ext]",
+        },
       },
     },
-  ],
-  build: {
-    cssCodeSplit: false,
-    cssMinify: true,
-    emptyOutDir: false,
-    lib: {
-      entry: resolve(__dirname, "src/main.tsx"),
-      name: "OceanMCPSDK",
-      formats: ["umd"],
-      fileName: () => "sdk.umd.js",
-    },
-    rollupOptions: {
-      output: {
-        assetFileNames: "sdk.[ext]",
-      },
-    },
-  },
+  };
 });

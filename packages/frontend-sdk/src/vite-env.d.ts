@@ -17,3 +17,6 @@ declare module "*.css?inline" {
   const css: string;
   export default css;
 }
+
+declare const __SDK_BUILD__: "demo" | "esm" | "umd";
+declare const __SDK_VERSION__: string;

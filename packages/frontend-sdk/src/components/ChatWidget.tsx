@@ -12,6 +12,11 @@ import { MessageRenderer } from "./MessageRenderer";
 import { wsClient } from "../runtime/ws-client";
 import { chatBridge } from "../runtime/chat-bridge";
 import { uploadRegistry } from "../runtime/upload-registry";
+import {
+  addSdkBreadcrumb,
+  captureException,
+  setSdkTags,
+} from "../runtime/sentry";
 import { sdkConfig, resolveTheme, LOCALE_CHANGE_EVENT, THEME_CHANGE_EVENT, THEME, type Theme, type SupportedLocale } from "../runtime/sdk-config";
 import { getActiveShadowRoot } from "../shadow-dom";
 import { t } from "../locale";
@@ -248,7 +253,7 @@ function AttachIcon() {
  * to the api-server's /api/chat endpoint.
  */
 export function ChatWidget({ avatar }: { avatar?: string }) {
-  useLocale();
+  const currentLocale = useLocale();
   const scrollRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const [input, setInput] = useState("");
@@ -259,6 +264,7 @@ export function ChatWidget({ avatar }: { avatar?: string }) {
   const submittedApprovalIdsRef = useRef<Set<string>>(new Set());
   /** Track userSelect toolCallIds that have already triggered an auto-submit to prevent re-sends. */
   const submittedUserSelectIdsRef = useRef<Set<string>>(new Set());
+  const lastCapturedChatErrorRef = useRef<unknown>(null);
 
   const welcomeTitle = sdkConfig.welcomeTitle ?? t("chat.welcome.title");
   const welcomeDescription = sdkConfig.welcomeDescription ?? t("chat.welcome.description");
@@ -381,6 +387,12 @@ export function ChatWidget({ avatar }: { avatar?: string }) {
       setMessages(normalized.messages as any);
     }
 
+    addSdkBreadcrumb("chat.send_programmatic", {
+      partCount: 1,
+      hasText: true,
+      fileCount: 0,
+    });
+
     await sendMessage({
       role: MESSAGE_ROLE.USER,
       parts: [{ type: MESSAGE_PART_TYPE.TEXT, text }],
@@ -417,6 +429,13 @@ export function ChatWidget({ avatar }: { avatar?: string }) {
       });
     }
 
+    const submitData = {
+      partCount: parts.length,
+      hasText: Boolean(hasText),
+      fileCount: readyFiles.length,
+    };
+    addSdkBreadcrumb("chat.submit", submitData);
+
     await sendMessage({
       role: MESSAGE_ROLE.USER,
       parts,
@@ -434,6 +453,29 @@ export function ChatWidget({ avatar }: { avatar?: string }) {
   useEffect(() => {
     inputRef.current?.focus();
   }, []);
+
+  useEffect(() => {
+    setSdkTags({
+      locale: currentLocale,
+    });
+  }, [currentLocale]);
+
+  useEffect(() => {
+    if (!error || lastCapturedChatErrorRef.current === error) {
+      return;
+    }
+
+    lastCapturedChatErrorRef.current = error;
+    captureException(error, {
+      tags: {
+        stage: "chat_transport",
+      },
+      extras: {
+        status,
+        messageCount: messages.length,
+      },
+    });
+  }, [error, messages.length, status]);
 
   // ─── Upload ──────────────────────────────────────────────────────────────
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -474,6 +516,16 @@ export function ChatWidget({ avatar }: { avatar?: string }) {
       );
     } catch (err: any) {
       console.error("[OceanMCP] Upload failed:", err);
+      captureException(err, {
+        tags: {
+          stage: "upload",
+        },
+        extras: {
+          fileCount: files.length,
+          mimeTypes: [...new Set(files.map((file) => file.type || "unknown"))],
+          totalBytes: files.reduce((sum, file) => sum + file.size, 0),
+        },
+      });
       setPendingFiles((prev) =>
         prev.map((pf) =>
           newPending.some((np) => np.id === pf.id)
@@ -579,6 +631,13 @@ export function ChatWidget({ avatar }: { avatar?: string }) {
     toolName: string,
     approvalId?: string,
   ) => {
+    const approvalData = {
+      toolName,
+      toolCallId,
+      hasApprovalId: Boolean(approvalId),
+    };
+    addSdkBreadcrumb("tool.approve", approvalData);
+
     if (approvalId) {
       // AI SDK v6: use addToolApprovalResponse for needsApproval tools
       addToolApprovalResponse({
@@ -600,6 +659,13 @@ export function ChatWidget({ avatar }: { avatar?: string }) {
     toolName: string,
     approvalId?: string,
   ) => {
+    const denyData = {
+      toolName,
+      toolCallId,
+      hasApprovalId: Boolean(approvalId),
+    };
+    addSdkBreadcrumb("tool.deny", denyData);
+
     if (approvalId) {
       // AI SDK v6: use addToolApprovalResponse for needsApproval tools
       addToolApprovalResponse({
@@ -642,6 +708,12 @@ export function ChatWidget({ avatar }: { avatar?: string }) {
   const isStreaming = status === CHAT_STATUS.STREAMING;
   const isLoading = status === CHAT_STATUS.SUBMITTED;
   const currentTheme = useTheme();
+
+  useEffect(() => {
+    setSdkTags({
+      theme: currentTheme,
+    });
+  }, [currentTheme]);
 
   return (
     <div 

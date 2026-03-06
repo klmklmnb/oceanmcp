@@ -1,5 +1,6 @@
 import React from "react";
 import { DiffEditor } from "@monaco-editor/react";
+import { captureException } from "../runtime/sentry";
 
 type DiffViewerProps = {
   label: string;
@@ -23,6 +24,20 @@ class DiffViewerErrorBoundary extends React.Component<
 
   static getDerivedStateFromError() {
     return { hasError: true };
+  }
+
+  componentDidCatch(error: Error, info: React.ErrorInfo) {
+    captureException(error, {
+      tags: {
+        component: "DiffViewer",
+        stage: "error_boundary",
+      },
+      extras: {
+        oldLength: this.props.oldValue.length,
+        newLength: this.props.newValue.length,
+        componentStack: info.componentStack,
+      },
+    });
   }
 
   render() {

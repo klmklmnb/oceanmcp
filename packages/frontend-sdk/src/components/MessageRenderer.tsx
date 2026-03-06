@@ -15,13 +15,44 @@ import { UserSelectCard } from "./UserSelectCard";
 import { MarkdownRenderer } from "./MarkdownRenderer";
 import { functionRegistry, skillRegistry } from "../registry";
 import { sdkConfig } from "../runtime/sdk-config";
+import { captureException } from "../runtime/sentry";
 import { t } from "../locale";
 
+function getPartToolName(partData: any): string | undefined {
+  if (
+    typeof partData?.type === "string" &&
+    partData.type.startsWith(TOOL_PART_TYPE_PREFIX)
+  ) {
+    return partData.type.slice(TOOL_PART_TYPE_PREFIX.length);
+  }
+
+  return partData?.toolName;
+}
+
+function getPartMetadata(partData: any) {
+  return {
+    partType: typeof partData?.type === "string" ? partData.type : "unknown",
+    partState: typeof partData?.state === "string" ? partData.state : undefined,
+    toolName: getPartToolName(partData),
+    hasApprovalId: Boolean(partData?.approval?.id),
+  };
+}
+
 class PartErrorBoundary extends React.Component<
-  { children: React.ReactNode; partIndex: number; partData?: any },
+  {
+    children: React.ReactNode;
+    partIndex: number;
+    partData?: any;
+    messageRole: string;
+  },
   { hasError: boolean; error?: Error }
 > {
-  constructor(props: { children: React.ReactNode; partIndex: number; partData?: any }) {
+  constructor(props: {
+    children: React.ReactNode;
+    partIndex: number;
+    partData?: any;
+    messageRole: string;
+  }) {
     super(props);
     this.state = { hasError: false };
   }
@@ -31,12 +62,29 @@ class PartErrorBoundary extends React.Component<
   }
 
   componentDidCatch(error: Error, info: React.ErrorInfo) {
+    const metadata = getPartMetadata(this.props.partData);
+    captureException(error, {
+      tags: {
+        component: "MessageRenderer",
+        stage: "part_error_boundary",
+        message_role: this.props.messageRole,
+        part_type: metadata.partType,
+        tool_name: metadata.toolName,
+      },
+      extras: {
+        partIndex: this.props.partIndex,
+        partState: metadata.partState,
+        hasApprovalId: metadata.hasApprovalId,
+        componentStack: info.componentStack,
+      },
+    });
     console.error(
       `[OceanMCP] Render error in message part ${this.props.partIndex}:`,
       "\n  Error:", error.message,
-      "\n  Stack:", error.stack,
       "\n  Component Stack:", info.componentStack,
-      "\n  Part data:", JSON.stringify(this.props.partData, null, 2),
+      "\n  Part type:", metadata.partType,
+      "\n  Part state:", metadata.partState,
+      "\n  Tool name:", metadata.toolName,
     );
   }
 
@@ -205,11 +253,11 @@ type MessageRendererProps = {
 /** Avatar icon for AI messages */
 function AvatarIcon({ avatar }: { avatar?: string }) {
   if (avatar) {
-    return <img src={avatar} alt="AI" className="flex-shrink-0 w-8 h-8 object-cover" />;
+    return <img src={avatar} alt="AI" className="shrink-0 w-8 h-8 object-cover" />;
   }
   
   return (
-    <div className="flex-shrink-0 w-8 h-8 rounded-full bg-gradient-to-br from-ocean-400 to-ocean-600 flex items-center justify-center shadow-sm">
+    <div className="shrink-0 w-8 h-8 rounded-full bg-linear-to-br from-ocean-400 to-ocean-600 flex items-center justify-center shadow-sm">
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
         <path
           d="M12 2L14.09 8.26L20 9.27L15.5 13.14L16.82 19.02L12 16.09L7.18 19.02L8.5 13.14L4 9.27L9.91 8.26L12 2Z"
@@ -334,10 +382,10 @@ function FileAttachmentCard({ file }: { file: FileAttachment }) {
         <img
           src={file.url}
           alt={file.name}
-          className="w-9 h-9 rounded-md object-cover flex-shrink-0"
+          className="w-9 h-9 rounded-md object-cover shrink-0"
         />
       ) : (
-        <div className="w-9 h-9 rounded-md bg-white/15 flex items-center justify-center flex-shrink-0 text-white/80">
+        <div className="w-9 h-9 rounded-md bg-white/15 flex items-center justify-center shrink-0 text-white/80">
           <FileIcon mimeType={file.mimeType} />
         </div>
       )}
@@ -654,13 +702,28 @@ export function MessageRenderer({
 
     return null;
     } catch (err: any) {
+      const metadata = getPartMetadata(part);
+      captureException(err, {
+        tags: {
+          component: "MessageRenderer",
+          stage: "render_part",
+          message_role: message.role,
+          part_type: metadata.partType,
+          tool_name: metadata.toolName,
+        },
+        extras: {
+          partIndex: index,
+          partState: metadata.partState,
+          hasApprovalId: metadata.hasApprovalId,
+        },
+      });
       console.error(
         "[OceanMCP] renderPart error:",
         "\n  Part index:", index,
-        "\n  Part type:", part?.type,
-        "\n  Part data:", JSON.stringify(part, null, 2),
+        "\n  Part type:", metadata.partType,
+        "\n  Part state:", metadata.partState,
+        "\n  Tool name:", metadata.toolName,
         "\n  Error:", err?.message,
-        "\n  Stack:", err?.stack,
       );
       return null;
     }
@@ -684,7 +747,12 @@ export function MessageRenderer({
               const node = renderPart(part, index);
               if (node === null) return null;
               return (
-                <PartErrorBoundary key={`eb-file-${index}`} partIndex={index} partData={part}>
+                <PartErrorBoundary
+                  key={`eb-file-${index}`}
+                  partIndex={index}
+                  partData={part}
+                  messageRole={message.role}
+                >
                   {node}
                 </PartErrorBoundary>
               );
@@ -696,7 +764,12 @@ export function MessageRenderer({
               const node = renderPart(part, index);
               if (node === null) return null;
               return (
-                <PartErrorBoundary key={`eb-text-${index}`} partIndex={index} partData={part}>
+                <PartErrorBoundary
+                  key={`eb-text-${index}`}
+                  partIndex={index}
+                  partData={part}
+                  messageRole={message.role}
+                >
                   {node}
                 </PartErrorBoundary>
               );
@@ -720,7 +793,12 @@ export function MessageRenderer({
           const node = renderPart(part, index);
           if (node === null) return null;
           return (
-            <PartErrorBoundary key={`eb-${index}`} partIndex={index} partData={part}>
+            <PartErrorBoundary
+              key={`eb-${index}`}
+              partIndex={index}
+              partData={part}
+              messageRole={message.role}
+            >
               {node}
             </PartErrorBoundary>
           );

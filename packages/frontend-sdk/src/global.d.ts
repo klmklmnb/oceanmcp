@@ -49,5 +49,7 @@ declare global {
   interface Window {
     /** The OceanMCP frontend SDK, available after loading `sdk.umd.js`. */
     OceanMCPSDK: OceanMCPSDKType;
+    /** Optional runtime override for the OceanMCP api-server base URL. */
+    __OCEAN_MCP_SERVER_URL__?: string;
   }
 }
