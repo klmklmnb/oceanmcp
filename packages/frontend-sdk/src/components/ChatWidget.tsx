@@ -708,6 +708,7 @@ export function ChatWidget({ avatar }: { avatar?: string }) {
   const isStreaming = status === CHAT_STATUS.STREAMING;
   const isLoading = status === CHAT_STATUS.SUBMITTED;
   const currentTheme = useTheme();
+  const lastMessageId = messages[messages.length - 1]?.id;
 
   useEffect(() => {
     setSdkTags({
@@ -789,6 +790,11 @@ export function ChatWidget({ avatar }: { avatar?: string }) {
               onUserSelect={handleUserSelect}
               onDenySelect={handleDenySelect}
               avatar={avatar}
+              showTrailingIndicator={
+                isStreaming &&
+                message.id === lastMessageId &&
+                message.role === MESSAGE_ROLE.ASSISTANT
+              }
             />
           ))}
 

@@ -237,6 +237,168 @@ function ToolCallCard({
   );
 }
 
+function getSkillLabel(skillName?: string): string {
+  if (!skillName) {
+    return sdkConfig.locale === "zh-CN" ? "未知技能" : "Unknown skill";
+  }
+
+  const skill = skillRegistry.get(skillName);
+  return skill
+    ? sdkConfig.resolveDisplayName(skill.name, skill.cnName)
+    : skillName;
+}
+
+function getLoadSkillDisplayName(skillName?: string): string {
+  const skillLabel = getSkillLabel(skillName);
+  return sdkConfig.locale === "zh-CN"
+    ? `技能装填：${skillLabel}`
+    : `Load Skill: ${skillLabel}`;
+}
+
+function stringifyToolData(value: unknown): string {
+  if (typeof value === "string") return value;
+  if (value === undefined) return "";
+  return JSON.stringify(value, null, 2);
+}
+
+function isLoadSkillPart(part: any): boolean {
+  return isToolPart(part) && getToolName(part) === "loadSkill";
+}
+
+function LoadSkillItemCard({ part }: { part: any }) {
+  const [expanded, setExpanded] = useState(false);
+  const itemState = part.state === TOOL_PART_STATE.OUTPUT_ERROR
+    ? { text: t("tool.status.error"), className: "text-red-500" }
+    : part.state === TOOL_PART_STATE.OUTPUT_AVAILABLE
+      ? { text: t("tool.status.complete"), className: "text-emerald-600" }
+      : { text: t("tool.status.running"), className: "text-ocean-500" };
+  const hasInput = part.input !== undefined && Object.keys(part.input || {}).length > 0;
+  const hasOutput = part.output !== undefined;
+  const hasError = Boolean(part.errorText);
+
+  return (
+    <div className="rounded-lg border border-border/60 bg-surface-tertiary overflow-hidden">
+      <button
+        onClick={() => setExpanded((value) => !value)}
+        className="w-full flex items-center justify-between gap-3 px-3 py-2.5 text-left hover:bg-surface transition-colors cursor-pointer"
+      >
+        <div className="min-w-0 flex items-center gap-2">
+          <span className="text-xs text-text-tertiary">{expanded ? "▼" : "▶"}</span>
+          <span className="text-sm text-text-primary truncate">
+            {getSkillLabel(part.input?.name)}
+          </span>
+        </div>
+        <span className={`shrink-0 text-xs ${itemState.className}`}>
+          {itemState.text}
+        </span>
+      </button>
+      {expanded && (
+        <div className="border-t border-border/60 px-3 py-3 space-y-3">
+          {hasInput && (
+            <div>
+              <p className="text-xs font-medium text-text-tertiary mb-1.5">
+                {t("tool.label.parameters")}
+              </p>
+              <pre className="text-xs bg-surface rounded-lg p-3 overflow-x-auto text-text-secondary font-mono max-h-40 overflow-y-auto">
+                {stringifyToolData(part.input)}
+              </pre>
+            </div>
+          )}
+          {hasOutput && (
+            <div>
+              <p className="text-xs font-medium text-text-tertiary mb-1.5">
+                {t("tool.label.result")}
+              </p>
+              <pre className="text-xs bg-surface rounded-lg p-3 overflow-x-auto text-text-secondary font-mono max-h-40 overflow-y-auto">
+                {stringifyToolData(part.output)}
+              </pre>
+            </div>
+          )}
+          {hasError && (
+            <div>
+              <p className="text-xs font-medium text-red-500 mb-1.5">
+                {t("tool.status.error")}
+              </p>
+              <pre className="text-xs bg-red-50 rounded-lg p-3 overflow-x-auto text-red-600 font-mono max-h-40 overflow-y-auto">
+                {stringifyToolData(part.errorText)}
+              </pre>
+            </div>
+          )}
+          {!hasInput && !hasOutput && !hasError && (
+            <p className="text-xs text-text-tertiary">
+              {sdkConfig.locale === "zh-CN" ? "暂无详情" : "No details yet"}
+            </p>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function LoadSkillGroupCard({ parts }: { parts: any[] }) {
+  const [expanded, setExpanded] = useState(false);
+
+  const summaryState = parts.some((part) => part.state === TOOL_PART_STATE.OUTPUT_ERROR)
+    ? TOOL_PART_STATE.OUTPUT_ERROR
+    : parts.every((part) => part.state === TOOL_PART_STATE.OUTPUT_AVAILABLE)
+      ? TOOL_PART_STATE.OUTPUT_AVAILABLE
+      : TOOL_PART_STATE.INPUT_AVAILABLE;
+
+  const title = sdkConfig.locale === "zh-CN" ? "技能装填" : "Load Skills";
+  const countLabel = sdkConfig.locale === "zh-CN"
+    ? `${parts.length} 项`
+    : `${parts.length} skills`;
+
+  return (
+    <div className="my-3 rounded-xl border border-border bg-surface overflow-hidden shadow-card ocean-fade-in">
+      <button
+        onClick={() => setExpanded((value) => !value)}
+        className="w-full px-4 py-3 bg-surface-secondary hover:bg-surface-tertiary transition-colors cursor-pointer"
+      >
+        <div className="flex items-center gap-2">
+          <span className="text-xs text-text-tertiary">{expanded ? "▼" : "▶"}</span>
+          <span className="text-sm">🔧</span>
+          <span className="text-sm font-semibold text-text-primary">{title}</span>
+          <span className="text-xs text-text-tertiary">({countLabel})</span>
+          {summaryState === TOOL_PART_STATE.OUTPUT_AVAILABLE && (
+            <span className="ml-auto flex items-center gap-1.5 text-xs text-emerald-600">
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
+              {t("tool.status.complete")}
+            </span>
+          )}
+          {summaryState === TOOL_PART_STATE.OUTPUT_ERROR && (
+            <span className="ml-auto flex items-center gap-1.5 text-xs text-red-500">
+              <span className="w-1.5 h-1.5 rounded-full bg-red-400" />
+              {t("tool.status.error")}
+            </span>
+          )}
+          {summaryState === TOOL_PART_STATE.INPUT_AVAILABLE && (
+            <span className="ml-auto flex items-center gap-1.5 text-xs text-ocean-500">
+              <span
+                className="inline-block w-3 h-3 border-2 border-ocean-500 border-t-transparent rounded-full"
+                style={{ animation: "ocean-spin 0.8s linear infinite" }}
+              />
+              {t("tool.status.running")}
+            </span>
+          )}
+        </div>
+      </button>
+      {expanded && (
+        <div className="px-4 py-3">
+          <div className="flex flex-col gap-2">
+            {parts.map((part, index) => (
+              <LoadSkillItemCard
+                key={part.toolCallId || `load-skill-${index}`}
+                part={part}
+              />
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 type MessageRendererProps = {
   message: UIMessage;
   onApprove: (
@@ -248,6 +410,7 @@ type MessageRendererProps = {
   onUserSelect: (toolCallId: string, output: Record<string, any>) => void;
   onDenySelect: (toolCallId: string) => void;
   avatar?: string;
+  showTrailingIndicator?: boolean;
 };
 
 /** Avatar icon for AI messages */
@@ -455,8 +618,10 @@ export function MessageRenderer({
   onUserSelect,
   onDenySelect,
   avatar,
+  showTrailingIndicator = false,
 }: MessageRendererProps) {
   const isUser = message.role === MESSAGE_ROLE.USER;
+  const suppressInlineTypingIndicator = showTrailingIndicator;
 
   const renderPart = (part: any, index: number) => {
     try {
@@ -476,7 +641,7 @@ export function MessageRenderer({
         return (
           <div key={toolCallId || index}>
             {state === TOOL_PART_STATE.INPUT_STREAMING ? (
-              <TypingIndicator />
+              suppressInlineTypingIndicator ? null : <TypingIndicator />
             ) : (
               <>
                 <FlowNodeCard
@@ -505,7 +670,7 @@ export function MessageRenderer({
         return (
           <div key={toolCallId || index}>
             {state === TOOL_PART_STATE.INPUT_STREAMING ? (
-              <TypingIndicator />
+              suppressInlineTypingIndicator ? null : <TypingIndicator />
             ) : (
               <UserSelectCard
                 toolCallId={toolCallId}
@@ -537,13 +702,7 @@ export function MessageRenderer({
           : input.functionId;
         fnArgs = input.arguments || {};
       } else if (toolName === "loadSkill" && input?.name) {
-        const skill = skillRegistry.get(input.name);
-        const skillLabel = skill
-          ? sdkConfig.resolveDisplayName(skill.name, skill.cnName)
-          : input.name;
-        displayName = sdkConfig.locale === "zh-CN"
-          ? `技能装填：${skillLabel}`
-          : `Load Skill: ${skillLabel}`;
+        displayName = getLoadSkillDisplayName(input.name);
       } else {
         // Direct proxy tool — toolName is the function ID itself
         fnDef = functionRegistry.get(toolName);
@@ -556,7 +715,7 @@ export function MessageRenderer({
       return (
         <div key={toolCallId || index}>
           {state === TOOL_PART_STATE.INPUT_STREAMING ? (
-            <TypingIndicator />
+            suppressInlineTypingIndicator ? null : <TypingIndicator />
           ) : state === TOOL_PART_STATE.APPROVAL_REQUESTED ? (
             <ApprovalButtons
               toolCallId={toolCallId}
@@ -729,6 +888,55 @@ export function MessageRenderer({
     }
   };
 
+  const renderParts = (parts: any[], keyPrefix: string) => {
+    const nodes: React.ReactNode[] = [];
+
+    for (let index = 0; index < parts.length; index += 1) {
+      const part = parts[index];
+
+      if (isLoadSkillPart(part)) {
+        const groupedParts = [part];
+        let nextIndex = index + 1;
+
+        while (nextIndex < parts.length && isLoadSkillPart(parts[nextIndex])) {
+          groupedParts.push(parts[nextIndex]);
+          nextIndex += 1;
+        }
+
+        if (groupedParts.length > 1) {
+          nodes.push(
+            <PartErrorBoundary
+              key={`${keyPrefix}-load-skill-${index}`}
+              partIndex={index}
+              partData={part}
+              messageRole={message.role}
+            >
+              <LoadSkillGroupCard parts={groupedParts} />
+            </PartErrorBoundary>,
+          );
+          index = nextIndex - 1;
+          continue;
+        }
+      }
+
+      const node = renderPart(part, index);
+      if (node === null) continue;
+
+      nodes.push(
+        <PartErrorBoundary
+          key={`${keyPrefix}-${index}`}
+          partIndex={index}
+          partData={part}
+          messageRole={message.role}
+        >
+          {node}
+        </PartErrorBoundary>,
+      );
+    }
+
+    return nodes;
+  };
+
   const hasTextContent = message.parts?.some(
     (p) => p.type === MESSAGE_PART_TYPE.TEXT && (p as any).text,
   );
@@ -743,37 +951,11 @@ export function MessageRenderer({
         <div className="ocean-fade-in flex flex-col gap-2 items-end">
           {/* File bubble */}
           <div className="max-w-[80%]">
-            {fileParts.map((part, index) => {
-              const node = renderPart(part, index);
-              if (node === null) return null;
-              return (
-                <PartErrorBoundary
-                  key={`eb-file-${index}`}
-                  partIndex={index}
-                  partData={part}
-                  messageRole={message.role}
-                >
-                  {node}
-                </PartErrorBoundary>
-              );
-            })}
+            {renderParts(fileParts, "eb-file")}
           </div>
           {/* Text bubble */}
           <div className="max-w-[80%]">
-            {textParts.map((part, index) => {
-              const node = renderPart(part, index);
-              if (node === null) return null;
-              return (
-                <PartErrorBoundary
-                  key={`eb-text-${index}`}
-                  partIndex={index}
-                  partData={part}
-                  messageRole={message.role}
-                >
-                  {node}
-                </PartErrorBoundary>
-              );
-            })}
+            {renderParts(textParts, "eb-text")}
           </div>
         </div>
       );
@@ -789,20 +971,13 @@ export function MessageRenderer({
 
       <div className={`max-w-[80%] ${isUser ? "" : "flex-1"}`}>
         {/* Render all parts */}
-        {message.parts?.map((part, index) => {
-          const node = renderPart(part, index);
-          if (node === null) return null;
-          return (
-            <PartErrorBoundary
-              key={`eb-${index}`}
-              partIndex={index}
-              partData={part}
-              messageRole={message.role}
-            >
-              {node}
-            </PartErrorBoundary>
-          );
-        })}
+        {message.parts ? renderParts(message.parts, "eb") : null}
+
+        {!isUser && showTrailingIndicator && (
+          <div className="mt-2">
+            <TypingIndicator />
+          </div>
+        )}
 
         {/* Action buttons for AI messages */}
         {!isUser && hasTextContent && (
