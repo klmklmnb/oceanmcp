@@ -141,29 +141,34 @@ function ToolCallCard({
     <div className="my-3 rounded-xl border border-border bg-surface overflow-hidden shadow-card ocean-fade-in">
       <button
         onClick={() => setExpanded((v) => !v)}
-        className="w-full px-4 py-3 border-b border-border bg-surface-secondary hover:bg-surface-tertiary transition-colors cursor-pointer"
+        className="w-full px-4 py-3 border-b border-border bg-surface-secondary hover:bg-surface-tertiary transition-colors cursor-pointer text-left"
       >
-        <div className="flex items-center gap-2">
-          <span className="text-xs text-text-tertiary">{expanded ? "▼" : "▶"}</span>
-          <span className="text-sm">🔧</span>
-          <span className="text-sm font-semibold text-text-primary">
+        <div className="flex min-w-0 items-center gap-2">
+          <div className="flex shrink-0 items-center gap-2">
+            <span className="text-xs text-text-tertiary">{expanded ? "▼" : "▶"}</span>
+            <span className="text-sm">🔧</span>
+          </div>
+          <span
+            className="min-w-0 flex-1 truncate text-sm font-semibold text-text-primary"
+            title={displayName}
+          >
             {displayName}
           </span>
           {state === TOOL_PART_STATE.OUTPUT_AVAILABLE && (
-            <span className="ml-auto flex items-center gap-1.5 text-xs text-emerald-600">
+            <span className="ml-auto flex whitespace-nowrap items-center gap-1.5 text-xs text-emerald-600">
               <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
               {t("tool.status.complete")}
             </span>
           )}
           {state === TOOL_PART_STATE.OUTPUT_ERROR && (
-            <span className="ml-auto flex items-center gap-1.5 text-xs text-red-500">
+            <span className="ml-auto flex whitespace-nowrap items-center gap-1.5 text-xs text-red-500">
               <span className="w-1.5 h-1.5 rounded-full bg-red-400" />
               {t("tool.status.error")}
             </span>
           )}
           {(state === TOOL_PART_STATE.INPUT_AVAILABLE ||
             state === TOOL_PART_STATE.APPROVAL_RESPONDED) && (
-            <span className="ml-auto flex items-center gap-1.5 text-xs text-ocean-500">
+            <span className="ml-auto flex whitespace-nowrap items-center gap-1.5 text-xs text-ocean-500">
               <span
                 className="inline-block w-3 h-3 border-2 border-ocean-500 border-t-transparent rounded-full"
                 style={{ animation: "ocean-spin 0.8s linear infinite" }}
@@ -280,17 +285,20 @@ function LoadSkillItemCard({ part }: { part: any }) {
     <div className="rounded-lg border border-border/60 bg-surface-tertiary overflow-hidden">
       <button
         onClick={() => setExpanded((value) => !value)}
-        className="w-full flex items-center justify-between gap-3 px-3 py-2.5 text-left hover:bg-surface transition-colors cursor-pointer"
+        className="w-full px-3 py-2.5 text-left hover:bg-surface transition-colors cursor-pointer"
       >
-        <div className="min-w-0 flex items-center gap-2">
-          <span className="text-xs text-text-tertiary">{expanded ? "▼" : "▶"}</span>
-          <span className="text-sm text-text-primary truncate">
+        <div className="flex min-w-0 items-center gap-3">
+          <span className="shrink-0 text-xs text-text-tertiary">{expanded ? "▼" : "▶"}</span>
+          <span
+            className="min-w-0 flex-1 truncate text-sm text-text-primary"
+            title={getSkillLabel(part.input?.name)}
+          >
             {getSkillLabel(part.input?.name)}
           </span>
+          <span className={`ml-auto shrink-0 whitespace-nowrap text-xs ${itemState.className}`}>
+            {itemState.text}
+          </span>
         </div>
-        <span className={`shrink-0 text-xs ${itemState.className}`}>
-          {itemState.text}
-        </span>
       </button>
       {expanded && (
         <div className="border-t border-border/60 px-3 py-3 space-y-3">
@@ -353,27 +361,33 @@ function LoadSkillGroupCard({ parts }: { parts: any[] }) {
     <div className="my-3 rounded-xl border border-border bg-surface overflow-hidden shadow-card ocean-fade-in">
       <button
         onClick={() => setExpanded((value) => !value)}
-        className="w-full px-4 py-3 bg-surface-secondary hover:bg-surface-tertiary transition-colors cursor-pointer"
+        className="w-full px-4 py-3 bg-surface-secondary hover:bg-surface-tertiary transition-colors cursor-pointer text-left"
       >
-        <div className="flex items-center gap-2">
-          <span className="text-xs text-text-tertiary">{expanded ? "▼" : "▶"}</span>
-          <span className="text-sm">🔧</span>
-          <span className="text-sm font-semibold text-text-primary">{title}</span>
-          <span className="text-xs text-text-tertiary">({countLabel})</span>
+        <div className="flex min-w-0 items-center gap-2">
+          <div className="flex shrink-0 items-center gap-2">
+            <span className="text-xs text-text-tertiary">{expanded ? "▼" : "▶"}</span>
+            <span className="text-sm">🔧</span>
+          </div>
+          <div className="min-w-0 flex flex-1 items-center gap-2 overflow-hidden">
+            <span className="min-w-0 truncate text-sm font-semibold text-text-primary">
+              {title}
+            </span>
+            <span className="shrink-0 whitespace-nowrap text-xs text-text-tertiary">({countLabel})</span>
+          </div>
           {summaryState === TOOL_PART_STATE.OUTPUT_AVAILABLE && (
-            <span className="ml-auto flex items-center gap-1.5 text-xs text-emerald-600">
+            <span className="ml-auto flex shrink-0 whitespace-nowrap items-center gap-1.5 text-xs text-emerald-600">
               <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
               {t("tool.status.complete")}
             </span>
           )}
           {summaryState === TOOL_PART_STATE.OUTPUT_ERROR && (
-            <span className="ml-auto flex items-center gap-1.5 text-xs text-red-500">
+            <span className="ml-auto flex shrink-0 whitespace-nowrap items-center gap-1.5 text-xs text-red-500">
               <span className="w-1.5 h-1.5 rounded-full bg-red-400" />
               {t("tool.status.error")}
             </span>
           )}
           {summaryState === TOOL_PART_STATE.INPUT_AVAILABLE && (
-            <span className="ml-auto flex items-center gap-1.5 text-xs text-ocean-500">
+            <span className="ml-auto flex shrink-0 whitespace-nowrap items-center gap-1.5 text-xs text-ocean-500">
               <span
                 className="inline-block w-3 h-3 border-2 border-ocean-500 border-t-transparent rounded-full"
                 style={{ animation: "ocean-spin 0.8s linear infinite" }}
@@ -969,7 +983,7 @@ export function MessageRenderer({
       {/* AI avatar icon */}
       {!isUser && <AvatarIcon avatar={avatar} />}
 
-      <div className={`max-w-[80%] ${isUser ? "" : "flex-1"}`}>
+      <div className={isUser ? "max-w-[80%]" : "min-w-0 flex-1 max-w-full"}>
         {/* Render all parts */}
         {message.parts ? renderParts(message.parts, "eb") : null}
 

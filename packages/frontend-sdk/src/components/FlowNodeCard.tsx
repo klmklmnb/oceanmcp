@@ -124,12 +124,12 @@ export function FlowNodeCard({
     <div className="my-3 rounded-xl border border-border bg-surface overflow-hidden shadow-card ocean-fade-in">
       {/* Header */}
       <div className="px-4 py-3 border-b border-border bg-surface-secondary">
-        <div className="flex items-center gap-2">
-          <span className="text-sm">📋</span>
-          <span className="text-sm font-semibold text-text-primary">
+        <div className="flex min-w-0 items-center gap-2">
+          <span className="shrink-0 text-sm">📋</span>
+          <span className="min-w-0 flex-1 truncate text-sm font-semibold text-text-primary">
             {t("flow.title")}
           </span>
-          <span className="ml-auto text-xs px-2 py-0.5 rounded-full bg-ocean-100 text-ocean-700 font-medium">
+          <span className="ml-auto shrink-0 whitespace-nowrap text-xs px-2 py-0.5 rounded-full bg-ocean-100 text-ocean-700 font-medium">
             {t("flow.stepCount", { count: steps.length })}
           </span>
         </div>
@@ -148,7 +148,7 @@ export function FlowNodeCard({
               <div className="flex items-start gap-3">
                 {/* Status icon */}
                 <span
-                  className={`flex-shrink-0 w-6 h-6 rounded-full ${config.bg} flex items-center justify-center text-xs ${config.color} font-bold mt-0.5`}
+                  className={`shrink-0 w-6 h-6 rounded-full ${config.bg} flex items-center justify-center text-xs ${config.color} font-bold mt-0.5`}
                 >
                   {status === FLOW_STEP_STATUS.RUNNING ? (
                     <span

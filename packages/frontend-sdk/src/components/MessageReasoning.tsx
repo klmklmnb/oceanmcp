@@ -40,10 +40,10 @@ export function MessageReasoning({
     <div className="my-2 border border-border/50 rounded-lg bg-surface-secondary/50 overflow-hidden">
       <button
         onClick={() => setIsOpen(!isOpen)}
-        className="flex items-center gap-2 w-full px-3 py-2 text-xs text-text-tertiary hover:bg-surface-tertiary/50 transition-colors"
+        className="flex min-w-0 items-center gap-2 w-full px-3 py-2 text-left text-xs text-text-tertiary hover:bg-surface-tertiary/50 transition-colors"
       >
         <div
-          className={`p-1 rounded-sm ${isLoading ? "animate-pulse text-ocean-500" : ""}`}
+          className={`shrink-0 p-1 rounded-sm ${isLoading ? "animate-pulse text-ocean-500" : ""}`}
         >
           <svg
             width="14"
@@ -58,15 +58,15 @@ export function MessageReasoning({
             <path d="M12 2a10 10 0 1 0 10 10 4 4 0 0 1-5-5 4 4 0 0 1-5-5c0-5 5-5 5-5" />
           </svg>
         </div>
-        <span className="font-medium">
+        <span className="min-w-0 flex-1 truncate font-medium">
           {isLoading ? t("reasoning.loading") : t("reasoning.title")}
         </span>
         {isLoading && (
-          <span className="text-text-quaternary ml-auto">{duration}s</span>
+          <span className="ml-auto shrink-0 whitespace-nowrap text-text-quaternary">{duration}s</span>
         )}
         {!isLoading && (
           <svg
-            className={`ml-auto w-4 h-4 transition-transform ${isOpen ? "rotate-180" : ""}`}
+            className={`ml-auto shrink-0 w-4 h-4 transition-transform ${isOpen ? "rotate-180" : ""}`}
             viewBox="0 0 24 24"
             fill="none"
             stroke="currentColor"
