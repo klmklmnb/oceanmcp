@@ -14,6 +14,7 @@
     "@ai-sdk/openai-compatible": "^2.0.27",
     "@ai-sdk/provider": "^3.0.3",
     "@ocean-mcp/shared": "workspace:*",
+    "@mihoyo/wave-opensdk": "file:vendor/mihoyo-wave-opensdk-0.9.0.tgz",
     "ai": "6.0.37",
     "zod": "^3.25.76"
   },

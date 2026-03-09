@@ -11,6 +11,7 @@ import { handleChatRequest } from "./routes/chat";
 import { connectionManager } from "./ws/connection-manager";
 import { initSkills, getSkillsContext } from "./ai/prompts";
 import { loadSkillsFromZip } from "./ai/skills";
+import { initWave, handleWaveWebhookWithContext } from "./wave";
 
 const PORT = Number(process.env.PORT) || 4000;
 
@@ -19,6 +20,9 @@ const PORT = Number(process.env.PORT) || 4000;
 // This must complete before the server starts accepting chat requests, so the
 // system prompt includes the skills catalog and the loadSkill tool is available.
 await initSkills();
+
+// ── Initialize Wave integration (if configured) ─────────────────────────────
+await initWave();
 
 const server = Bun.serve<{ connectionId: string }>({
   port: PORT,
@@ -48,6 +52,11 @@ const server = Bun.serve<{ connectionId: string }>({
       const response = await handleChatRequest(req);
       response.headers.set("Access-Control-Allow-Origin", "*");
       return response;
+    }
+
+    // ── Wave Webhook ────────────────────────────────────────────────────
+    if (url.pathname === "/wave/events" && req.method === "POST") {
+      return handleWaveWebhookWithContext(req);
     }
 
     // ── WebSocket upgrade ───────────────────────────────────────────────
