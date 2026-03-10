@@ -91,19 +91,34 @@ export function createExecutePlanTool(connectionId?: string) {
       intent: z
         .string()
         .describe("A clear description of what this plan accomplishes"),
-      steps: z.array(
-        z.object({
-          functionId: z
-            .string()
-            .describe("The ID of the registered function to execute"),
-          arguments: z
-            .record(z.any())
-            .describe("Arguments to pass to the function")
-            .default({}),
-          title: z
-            .string()
-            .describe("A human-readable title describing this step"),
-        }),
+      steps: z.preprocess(
+        (val) => {
+          // LLMs sometimes emit `steps` as a JSON string instead of an array.
+          // Parse it so Zod validation succeeds without a hard failure.
+          if (typeof val === "string") {
+            try {
+              const parsed = JSON.parse(val);
+              if (Array.isArray(parsed)) return parsed;
+            } catch {
+              // fall through — let Zod report the validation error
+            }
+          }
+          return val;
+        },
+        z.array(
+          z.object({
+            functionId: z
+              .string()
+              .describe("The ID of the registered function to execute"),
+            arguments: z
+              .record(z.any())
+              .describe("Arguments to pass to the function")
+              .default({}),
+            title: z
+              .string()
+              .describe("A human-readable title describing this step"),
+          }),
+        ),
       ),
     }),
 

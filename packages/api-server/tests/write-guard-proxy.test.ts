@@ -158,6 +158,89 @@ describe("createBrowserProxyToolFromSchema — needsApproval gate", () => {
 // approval with bad data.
 // ---------------------------------------------------------------------------
 
+// ---------------------------------------------------------------------------
+// Bug: LLM sends `steps` as a JSON string instead of an array, causing
+// Zod schema validation to fail with "Expected array, received string"
+// before execute() is ever called. The z.preprocess wrapper should
+// auto-parse stringified JSON arrays so the plan proceeds normally.
+// ---------------------------------------------------------------------------
+
+describe("executePlan — stringified steps auto-parsing", () => {
+  test("accepts steps as a JSON string and parses it into an array", async () => {
+    connectionManager.registerTools(CONN_ID, [
+      makeFunctionSchema({
+        id: "updateFormValues",
+        operationType: OPERATION_TYPE.WRITE,
+      }),
+    ]);
+
+    const planTool = createExecutePlanTool(CONN_ID);
+
+    const stepsArray = [
+      {
+        functionId: "updateFormValues",
+        title: "Fill form values",
+        arguments: { title: "2025年5月通行费报销" },
+      },
+    ];
+
+    const input = {
+      intent: "Fill reimbursement form",
+      // Simulate the LLM sending steps as a JSON string
+      steps: JSON.stringify(stepsArray),
+    };
+
+    // The inputSchema should preprocess the string into an array,
+    // so needsApproval receives a valid parsed input.
+    const inputSchema = (planTool as any).inputSchema;
+    const parsed = inputSchema.safeParse(input);
+    expect(parsed.success).toBe(true);
+    expect(Array.isArray(parsed.data.steps)).toBe(true);
+    expect(parsed.data.steps).toHaveLength(1);
+    expect(parsed.data.steps[0].functionId).toBe("updateFormValues");
+  });
+
+  test("still rejects steps that are a non-array JSON string", async () => {
+    const planTool = createExecutePlanTool(CONN_ID);
+    const inputSchema = (planTool as any).inputSchema;
+
+    const parsed = inputSchema.safeParse({
+      intent: "test",
+      steps: JSON.stringify({ not: "an array" }),
+    });
+    expect(parsed.success).toBe(false);
+  });
+
+  test("still rejects steps that are a non-JSON string", async () => {
+    const planTool = createExecutePlanTool(CONN_ID);
+    const inputSchema = (planTool as any).inputSchema;
+
+    const parsed = inputSchema.safeParse({
+      intent: "test",
+      steps: "this is not json at all",
+    });
+    expect(parsed.success).toBe(false);
+  });
+
+  test("normal array steps still work as before", async () => {
+    const planTool = createExecutePlanTool(CONN_ID);
+    const inputSchema = (planTool as any).inputSchema;
+
+    const parsed = inputSchema.safeParse({
+      intent: "test",
+      steps: [
+        {
+          functionId: "someFunc",
+          title: "Do something",
+          arguments: { key: "value" },
+        },
+      ],
+    });
+    expect(parsed.success).toBe(true);
+    expect(parsed.data.steps).toHaveLength(1);
+  });
+});
+
 describe("executePlan — validateSteps skill-bundled schema lookup", () => {
   test("validates parameters of skill-bundled tools (rejects invalid args)", async () => {
     // Register a skill with a tool that has a REQUIRED string parameter
