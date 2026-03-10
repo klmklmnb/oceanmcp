@@ -129,7 +129,7 @@ export async function handleWaveMessage(
   const session = waveSessionManager.getOrCreate(sessionKey);
 
   // 5. Build tools and system prompt
-  const tools = buildWaveTools(fileSkills, zipSkills, sandbox);
+  const tools = buildWaveTools(fileSkills, zipSkills, sandbox, clients, ctx.senderId, sessionKey);
   const systemPrompt = buildWaveSystemPrompt(fileSkills, zipSkills);
 
   // 6. Convert messages to model format

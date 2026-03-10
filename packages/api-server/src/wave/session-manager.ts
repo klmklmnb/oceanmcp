@@ -9,6 +9,18 @@
  * conversations.
  */
 
+/** Cached user info fetched via contact:user API */
+export interface WaveUserInfo {
+  name: string;
+  en_name: string;
+  nick_name: string;
+  avatar: string;
+  union_id: string;
+  user_id: string;
+  display_status: string;
+  email: string;
+}
+
 export interface WaveSession {
   /** Session key: "wave:dm:<userId>" or "wave:group:<chatId>" */
   sessionKey: string;
@@ -16,6 +28,8 @@ export interface WaveSession {
   messages: any[];
   /** Last activity timestamp (epoch ms) */
   lastActivity: number;
+  /** Cached user info keyed by union_id — avoids repeated contact API calls */
+  userInfo: Map<string, WaveUserInfo>;
 }
 
 /** Default session TTL: 2 hours of inactivity */
@@ -42,6 +56,7 @@ class SessionManager {
         sessionKey,
         messages: [],
         lastActivity: Date.now(),
+        userInfo: new Map(),
       };
       this.sessions.set(sessionKey, session);
     }
@@ -70,6 +85,21 @@ class SessionManager {
       role: "assistant",
       parts: [{ type: "text", text }],
     });
+  }
+
+  /**
+   * Cache user info for a given union_id within a session.
+   */
+  setUserInfo(sessionKey: string, unionId: string, info: WaveUserInfo): void {
+    const session = this.getOrCreate(sessionKey);
+    session.userInfo.set(unionId, info);
+  }
+
+  /**
+   * Retrieve cached user info for a given union_id within a session.
+   */
+  getUserInfo(sessionKey: string, unionId: string): WaveUserInfo | undefined {
+    return this.sessions.get(sessionKey)?.userInfo.get(unionId);
   }
 
   /**
