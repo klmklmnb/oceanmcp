@@ -42,6 +42,15 @@ class SessionManager {
   private sessions = new Map<string, WaveSession>();
   private cleanupTimer: ReturnType<typeof setInterval> | null = null;
 
+  /**
+   * Active AbortController per session — used to cancel a running
+   * streamText() when the user sends a new message.
+   *
+   * Kept separate from WaveSession because AbortController is not
+   * serializable and is strictly a runtime concern.
+   */
+  private activeControllers = new Map<string, AbortController>();
+
   constructor() {
     this.startCleanup();
   }
@@ -123,10 +132,37 @@ class SessionManager {
     return this.sessions.get(sessionKey)?.messages.length ?? 0;
   }
 
+  // ── Active stream AbortController management ──────────────────────────
+
+  /**
+   * Store the AbortController for the currently active streamText() call
+   * on a session. Called at the start of handleWaveMessage().
+   */
+  setActiveAbortController(sessionKey: string, controller: AbortController): void {
+    this.activeControllers.set(sessionKey, controller);
+  }
+
+  /**
+   * Get the AbortController for the session's current active stream
+   * (if any). Returns `undefined` when no stream is running.
+   */
+  getActiveAbortController(sessionKey: string): AbortController | undefined {
+    return this.activeControllers.get(sessionKey);
+  }
+
+  /**
+   * Remove the tracked AbortController for a session.
+   * Called when a stream completes normally or after aborting.
+   */
+  clearActiveAbortController(sessionKey: string): void {
+    this.activeControllers.delete(sessionKey);
+  }
+
   /**
    * Clear a specific session.
    */
   clear(sessionKey: string): void {
+    this.activeControllers.delete(sessionKey);
     this.sessions.delete(sessionKey);
   }
 
@@ -162,6 +198,7 @@ class SessionManager {
       clearInterval(this.cleanupTimer);
       this.cleanupTimer = null;
     }
+    this.activeControllers.clear();
     this.sessions.clear();
   }
 }

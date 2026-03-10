@@ -27,6 +27,7 @@ import {
 import { checkPolicy } from "./policy";
 import { waveSessionManager } from "./session-manager";
 import { buildWaveTools } from "./tools";
+import { removeAllForSession } from "./pending-selections";
 import {
   sendInitialReplyCard,
   enableStreaming,
@@ -145,14 +146,34 @@ export async function handleWaveMessage(
   // 4. Get/create session and append user message
   const t3 = Date.now();
   const sessionKey = deriveSessionKey(ctx);
+
+  // 4a. Abort any previous active stream for this session.
+  // This handles the case where the user sends a new message while a
+  // userSelect is waiting — the old streamText() gets aborted and any
+  // pending selections for the session are rejected.
+  const previousController = waveSessionManager.getActiveAbortController(sessionKey);
+  if (previousController) {
+    debugLog(`${TAG} [${reqId}] Aborting previous stream for session ${sessionKey}`);
+    previousController.abort(new Error("New message received, aborting previous stream"));
+    const removed = removeAllForSession(sessionKey, "User sent a new message");
+    if (removed > 0) {
+      debugLog(`${TAG} [${reqId}] Rejected ${removed} pending selection(s) for session ${sessionKey}`);
+    }
+    waveSessionManager.clearActiveAbortController(sessionKey);
+  }
+
   waveSessionManager.addUserMessage(sessionKey, ctx.content);
   waveSessionManager.trimHistory(sessionKey, config.historyLimit);
   const session = waveSessionManager.getOrCreate(sessionKey);
   debugLog(`${TAG} [${reqId}] Session setup: ${elapsed(t3)} (key=${sessionKey}, msgs=${session.messages.length})`);
 
+  // 4b. Create a new AbortController for this stream
+  const abortController = new AbortController();
+  waveSessionManager.setActiveAbortController(sessionKey, abortController);
+
   // 5. Build tools and system prompt
   const t4 = Date.now();
-  const tools = buildWaveTools(fileSkills, zipSkills, sandbox, clients, ctx.senderId, sessionKey);
+  const tools = buildWaveTools(fileSkills, zipSkills, sandbox, clients, ctx.senderId, sessionKey, ctx.chatId);
   const systemPrompt = buildWaveSystemPrompt(fileSkills, zipSkills);
   debugLog(`${TAG} [${reqId}] Build tools+prompt: ${elapsed(t4)} (tools=${Object.keys(tools).length}, promptLen=${systemPrompt.length})`);
 
@@ -172,12 +193,24 @@ export async function handleWaveMessage(
   try {
     const t7 = Date.now();
     if (config.streaming) {
-      await handleStreamingResponse(ctx, clients, resolvedModel, systemPrompt, modelMessages, tools, thinkingConfig, sessionKey, reqId);
+      await handleStreamingResponse(ctx, clients, resolvedModel, systemPrompt, modelMessages, tools, thinkingConfig, sessionKey, reqId, abortController.signal);
     } else {
-      await handleSimpleResponse(ctx, clients, resolvedModel, systemPrompt, modelMessages, tools, thinkingConfig, sessionKey, reqId);
+      await handleSimpleResponse(ctx, clients, resolvedModel, systemPrompt, modelMessages, tools, thinkingConfig, sessionKey, reqId, abortController.signal);
     }
     debugLog(`${TAG} [${reqId}] ── Response complete ── response: ${elapsed(t7)}, total: ${elapsed(t0)}`);
   } catch (err) {
+    // Check if this was an intentional abort (user sent a new message)
+    const isAbort =
+      err instanceof Error &&
+      (err.name === "AbortError" ||
+        err.message.includes("aborting previous stream") ||
+        abortController.signal.aborted);
+
+    if (isAbort) {
+      debugLog(`${TAG} [${reqId}] ── Aborted (new message) after ${elapsed(t0)} ──`);
+      return; // Don't send error reply — user already moved on
+    }
+
     console.error(`${TAG} [${reqId}] ── Error after ${elapsed(t0)} ──`, err);
     try {
       await sendSimpleReply(
@@ -188,6 +221,10 @@ export async function handleWaveMessage(
     } catch {
       // best effort
     }
+  } finally {
+    // Clear the active controller for this session once the stream ends
+    // (whether normally, by error, or by abort).
+    waveSessionManager.clearActiveAbortController(sessionKey);
   }
 }
 
@@ -204,6 +241,7 @@ async function handleStreamingResponse(
   thinkingConfig: any,
   sessionKey: string,
   reqId: string,
+  abortSignal: AbortSignal,
 ): Promise<void> {
   // Send initial placeholder card
   const tCard = Date.now();
@@ -217,7 +255,7 @@ async function handleStreamingResponse(
   if (!cardMessageId) {
     // Fallback to non-streaming
     debugLog(`${TAG} [${reqId}] No card ID, falling back to simple response`);
-    return handleSimpleResponse(ctx, clients, model, systemPrompt, modelMessages, tools, thinkingConfig, sessionKey, reqId);
+    return handleSimpleResponse(ctx, clients, model, systemPrompt, modelMessages, tools, thinkingConfig, sessionKey, reqId, abortSignal);
   }
 
   const state: StreamingCardState = {
@@ -239,6 +277,7 @@ async function handleStreamingResponse(
       tools,
       maxOutputTokens: resolveMaxTokens(),
       stopWhen: stepCountIs(10),
+      abortSignal,
     }),
   );
 
@@ -307,6 +346,7 @@ async function handleSimpleResponse(
   thinkingConfig: any,
   sessionKey: string,
   reqId: string,
+  abortSignal: AbortSignal,
 ): Promise<void> {
   const tLlm = Date.now();
   const result = withThinkingConfig(thinkingConfig, () =>
@@ -317,6 +357,7 @@ async function handleSimpleResponse(
       tools,
       maxOutputTokens: resolveMaxTokens(),
       stopWhen: stepCountIs(10),
+      abortSignal,
     }),
   );
 

@@ -165,8 +165,15 @@ export function parseWaveEvent(
     }
   }
 
+  // For DMs the receiver is the bot itself (app_id / cli_xxx). The Wave
+  // msg.send API requires a valid receiver_id_type — "app_id" is rejected
+  // (error 10401004). In DMs the correct send target is the *sender*
+  // (union_id / ou_xxx). For groups the receiver is already the chat
+  // (chat_id / oc_xxx) which is correct.
+  const chatId = isDirectChat ? sender.id : receiver.id;
+
   return {
-    chatId: receiver.id,
+    chatId,
     messageId: (message as any).msg_id,
     senderId: sender.id,
     senderIdType: String(sender.id_type ?? "union_id"),

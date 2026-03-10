@@ -6,7 +6,7 @@
  * executePlan) since there is no browser WebSocket connection.
  *
  * Tool sources:
- *   1. Server tools: userSelect, getCurrentUser
+ *   1. Server tools: userSelect (Wave-native interactive card), getCurrentUser
  *   2. loadSkill tool (when any skills exist)
  *   3. Skill-bundled tools (from tools.ts exports — server-side execute)
  *   4. File-based skills discovered at startup (global)
@@ -17,11 +17,133 @@
 import { tool, type Tool } from "ai";
 import { z } from "zod";
 import type { Sandbox } from "@ocean-mcp/shared";
-import { userSelect } from "../ai/tools/user-select-tool";
 import { createLoadSkillTool } from "../ai/skills/loader";
 import type { DiscoveredSkill } from "../ai/skills/discover";
 import type { WaveClients } from "./client";
 import { waveSessionManager, type WaveUserInfo } from "./session-manager";
+import { sendUserSelectCard } from "./message-sender";
+import { addPendingSelection, type PendingSelectionOption } from "./pending-selections";
+
+/**
+ * Create the Wave-native `userSelect` tool.
+ *
+ * Unlike the generic `userSelect` (which is client-side with no execute),
+ * this version sends an interactive Wave card message (buttons for ≤3 options,
+ * dropdown for >3 options) and awaits the user's click via the card reaction
+ * callback (EventMsgCardReaction).
+ *
+ * The tool's `execute()` returns a Promise that resolves when the user clicks
+ * an option. The AI SDK's multi-step mechanism pauses the stream while waiting.
+ *
+ * @param clients    - Wave SDK clients (for sending messages)
+ * @param chatId     - The chat ID to send the interactive card to
+ * @param sessionKey - Session key for correlation
+ */
+function createWaveUserSelectTool(
+  clients: WaveClients,
+  chatId: string,
+  sessionKey: string,
+): Tool<any, any> {
+  return tool({
+    description:
+      "Ask the user to select one option before continuing. " +
+      "Use this whenever a value is uncertain and there are known or inferred candidate options. " +
+      "An interactive card (buttons or dropdown) will be sent to the user in Wave.",
+    inputSchema: z
+      .object({
+        functionId: z
+          .string()
+          .optional()
+          .describe(
+            "Optional target tool ID. Use with parameterName to resolve option metadata from the target tool.",
+          ),
+        parameterName: z
+          .string()
+          .optional()
+          .describe(
+            "Optional target parameter name on functionId. Used to resolve enumMap/display hints when explicit options are not provided.",
+          ),
+        message: z
+          .string()
+          .optional()
+          .describe("Optional prompt text shown to the user."),
+        options: z
+          .array(
+            z.object({
+              value: z.any().describe("The raw option value."),
+              label: z
+                .string()
+                .optional()
+                .describe("Optional user-facing option label."),
+              description: z
+                .string()
+                .optional()
+                .describe("Optional extra detail shown with the option."),
+            }),
+          )
+          .optional()
+          .describe(
+            "Explicit candidate options. For non-enum parameters, prefer providing this after reasoning candidates from context/descriptions.",
+          ),
+      })
+      .refine(
+        (input) =>
+          (Array.isArray(input.options) && input.options.length > 0) ||
+          Boolean(input.functionId && input.parameterName),
+        {
+          message:
+            "Provide either non-empty options, or both functionId and parameterName.",
+        },
+      ),
+    execute: async (input) => {
+      const promptMessage = input.message || "请选择一个选项";
+      const opts: PendingSelectionOption[] = (input.options ?? []).map(
+        (o: { value?: any; label?: string; description?: string }) => ({
+          value: String(o.value ?? ""),
+          label: o.label || (o.description ? `${o.value} — ${o.description}` : undefined),
+        }),
+      );
+
+      if (opts.length === 0) {
+        return {
+          error:
+            "No options provided and functionId/parameterName resolution is not supported in Wave context. Please provide explicit options.",
+        };
+      }
+
+      try {
+        // Send the interactive card
+        const cardMsgId = await sendUserSelectCard(
+          clients,
+          chatId,
+          promptMessage,
+          opts,
+        );
+
+        if (!cardMsgId) {
+          return { error: "Failed to send interactive selection card." };
+        }
+
+        // Wait for the user to click an option (resolved by onMsgCardReaction)
+        const selectedValue = await addPendingSelection(
+          cardMsgId,
+          opts,
+          sessionKey,
+        );
+
+        // Find the label for the selected value
+        const selectedOption = opts.find((o) => o.value === selectedValue);
+        const selectedLabel = selectedOption?.label || selectedValue;
+
+        return { selectedValue, selectedLabel };
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        console.error(`[Wave] userSelect failed:`, message);
+        return { error: `Selection failed: ${message}` };
+      }
+    },
+  });
+}
 
 /**
  * Create the `getCurrentUser` tool.
@@ -88,9 +210,10 @@ function createGetCurrentUserTool(
  * @param fileSkills - File-based skills discovered at startup
  * @param zipSkills - Skills loaded from the webhook's ?skills= URL
  * @param sandbox - Filesystem sandbox for skill resource loading
- * @param clients - Wave SDK clients (for getCurrentUser tool)
+ * @param clients - Wave SDK clients (for getCurrentUser + userSelect tools)
  * @param senderId - The sender's union_id (for getCurrentUser tool)
  * @param sessionKey - Session key (for getCurrentUser caching)
+ * @param chatId - The chat ID for sending interactive cards (userSelect)
  */
 export function buildWaveTools(
   fileSkills: DiscoveredSkill[],
@@ -99,9 +222,10 @@ export function buildWaveTools(
   clients: WaveClients,
   senderId: string,
   sessionKey: string,
+  chatId: string,
 ): Record<string, Tool<any, any>> {
   const tools: Record<string, Tool<any, any>> = {
-    userSelect,
+    userSelect: createWaveUserSelectTool(clients, chatId, sessionKey),
     getCurrentUser: createGetCurrentUserTool(clients, senderId, sessionKey),
   };
 

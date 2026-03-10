@@ -7,12 +7,20 @@
  *   1. Extracts the `?skills=` query parameter (zip URL for tools/skills)
  *   2. Passes the body to the Wave SDK's event handler for decryption + dispatch
  *   3. Returns the appropriate response (challenge for verification, empty for events)
+ *
+ * Also handles card interaction callbacks (EventMsgCardReaction) for
+ * the interactive user-selection cards sent by the Wave `userSelect` tool.
  */
 
 import type { WaveConfig } from "./config";
 import { getWaveClients } from "./client";
 import { handleWaveMessage } from "./event-handler";
 import type { WaveEvent } from "./message-parser";
+import {
+  resolvePendingSelection,
+  hasPendingSelection,
+} from "./pending-selections";
+import { updateCardAfterSelection, updateCardAsExpired } from "./message-sender";
 
 let waveConfig: WaveConfig | null = null;
 
@@ -125,6 +133,71 @@ export function registerEventHandlers(config: WaveConfig): void {
     const zipUrl = currentSkillsZipUrl;
     void handleWaveMessage(event as WaveEvent, config, zipUrl).catch((err) =>
       console.error("[Wave] Group handler error:", err),
+    );
+  });
+
+  // ── Card interaction callback (buttons / dropdown selection) ─────────
+  //
+  // When a user clicks a button or selects a dropdown option on an
+  // interactive card sent by `userSelect`, Wave fires a
+  // `MsgCardReaction` event. We look up the pending selection by the
+  // card's message ID and resolve the corresponding Promise so the
+  // tool's execute() can return the selected value to the LLM.
+  clients.event.onMsgCardReaction((event) => {
+    const { open_msg_id, token, action } = event.event;
+    const selectedValue = action?.values?.[0];
+
+    if (process.env.DEBUG === "true") {
+      console.log(
+        "[Wave][Debug] Card reaction event:",
+        JSON.stringify(
+          { open_msg_id, selectedValue, allValues: action?.values },
+          null,
+          2,
+        ),
+      );
+    }
+
+    // Only handle events for cards we sent (pending userSelect cards).
+    // If the card is not pending, it may be stale (server restart, abort,
+    // timeout, etc.) — update it to inform the user.
+    if (!open_msg_id || !hasPendingSelection(open_msg_id)) {
+      if (process.env.DEBUG === "true") {
+        console.log(
+          `[Wave][Debug] Card reaction for non-pending card ${open_msg_id}, sending expired notice`,
+        );
+      }
+      if (open_msg_id) {
+        void updateCardAsExpired(clients, open_msg_id).catch(() => {});
+      }
+      return;
+    }
+
+    if (!selectedValue) {
+      console.warn(
+        `[Wave] Card reaction for ${open_msg_id} has no selected value`,
+      );
+      return;
+    }
+
+    // Resolve the pending selection — this unblocks the tool's execute()
+    const pending = resolvePendingSelection(open_msg_id, selectedValue);
+    if (!pending) return;
+
+    // Find the label of the selected option for the card update
+    const selectedOption = pending.options.find(
+      (o) => o.value === selectedValue,
+    );
+    const selectedLabel = selectedOption?.label || selectedValue;
+
+    // Update the card to show the confirmed selection (fire-and-forget)
+    void updateCardAfterSelection(
+      clients,
+      open_msg_id,
+      "选择完成",
+      selectedLabel,
+    ).catch((err) =>
+      console.error("[Wave] Failed to update card after selection:", err),
     );
   });
 }

@@ -17,9 +17,19 @@ import {
   CardTag,
   msgCard,
   msgMarkdown,
+  cardMarkdown,
+  cardButton,
+  cardOptionValue,
+  cardDropdown,
+  cardFlow,
+  cardColumn,
+  cardHeader,
   type MsgCard,
+  type Card,
+  type CardOption,
 } from "@mihoyo/wave-opensdk";
 import type { WaveClients } from "./client";
+import type { PendingSelectionOption } from "./pending-selections";
 
 const TAG = "[Wave][Perf]";
 
@@ -332,4 +342,179 @@ export async function sendSimpleReply(
   const t0 = Date.now();
   await clients.msg.reply(replyToMessageId, msgMarkdown(text));
   debugLog(`${TAG} msg.reply (simple): ${Date.now() - t0}ms`);
+}
+
+// ── Interactive User-Select Card ─────────────────────────────────────────────
+
+/** Max options count rendered as inline buttons. Above this threshold, use dropdown. */
+const BUTTON_THRESHOLD = 3;
+
+/**
+ * Build a card with interactive buttons for user selection (≤3 options).
+ *
+ * Layout:
+ *   header  (info template, shows the prompt message)
+ *   flow    [Button] [Button] [Button]
+ */
+function buildButtonSelectCard(
+  message: string,
+  options: PendingSelectionOption[],
+): MsgCard["content"] {
+  const buttons: Card[] = options.map((opt, i) =>
+    cardButton(
+      opt.label || String(opt.value),
+      cardOptionValue(String(opt.value), opt.label || String(opt.value)),
+      // First option gets primary style to hint the "default" choice
+      { style: i === 0 ? "primary" : "default" },
+    ),
+  );
+
+  return {
+    header: cardHeader(message, "info"),
+    card: cardFlow(buttons),
+  };
+}
+
+/**
+ * Build a card with a dropdown for user selection (>3 options).
+ *
+ * Uses the dropdown component structure matching the Wave card spec:
+ *   header   (info template, shows the prompt message)
+ *   dropdown with value options
+ */
+function buildDropdownSelectCard(
+  message: string,
+  options: PendingSelectionOption[],
+): MsgCard["content"] {
+  const dropdownOptions: CardOption[] = options.map((opt) =>
+    cardOptionValue(String(opt.value), opt.label || String(opt.value)),
+  );
+
+  return {
+    header: cardHeader(message, "info"),
+    card: cardDropdown("请选择", dropdownOptions),
+  };
+}
+
+/**
+ * Build a "selection confirmed" card shown after the user clicks an option.
+ */
+function buildSelectionConfirmedCard(
+  message: string,
+  selectedLabel: string,
+): MsgCard["content"] {
+  return {
+    header: cardHeader(message, "success"),
+    card: cardColumn([
+      cardMarkdown(`已选择: **${selectedLabel}**`),
+    ]),
+  };
+}
+
+/**
+ * Send an interactive user-select card (buttons or dropdown).
+ *
+ * @param clients   - Wave SDK clients
+ * @param chatId    - The chat/receiver ID to send to
+ * @param message   - Prompt text shown to the user
+ * @param options   - Selection options
+ * @returns The message ID of the sent card (used to correlate with the callback)
+ */
+export async function sendUserSelectCard(
+  clients: WaveClients,
+  chatId: string,
+  message: string,
+  options: PendingSelectionOption[],
+): Promise<string> {
+  const content =
+    options.length <= BUTTON_THRESHOLD
+      ? buildButtonSelectCard(message, options)
+      : buildDropdownSelectCard(message, options);
+
+  const t0 = Date.now();
+  try {
+    const result = await clients.msg.send(chatId, msgCard(content));
+    debugLog(
+      `${TAG} msg.send (userSelect card, ${options.length <= BUTTON_THRESHOLD ? "buttons" : "dropdown"}): ${Date.now() - t0}ms`,
+    );
+    return result?.msg_id ?? "";
+  } catch (err) {
+    console.error(
+      `${TAG} msg.send (userSelect card) FAILED after ${Date.now() - t0}ms:`,
+      err,
+    );
+    throw err;
+  }
+}
+
+/**
+ * Update the interactive card after the user makes a selection.
+ *
+ * Replaces the buttons/dropdown with a confirmation showing the selected option.
+ *
+ * Uses `updateCardActively` (by message ID) instead of `updateCard` (by token)
+ * because the token-based endpoint has issues with `receiver_id_type` validation
+ * in DM contexts.
+ *
+ * @param clients        - Wave SDK clients
+ * @param cardMessageId  - The `open_msg_id` from the `EventMsgCardReaction` event
+ * @param message        - Original prompt text
+ * @param selectedLabel  - The label of the selected option
+ */
+export async function updateCardAfterSelection(
+  clients: WaveClients,
+  cardMessageId: string,
+  message: string,
+  selectedLabel: string,
+): Promise<void> {
+  const content = buildSelectionConfirmedCard(message, selectedLabel);
+  const t0 = Date.now();
+  try {
+    await clients.msg.updateCardActively(cardMessageId, content);
+    debugLog(`${TAG} msg.updateCardActively (selection confirmed): ${Date.now() - t0}ms`);
+  } catch (err) {
+    console.error(
+      `${TAG} msg.updateCardActively (selection confirmed) FAILED after ${Date.now() - t0}ms:`,
+      err,
+    );
+    // Non-fatal — the selection was already resolved
+  }
+}
+
+/**
+ * Update an interactive card to show that the selection has expired.
+ *
+ * Used when:
+ *   - The server restarted and the pending selection was lost
+ *   - The user's previous stream was aborted (new message sent)
+ *   - The 10-minute safety timeout fired
+ *
+ * Uses `updateCardActively` (by message ID) instead of `updateCard` (by token)
+ * because the token-based endpoint has issues with `receiver_id_type` validation
+ * in DM contexts.
+ *
+ * @param clients        - Wave SDK clients
+ * @param cardMessageId  - The `open_msg_id` from the `EventMsgCardReaction` event
+ */
+export async function updateCardAsExpired(
+  clients: WaveClients,
+  cardMessageId: string,
+): Promise<void> {
+  const content = {
+    header: cardHeader("选择已过期", "warning"),
+    card: cardColumn([
+      cardMarkdown("该选择已失效，请重新发送消息。"),
+    ]),
+  };
+  const t0 = Date.now();
+  try {
+    await clients.msg.updateCardActively(cardMessageId, content);
+    debugLog(`${TAG} msg.updateCardActively (selection expired): ${Date.now() - t0}ms`);
+  } catch (err) {
+    console.error(
+      `${TAG} msg.updateCardActively (selection expired) FAILED after ${Date.now() - t0}ms:`,
+      err,
+    );
+    // Non-fatal
+  }
 }
