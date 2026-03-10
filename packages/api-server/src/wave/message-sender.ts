@@ -433,13 +433,13 @@ type ExecutePlanResult = {
   }>;
 };
 
-function truncateText(value: string, maxLength: number): string {
-  return value.length <= maxLength ? value : `${value.slice(0, maxLength - 1)}...`;
-}
+function formatExecutePlanCodeBlock(value: unknown): string {
+  if (typeof value === "string") {
+    return `\`\`\`\n${value}\n\`\`\``;
+  }
 
-function formatStepArguments(args: Record<string, any>): string {
-  const json = JSON.stringify(args ?? {});
-  return truncateText(json, 180);
+  const json = JSON.stringify(value ?? {}, null, 2);
+  return `\`\`\`json\n${json}\n\`\`\``;
 }
 
 function buildExecutePlanMarkdown(
@@ -468,12 +468,17 @@ function buildExecutePlanMarkdown(
     lines.push(
       `${i + 1}. ${step.title}`,
       `   - 工具: \`${step.functionId}\``,
-      `   - 参数: \`${formatStepArguments(step.arguments)}\``,
+      `   - 参数:`,
+      formatExecutePlanCodeBlock(step.arguments),
       `   - 状态: ${statusPrefix}`,
     );
 
+    if (stepResult?.result !== undefined) {
+      lines.push("   - 输出:", formatExecutePlanCodeBlock(stepResult.result));
+    }
+
     if (stepResult?.error) {
-      lines.push(`   - 错误: ${truncateText(stepResult.error, 160)}`);
+      lines.push("   - 错误:", formatExecutePlanCodeBlock(stepResult.error));
     }
   }
 

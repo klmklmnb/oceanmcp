@@ -272,6 +272,8 @@ describe("Wave executePlan tool", () => {
     await tick();
     expect(sentContent.header.title).toBe("待审批执行计划");
     expect(sentContent.card.elements[1].tag).toBe("flow");
+    expect(sentContent.card.elements[0].text).toContain("```json");
+    expect(sentContent.card.elements[0].text).toContain("{}");
 
     resolvePendingPlanApproval("wave_plan_deny_card", PLAN_APPROVAL_ACTION.DENY);
     const result = await executePromise;
@@ -352,6 +354,14 @@ describe("Wave executePlan tool", () => {
     expect(updateCalls).toHaveLength(1);
     expect(updateCalls[0].msgId).toBe("wave_plan_approve_card");
     expect(updateCalls[0].content.header.title).toBe("执行计划执行完成");
+    expect(updateCalls[0].content.card.elements[0].text).toContain("   - 参数:");
+    expect(updateCalls[0].content.card.elements[0].text).toContain(
+      '```json\n{\n  "name": "release-note"\n}\n```',
+    );
+    expect(updateCalls[0].content.card.elements[0].text).toContain("   - 输出:");
+    expect(updateCalls[0].content.card.elements[0].text).toContain(
+      '```json\n{\n  "published": true,\n  "draftId": "draft-release-note",\n  "channel": "wave"\n}\n```',
+    );
   });
 });
 
