@@ -259,6 +259,7 @@ export function ChatWidget({ avatar }: { avatar?: string }) {
   const [input, setInput] = useState("");
   const [pendingFiles, setPendingFiles] = useState<PendingFile[]>([]);
   const [isDragging, setIsDragging] = useState(false);
+  const [stopRequested, setStopRequested] = useState(false);
   const dragCounterRef = useRef(0);
   /** Track approval IDs that have already triggered an auto-submit to prevent re-sends. */
   const submittedApprovalIdsRef = useRef<Set<string>>(new Set());
@@ -375,6 +376,7 @@ export function ChatWidget({ avatar }: { avatar?: string }) {
 
   const sendUserText = async (text: string) => {
     if (!text.trim()) return;
+    setStopRequested(false);
 
     const normalized = denyPendingInteractions(messages as any[]);
     if (normalized.changed) {
@@ -406,6 +408,7 @@ export function ChatWidget({ avatar }: { avatar?: string }) {
     const readyFiles = pendingFiles.filter((f) => f.status === "ready");
     
     if (!hasText && readyFiles.length === 0) return;
+    setStopRequested(false);
 
     const value = input;
     setInput("");
@@ -476,6 +479,12 @@ export function ChatWidget({ avatar }: { avatar?: string }) {
       },
     });
   }, [error, messages.length, status]);
+
+  useEffect(() => {
+    if (status !== CHAT_STATUS.STREAMING && status !== CHAT_STATUS.SUBMITTED) {
+      setStopRequested(false);
+    }
+  }, [status]);
 
   // ─── Upload ──────────────────────────────────────────────────────────────
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -592,6 +601,11 @@ export function ChatWidget({ avatar }: { avatar?: string }) {
   const stopRef = useRef(stop);
   stopRef.current = stop;
 
+  const handleStop = useCallback(() => {
+    setStopRequested(true);
+    stopRef.current();
+  }, []);
+
   useEffect(() => {
     chatBridge.register("chat", async (text: string) => {
       setInput(text);
@@ -611,11 +625,11 @@ export function ChatWidget({ avatar }: { avatar?: string }) {
     });
 
     chatBridge.register("stop", () => {
-      stopRef.current();
+      handleStop();
     });
 
     return () => chatBridge.unregisterAll();
-  }, []);
+  }, [handleStop]);
 
   /**
    * AI SDK v6 approval flow:
@@ -707,6 +721,7 @@ export function ChatWidget({ avatar }: { avatar?: string }) {
 
   const isStreaming = status === CHAT_STATUS.STREAMING;
   const isLoading = status === CHAT_STATUS.SUBMITTED;
+  const isResponseActive = (isStreaming || isLoading) && !stopRequested;
   const currentTheme = useTheme();
   const lastMessageId = messages[messages.length - 1]?.id;
 
@@ -792,6 +807,12 @@ export function ChatWidget({ avatar }: { avatar?: string }) {
               avatar={avatar}
               showTrailingIndicator={
                 isStreaming &&
+                !stopRequested &&
+                message.id === lastMessageId &&
+                message.role === MESSAGE_ROLE.ASSISTANT
+              }
+              streamingActive={
+                isResponseActive &&
                 message.id === lastMessageId &&
                 message.role === MESSAGE_ROLE.ASSISTANT
               }
@@ -921,7 +942,7 @@ export function ChatWidget({ avatar }: { avatar?: string }) {
               {isStreaming || isLoading ? (
                 <button
                   type="button"
-                  onClick={() => stop()}
+                  onClick={handleStop}
                   className="w-8 h-8 rounded-lg flex items-center justify-center transition-all cursor-pointer bg-ocean-600 text-white hover:bg-ocean-700 shadow-sm"
                   title={t("chat.stop.title")}
                 >

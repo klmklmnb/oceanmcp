@@ -425,6 +425,7 @@ type MessageRendererProps = {
   onDenySelect: (toolCallId: string) => void;
   avatar?: string;
   showTrailingIndicator?: boolean;
+  streamingActive?: boolean;
 };
 
 /** Avatar icon for AI messages */
@@ -633,6 +634,7 @@ export function MessageRenderer({
   onDenySelect,
   avatar,
   showTrailingIndicator = false,
+  streamingActive = false,
 }: MessageRendererProps) {
   const isUser = message.role === MESSAGE_ROLE.USER;
   const suppressInlineTypingIndicator = showTrailingIndicator;
@@ -655,7 +657,7 @@ export function MessageRenderer({
         return (
           <div key={toolCallId || index}>
             {state === TOOL_PART_STATE.INPUT_STREAMING ? (
-              suppressInlineTypingIndicator ? null : <TypingIndicator />
+              streamingActive && !suppressInlineTypingIndicator ? <TypingIndicator /> : null
             ) : (
               <>
                 <FlowNodeCard
@@ -684,7 +686,7 @@ export function MessageRenderer({
         return (
           <div key={toolCallId || index}>
             {state === TOOL_PART_STATE.INPUT_STREAMING ? (
-              suppressInlineTypingIndicator ? null : <TypingIndicator />
+              streamingActive && !suppressInlineTypingIndicator ? <TypingIndicator /> : null
             ) : (
               <UserSelectCard
                 toolCallId={toolCallId}
@@ -729,7 +731,7 @@ export function MessageRenderer({
       return (
         <div key={toolCallId || index}>
           {state === TOOL_PART_STATE.INPUT_STREAMING ? (
-            suppressInlineTypingIndicator ? null : <TypingIndicator />
+            streamingActive && !suppressInlineTypingIndicator ? <TypingIndicator /> : null
           ) : state === TOOL_PART_STATE.APPROVAL_REQUESTED ? (
             <ApprovalButtons
               toolCallId={toolCallId}
@@ -772,14 +774,16 @@ export function MessageRenderer({
           ? part.details.text
           : "";
       // Skip empty reasoning blocks that are not actively streaming
-      if (!reasoningText.trim() && part.state !== MESSAGE_PART_STATE.STREAMING) {
+      const isReasoningLoading =
+        streamingActive && part.state === MESSAGE_PART_STATE.STREAMING;
+      if (!reasoningText.trim() && !isReasoningLoading) {
         return null;
       }
       return (
         <MessageReasoning
           key={`reasoning-${index}`}
           reasoning={reasoningText}
-          isLoading={part.state === MESSAGE_PART_STATE.STREAMING}
+          isLoading={isReasoningLoading}
         />
       );
     }
@@ -845,7 +849,9 @@ export function MessageRenderer({
             key={`think-${match.index}`}
             reasoning={thinkContent}
             isLoading={
-              isUnfinished && index === (message.parts?.length || 0) - 1
+              streamingActive &&
+              isUnfinished &&
+              index === (message.parts?.length || 0) - 1
             }
           />,
         );
