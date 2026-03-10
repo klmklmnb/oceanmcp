@@ -2,6 +2,7 @@ import { getServerStatus, echo } from "./server-tools";
 import { createBrowserExecuteTool } from "./browser-proxy-tool";
 import { createExecutePlanTool } from "./execute-plan-tool";
 import { userSelect } from "./user-select-tool";
+import { imageOcr } from "./image-ocr-tool";
 import {
   OPERATION_TYPE,
   PARAMETER_TYPE,
@@ -19,6 +20,7 @@ export const serverTools = {
   userSelect,
   getServerStatus,
   echo,
+  imageOcr,
 };
 
 function dedupeStrings(values: string[]): string[] {
@@ -204,6 +206,7 @@ export function getMergedTools(
 ): Record<string, Tool<any, any>> {
   const tools: Record<string, Tool<any, any>> = {
     userSelect,
+    imageOcr,
     // ...serverTools,
     ...getBrowserTools(connectionId),
   };

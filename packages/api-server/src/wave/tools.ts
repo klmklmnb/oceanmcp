@@ -23,6 +23,7 @@ import type { WaveClients } from "./client";
 import { waveSessionManager, type WaveUserInfo } from "./session-manager";
 import { sendUserSelectCard } from "./message-sender";
 import { addPendingSelection, type PendingSelectionOption } from "./pending-selections";
+import { imageOcr } from "../ai/tools/image-ocr-tool";
 
 /**
  * Create the Wave-native `userSelect` tool.
@@ -293,6 +294,7 @@ export function buildWaveTools(
     userSelect: createWaveUserSelectTool(clients, chatId, sessionKey),
     getCurrentUser: createGetCurrentUserTool(clients, senderId, sessionKey),
     getImageUrl: createGetImageUrlTool(clients),
+    imageOcr,
   };
 
   const allSkills = [...fileSkills, ...zipSkills];
