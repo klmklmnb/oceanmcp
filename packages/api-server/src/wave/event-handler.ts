@@ -36,6 +36,18 @@ import {
   type StreamingCardState,
 } from "./message-sender";
 
+// ── Debug Timing Helpers ─────────────────────────────────────────────────────
+
+const TAG = "[Wave][Perf]";
+
+function elapsed(startMs: number): string {
+  return `${(Date.now() - startMs).toLocaleString()}ms`;
+}
+
+function debugLog(...args: unknown[]): void {
+  if (process.env.DEBUG === "true") console.log(...args);
+}
+
 /** Cached zip skills per URL — reuses loadSkillsFromZip's HTTP cache */
 const zipSkillsCache = new Map<string, DiscoveredSkill[]>();
 
@@ -95,6 +107,7 @@ export async function handleWaveMessage(
   config: WaveConfig,
   skillsZipUrl?: string,
 ): Promise<void> {
+  const t0 = Date.now();
   const clients = getWaveClients();
 
   // 1. Parse message
@@ -106,8 +119,13 @@ export async function handleWaveMessage(
   // Ignore messages from bots (prevent loops)
   if (ctx.senderIdType === "app_id") return;
 
+  const reqId = ctx.messageId.slice(-8); // short ID for log correlation
+  debugLog(`${TAG} [${reqId}] ── Start ── sender=${ctx.senderId.slice(-8)} chat=${ctx.chatType}`);
+
   // 2. Policy check
+  const t1 = Date.now();
   const policy = checkPolicy(ctx, config);
+  debugLog(`${TAG} [${reqId}] Policy check: ${elapsed(t1)} (allowed=${policy.allowed})`);
   if (!policy.allowed) {
     if (process.env.DEBUG === "true") {
       console.log(`[Wave] Message blocked: ${policy.reason}`);
@@ -116,37 +134,51 @@ export async function handleWaveMessage(
   }
 
   // 3. Load skills from zip URL (if provided)
+  const t2 = Date.now();
   const { sandbox, discoveredSkills: fileSkills } = getBasePromptContext();
   let zipSkills: DiscoveredSkill[] = [];
   if (skillsZipUrl) {
     zipSkills = await loadZipSkills(sandbox, skillsZipUrl);
   }
+  debugLog(`${TAG} [${reqId}] Load skills: ${elapsed(t2)} (file=${fileSkills.length}, zip=${zipSkills.length}, url=${skillsZipUrl ? 'yes' : 'none'})`);
 
   // 4. Get/create session and append user message
+  const t3 = Date.now();
   const sessionKey = deriveSessionKey(ctx);
   waveSessionManager.addUserMessage(sessionKey, ctx.content);
   waveSessionManager.trimHistory(sessionKey, config.historyLimit);
   const session = waveSessionManager.getOrCreate(sessionKey);
+  debugLog(`${TAG} [${reqId}] Session setup: ${elapsed(t3)} (key=${sessionKey}, msgs=${session.messages.length})`);
 
   // 5. Build tools and system prompt
+  const t4 = Date.now();
   const tools = buildWaveTools(fileSkills, zipSkills, sandbox, clients, ctx.senderId, sessionKey);
   const systemPrompt = buildWaveSystemPrompt(fileSkills, zipSkills);
+  debugLog(`${TAG} [${reqId}] Build tools+prompt: ${elapsed(t4)} (tools=${Object.keys(tools).length}, promptLen=${systemPrompt.length})`);
 
   // 6. Convert messages to model format
+  const t5 = Date.now();
   const modelMessages = await convertToModelMessages(session.messages);
+  debugLog(`${TAG} [${reqId}] Convert messages: ${elapsed(t5)} (count=${modelMessages.length})`);
 
   // 7. Stream AI response
+  const t6 = Date.now();
   const resolvedModel = getLanguageModel();
   const thinkingConfig = resolveThinkingConfig();
+  debugLog(`${TAG} [${reqId}] Resolve model: ${elapsed(t6)} (streaming=${config.streaming})`);
+
+  debugLog(`${TAG} [${reqId}] ── Pipeline ready ── total prep: ${elapsed(t0)}`);
 
   try {
+    const t7 = Date.now();
     if (config.streaming) {
-      await handleStreamingResponse(ctx, clients, resolvedModel, systemPrompt, modelMessages, tools, thinkingConfig, sessionKey);
+      await handleStreamingResponse(ctx, clients, resolvedModel, systemPrompt, modelMessages, tools, thinkingConfig, sessionKey, reqId);
     } else {
-      await handleSimpleResponse(ctx, clients, resolvedModel, systemPrompt, modelMessages, tools, thinkingConfig, sessionKey);
+      await handleSimpleResponse(ctx, clients, resolvedModel, systemPrompt, modelMessages, tools, thinkingConfig, sessionKey, reqId);
     }
+    debugLog(`${TAG} [${reqId}] ── Response complete ── response: ${elapsed(t7)}, total: ${elapsed(t0)}`);
   } catch (err) {
-    console.error(`[Wave] Chat error for ${sessionKey}:`, err);
+    console.error(`${TAG} [${reqId}] ── Error after ${elapsed(t0)} ──`, err);
     try {
       await sendSimpleReply(
         clients,
@@ -171,17 +203,21 @@ async function handleStreamingResponse(
   tools: Record<string, any>,
   thinkingConfig: any,
   sessionKey: string,
+  reqId: string,
 ): Promise<void> {
   // Send initial placeholder card
+  const tCard = Date.now();
   const cardMessageId = await sendInitialReplyCard(
     clients,
     ctx.messageId,
     "...",
   );
+  debugLog(`${TAG} [${reqId}] Send initial card: ${elapsed(tCard)} (cardId=${cardMessageId ? cardMessageId.slice(-8) : 'NONE'})`);
 
   if (!cardMessageId) {
     // Fallback to non-streaming
-    return handleSimpleResponse(ctx, clients, model, systemPrompt, modelMessages, tools, thinkingConfig, sessionKey);
+    debugLog(`${TAG} [${reqId}] No card ID, falling back to simple response`);
+    return handleSimpleResponse(ctx, clients, model, systemPrompt, modelMessages, tools, thinkingConfig, sessionKey, reqId);
   }
 
   const state: StreamingCardState = {
@@ -194,6 +230,7 @@ async function handleStreamingResponse(
   };
 
   // Start streaming
+  const tLlm = Date.now();
   const result = withThinkingConfig(thinkingConfig, () =>
     streamText({
       model,
@@ -207,32 +244,54 @@ async function handleStreamingResponse(
 
   // Consume the text stream and push updates to Wave
   let lastUpdateTime = 0;
+  let firstTokenTime = 0;
+  let updateCount = 0;
   const MIN_UPDATE_INTERVAL_MS = 300; // Throttle updates to avoid rate limits
 
   for await (const textPart of result.textStream) {
     if (!textPart) continue;
 
+    if (!firstTokenTime) {
+      firstTokenTime = Date.now();
+      debugLog(`${TAG} [${reqId}] First token (TTFT): ${elapsed(tLlm)}`);
+    }
+
     state.accumulatedText += textPart;
 
     const now = Date.now();
     if (now - lastUpdateTime >= MIN_UPDATE_INTERVAL_MS) {
+      const tUpd = Date.now();
       await updateStreamingText(clients, state, state.accumulatedText);
       lastUpdateTime = now;
+      updateCount++;
+      // Log every 5th update to avoid log spam
+      if (updateCount <= 3 || updateCount % 5 === 0) {
+        debugLog(`${TAG} [${reqId}] Stream update #${updateCount}: ${elapsed(tUpd)} (${state.accumulatedText.length} chars)`);
+      }
     }
   }
 
+  const tStreamDone = Date.now();
+  debugLog(`${TAG} [${reqId}] Stream complete: LLM total=${elapsed(tLlm)}, updates=${updateCount}, chars=${state.accumulatedText.length}`);
+
   // Final update with any remaining text
   if (state.accumulatedText) {
+    const tFinalUpd = Date.now();
     await updateStreamingText(clients, state, state.accumulatedText);
+    debugLog(`${TAG} [${reqId}] Final stream update: ${elapsed(tFinalUpd)}`);
   }
 
   // Finalize
+  const tFinalize = Date.now();
   await finalizeReplyCard(clients, state, ctx.chatId);
+  debugLog(`${TAG} [${reqId}] Finalize card: ${elapsed(tFinalize)}`);
 
   // Save assistant response to session
   if (state.accumulatedText.trim()) {
     waveSessionManager.addAssistantMessage(sessionKey, state.accumulatedText);
   }
+
+  debugLog(`${TAG} [${reqId}] Post-stream overhead (finalize+save): ${elapsed(tStreamDone)}`);
 }
 
 /**
@@ -247,7 +306,9 @@ async function handleSimpleResponse(
   tools: Record<string, any>,
   thinkingConfig: any,
   sessionKey: string,
+  reqId: string,
 ): Promise<void> {
+  const tLlm = Date.now();
   const result = withThinkingConfig(thinkingConfig, () =>
     streamText({
       model,
@@ -261,12 +322,20 @@ async function handleSimpleResponse(
 
   // Collect full text
   let fullText = "";
+  let firstTokenTime = 0;
   for await (const textPart of result.textStream) {
+    if (!firstTokenTime && textPart) {
+      firstTokenTime = Date.now();
+      debugLog(`${TAG} [${reqId}] First token (TTFT): ${elapsed(tLlm)}`);
+    }
     fullText += textPart;
   }
+  debugLog(`${TAG} [${reqId}] LLM complete: ${elapsed(tLlm)} (chars=${fullText.length})`);
 
   if (fullText.trim()) {
+    const tSend = Date.now();
     await sendSimpleReply(clients, ctx.messageId, fullText);
+    debugLog(`${TAG} [${reqId}] Send reply: ${elapsed(tSend)}`);
     waveSessionManager.addAssistantMessage(sessionKey, fullText);
   }
 }

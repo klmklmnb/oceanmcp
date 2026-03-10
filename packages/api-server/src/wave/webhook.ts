@@ -41,7 +41,9 @@ export async function handleWaveWebhook(req: Request): Promise<Response> {
   const skillsZipUrl = url.searchParams.get("skills") || undefined;
 
   try {
+    const t0 = Date.now();
     const body = await req.json();
+    const tParse = Date.now();
     const headers = Object.fromEntries(req.headers.entries());
     const clients = getWaveClients();
 
@@ -49,6 +51,9 @@ export async function handleWaveWebhook(req: Request): Promise<Response> {
     // The event handlers are registered in initWave() and process
     // messages asynchronously (fire-and-forget).
     const result = clients.event.handle(body, headers);
+    if (process.env.DEBUG === "true") {
+      console.log(`[Wave][Perf] Webhook: parse=${tParse - t0}ms, decrypt+dispatch=${Date.now() - tParse}ms, total=${Date.now() - t0}ms`);
+    }
 
     // For verification events, the SDK returns { challenge: "..." }
     if (result && typeof result === "object" && "challenge" in result) {

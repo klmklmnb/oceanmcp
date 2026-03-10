@@ -21,6 +21,12 @@ import {
 } from "@mihoyo/wave-opensdk";
 import type { WaveClients } from "./client";
 
+const TAG = "[Wave][Perf]";
+
+function debugLog(...args: unknown[]): void {
+  if (process.env.DEBUG === "true") console.log(...args);
+}
+
 /** Named Markdown component for streaming updates */
 const STREAMING_COMPONENT_NAME = "reply_content";
 
@@ -32,7 +38,7 @@ const CARD_JSON_OVERHEAD = 500;
 
 function buildReplyCardContent(
   text: string,
-  opts?: { streaming?: boolean },
+  opts?: { streaming?: boolean; streamingMode?: boolean },
 ): MsgCard["content"] {
   return {
     card: {
@@ -47,6 +53,7 @@ function buildReplyCardContent(
     },
     ...(opts?.streaming && {
       config: {
+        ...(opts?.streamingMode && { mode: "streaming" as const }),
         streaming_config: {
           component_name: STREAMING_COMPONENT_NAME,
         },
@@ -132,13 +139,13 @@ export async function sendInitialReplyCard(
   initialText: string,
 ): Promise<string> {
   const card = buildReplyCardContent(initialText, { streaming: true });
-  console.log("[Wave][DEBUG] sendInitialReplyCard msgId:", replyToMessageId);
+  const t0 = Date.now();
   try {
     const result = await clients.msg.reply(replyToMessageId, msgCard(card));
-    console.log("[Wave][DEBUG] sendInitialReplyCard result:", JSON.stringify(result));
+    debugLog(`${TAG} msg.reply (initial card): ${Date.now() - t0}ms`);
     return result?.msg_id ?? "";
   } catch (err) {
-    console.error("[Wave][DEBUG] sendInitialReplyCard FAILED:", err);
+    console.error(`${TAG} msg.reply (initial card) FAILED after ${Date.now() - t0}ms:`, err);
     throw err;
   }
 }
@@ -150,18 +157,22 @@ export async function enableStreaming(
   clients: WaveClients,
   state: StreamingCardState,
 ): Promise<void> {
+  const t0 = Date.now();
   try {
     const result = await clients.msg.updateCardMode(state.cardMessageId, {
       name: STREAMING_COMPONENT_NAME,
       sequence: state.sequence++,
       mode: "streaming",
-      content: state.accumulatedText,
+      content: JSON.stringify(
+        buildReplyCardContent(state.accumulatedText, { streaming: true, streamingMode: true }),
+      ),
     }) as { streaming_id?: string };
 
     state.streamingId = result?.streaming_id ?? "";
     state.streamingEnabled = true;
+    debugLog(`${TAG} msg.updateCardMode (enable streaming): ${Date.now() - t0}ms`);
   } catch (err) {
-    console.error("[Wave] Failed to enable streaming mode:", err);
+    console.error(`${TAG} msg.updateCardMode (enable streaming) FAILED after ${Date.now() - t0}ms:`, err);
     state.fallbackToCardUpdate = true;
   }
 }
@@ -180,6 +191,7 @@ export async function updateStreamingText(
 
   if (state.fallbackToCardUpdate) {
     // Fallback: full card update
+    const t0 = Date.now();
     try {
       const safeText =
         estimateCardBytes(text) > CARD_BODY_SAFE_BYTES
@@ -189,8 +201,9 @@ export async function updateStreamingText(
         state.cardMessageId,
         buildReplyCardContent(safeText),
       );
+      debugLog(`${TAG} msg.updateCardActively (fallback): ${Date.now() - t0}ms`);
     } catch (err) {
-      console.error("[Wave] Fallback card update failed:", err);
+      console.error(`${TAG} msg.updateCardActively (fallback) FAILED after ${Date.now() - t0}ms:`, err);
     }
     return;
   }
@@ -207,6 +220,7 @@ export async function updateStreamingText(
 
   // Subsequent updates: streaming API
   if (state.streamingId) {
+    const t0 = Date.now();
     try {
       await clients.msg.updateCardStreamingActively(
         state.cardMessageId,
@@ -214,17 +228,24 @@ export async function updateStreamingText(
         text,
         state.sequence++,
       );
+      // Only log slow streaming updates (>200ms) to avoid noise
+      const dur = Date.now() - t0;
+      if (dur > 200) {
+        debugLog(`${TAG} msg.updateCardStreamingActively: ${dur}ms (SLOW)`);
+      }
     } catch (err) {
-      console.error("[Wave] Streaming update failed, falling back:", err);
+      console.error(`${TAG} msg.updateCardStreamingActively FAILED after ${Date.now() - t0}ms:`, err);
       state.streamingEnabled = false;
       state.streamingId = "";
       state.fallbackToCardUpdate = true;
       // Retry as fallback
+      const t1 = Date.now();
       try {
         await clients.msg.updateCardActively(
           state.cardMessageId,
           buildReplyCardContent(text),
         );
+        debugLog(`${TAG} msg.updateCardActively (retry fallback): ${Date.now() - t1}ms`);
       } catch {
         // best effort
       }
@@ -245,8 +266,10 @@ export async function finalizeReplyCard(
 
   if (!state.accumulatedText.trim()) {
     // No content — recall the empty card
+    const t0 = Date.now();
     try {
       await clients.msg.recall(state.cardMessageId);
+      debugLog(`${TAG} msg.recall (empty card): ${Date.now() - t0}ms`);
     } catch {
       // best effort
     }
@@ -255,15 +278,19 @@ export async function finalizeReplyCard(
 
   // Disable streaming mode
   if (state.streamingEnabled) {
+    const t0 = Date.now();
     try {
       await clients.msg.updateCardMode(state.cardMessageId, {
         name: STREAMING_COMPONENT_NAME,
         sequence: state.sequence++,
         mode: "normal",
-        content: state.accumulatedText,
+        content: JSON.stringify(
+          buildReplyCardContent(state.accumulatedText),
+        ),
       });
+      debugLog(`${TAG} msg.updateCardMode (disable streaming): ${Date.now() - t0}ms`);
     } catch (err) {
-      console.error("[Wave] Failed to disable streaming mode:", err);
+      console.error(`${TAG} msg.updateCardMode (disable streaming) FAILED after ${Date.now() - t0}ms:`, err);
     }
   }
 
@@ -271,21 +298,25 @@ export async function finalizeReplyCard(
   const chunks = splitTextForCards(state.accumulatedText);
 
   // First chunk goes into the existing card
+  const t1 = Date.now();
   try {
     await clients.msg.updateCardActively(
       state.cardMessageId,
       buildReplyCardContent(chunks[0]),
     );
+    debugLog(`${TAG} msg.updateCardActively (final): ${Date.now() - t1}ms (chunks=${chunks.length})`);
   } catch (err) {
-    console.error("[Wave] Failed to update final card:", err);
+    console.error(`${TAG} msg.updateCardActively (final) FAILED after ${Date.now() - t1}ms:`, err);
   }
 
   // Remaining chunks as new messages
   for (let i = 1; i < chunks.length; i++) {
+    const t2 = Date.now();
     try {
       await clients.msg.send(chatId, msgMarkdown(chunks[i]));
+      debugLog(`${TAG} msg.send (continuation ${i + 1}/${chunks.length}): ${Date.now() - t2}ms`);
     } catch (err) {
-      console.error(`[Wave] Failed to send continuation message (${i + 1}/${chunks.length}):`, err);
+      console.error(`${TAG} msg.send (continuation ${i + 1}/${chunks.length}) FAILED after ${Date.now() - t2}ms:`, err);
     }
   }
 }
@@ -298,5 +329,7 @@ export async function sendSimpleReply(
   replyToMessageId: string,
   text: string,
 ): Promise<void> {
+  const t0 = Date.now();
   await clients.msg.reply(replyToMessageId, msgMarkdown(text));
+  debugLog(`${TAG} msg.reply (simple): ${Date.now() - t0}ms`);
 }
