@@ -44,20 +44,79 @@ const STREAMING_COMPONENT_NAME = "reply_content";
 /** Wave card body safe limit in bytes (leave headroom for JSON structure) */
 const CARD_BODY_SAFE_BYTES = 24_000;
 const CARD_JSON_OVERHEAD = 500;
+const THINK_OPEN_TAG = "<think>";
+const THINK_CLOSE_TAG = "</think>";
+const THINK_MARKDOWN_PREFIX = '*<font color="comment">';
+const THINK_MARKDOWN_SUFFIX = "</font>*";
 
 // ── Card Building ────────────────────────────────────────────────────────────
+
+function formatWaveReplyText(text: string): string {
+  if (!text.includes("<think")) return text;
+
+  let formatted = "";
+  let cursor = 0;
+  let inThinkBlock = false;
+
+  while (cursor < text.length) {
+    const nextOpen = text.indexOf(THINK_OPEN_TAG, cursor);
+    const nextClose = text.indexOf(THINK_CLOSE_TAG, cursor);
+
+    if (!inThinkBlock) {
+      if (nextOpen === -1 && nextClose === -1) {
+        formatted += text.slice(cursor);
+        break;
+      }
+
+      if (nextClose !== -1 && (nextOpen === -1 || nextClose < nextOpen)) {
+        formatted += text.slice(cursor, nextClose);
+        cursor = nextClose + THINK_CLOSE_TAG.length;
+        continue;
+      }
+
+      formatted += text.slice(cursor, nextOpen);
+      formatted += THINK_MARKDOWN_PREFIX;
+      cursor = nextOpen + THINK_OPEN_TAG.length;
+      inThinkBlock = true;
+      continue;
+    }
+
+    if (nextClose === -1 && nextOpen === -1) {
+      formatted += text.slice(cursor);
+      break;
+    }
+
+    if (nextOpen !== -1 && (nextClose === -1 || nextOpen < nextClose)) {
+      formatted += text.slice(cursor, nextOpen);
+      cursor = nextOpen + THINK_OPEN_TAG.length;
+      continue;
+    }
+
+    formatted += text.slice(cursor, nextClose);
+    formatted += THINK_MARKDOWN_SUFFIX;
+    cursor = nextClose + THINK_CLOSE_TAG.length;
+    inThinkBlock = false;
+  }
+
+  if (inThinkBlock) {
+    formatted += THINK_MARKDOWN_SUFFIX;
+  }
+
+  return formatted;
+}
 
 function buildReplyCardContent(
   text: string,
   opts?: { streaming?: boolean; streamingMode?: boolean },
 ): MsgCard["content"] {
+  const formattedText = formatWaveReplyText(text);
   return {
     card: {
       tag: CardTag.Column,
       elements: [
         {
           tag: CardTag.Markdown,
-          text,
+          text: formattedText,
           name: STREAMING_COMPONENT_NAME,
         },
       ],
@@ -74,20 +133,22 @@ function buildReplyCardContent(
 }
 
 function estimateCardBytes(text: string): number {
-  return Buffer.byteLength(text, "utf-8") + CARD_JSON_OVERHEAD;
+  return Buffer.byteLength(formatWaveReplyText(text), "utf-8") + CARD_JSON_OVERHEAD;
 }
 
 /**
  * Split text into chunks that fit within the card size limit.
  */
 function splitTextForCards(text: string): string[] {
-  if (estimateCardBytes(text) <= CARD_BODY_SAFE_BYTES) {
-    return [text];
+  const formattedText = formatWaveReplyText(text);
+
+  if (estimateCardBytes(formattedText) <= CARD_BODY_SAFE_BYTES) {
+    return [formattedText];
   }
 
   const maxTextBytes = CARD_BODY_SAFE_BYTES - CARD_JSON_OVERHEAD;
   const chunks: string[] = [];
-  let remaining = text;
+  let remaining = formattedText;
 
   while (remaining.length > 0) {
     if (Buffer.byteLength(remaining, "utf-8") <= maxTextBytes) {
@@ -197,6 +258,7 @@ export async function updateStreamingText(
   text: string,
 ): Promise<void> {
   state.accumulatedText = text;
+  const formattedText = formatWaveReplyText(text);
 
   if (!state.cardMessageId) return;
 
@@ -205,9 +267,9 @@ export async function updateStreamingText(
     const t0 = Date.now();
     try {
       const safeText =
-        estimateCardBytes(text) > CARD_BODY_SAFE_BYTES
-          ? text.slice(0, Math.floor((CARD_BODY_SAFE_BYTES - CARD_JSON_OVERHEAD) * text.length / Buffer.byteLength(text, "utf-8")))
-          : text;
+        estimateCardBytes(formattedText) > CARD_BODY_SAFE_BYTES
+          ? formattedText.slice(0, Math.floor((CARD_BODY_SAFE_BYTES - CARD_JSON_OVERHEAD) * formattedText.length / Buffer.byteLength(formattedText, "utf-8")))
+          : formattedText;
       await clients.msg.updateCardActively(
         state.cardMessageId,
         buildReplyCardContent(safeText),
@@ -236,7 +298,7 @@ export async function updateStreamingText(
       await clients.msg.updateCardStreamingActively(
         state.cardMessageId,
         state.streamingId,
-        text,
+        formattedText,
         state.sequence++,
       );
       // Only log slow streaming updates (>200ms) to avoid noise
@@ -254,7 +316,7 @@ export async function updateStreamingText(
       try {
         await clients.msg.updateCardActively(
           state.cardMessageId,
-          buildReplyCardContent(text),
+          buildReplyCardContent(formattedText),
         );
         debugLog(`${TAG} msg.updateCardActively (retry fallback): ${Date.now() - t1}ms`);
       } catch {
@@ -341,7 +403,7 @@ export async function sendSimpleReply(
   text: string,
 ): Promise<void> {
   const t0 = Date.now();
-  await clients.msg.reply(replyToMessageId, msgMarkdown(text));
+  await clients.msg.reply(replyToMessageId, msgMarkdown(formatWaveReplyText(text)));
   debugLog(`${TAG} msg.reply (simple): ${Date.now() - t0}ms`);
 }
 
