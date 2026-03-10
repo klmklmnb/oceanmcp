@@ -27,6 +27,7 @@ import {
 import { checkPolicy } from "./policy";
 import { waveSessionManager } from "./session-manager";
 import { buildWaveTools } from "./tools";
+import { removeAllPlanApprovalsForSession } from "./pending-approvals";
 import { removeAllForSession } from "./pending-selections";
 import { buildAssistantStoredMessage } from "./message-history";
 import {
@@ -95,7 +96,14 @@ function buildWaveSystemPrompt(
   const { basePrompt } = getBasePromptContext();
   const allSkills = [...fileSkills, ...zipSkills];
   // Always use Chinese for Wave (internal IM)
-  return basePrompt + buildSkillsPrompt(allSkills) + "\n\n请用简体中文回复用户的所有消息。";
+  return (
+    basePrompt +
+    buildSkillsPrompt(allSkills) +
+    "\n\n请用简体中文回复用户的所有消息。" +
+    "\n对于会修改数据、状态或外部系统的操作，必须调用 executePlan。" +
+    "\nexecutePlan 会在 Wave 中发送可点击的审批卡片，等待用户点击批准或拒绝。" +
+    "\n不要要求用户通过输入文字来确认执行计划。"
+  );
 }
 
 /**
@@ -177,9 +185,16 @@ export async function handleWaveMessage(
   if (previousController) {
     debugLog(`${TAG} [${reqId}] Aborting previous stream for session ${sessionKey}`);
     previousController.abort(new Error("New message received, aborting previous stream"));
-    const removed = removeAllForSession(sessionKey, "User sent a new message");
-    if (removed > 0) {
-      debugLog(`${TAG} [${reqId}] Rejected ${removed} pending selection(s) for session ${sessionKey}`);
+    const removedSelections = removeAllForSession(sessionKey, "User sent a new message");
+    const removedApprovals = removeAllPlanApprovalsForSession(
+      sessionKey,
+      "User sent a new message",
+    );
+    if (removedSelections > 0 || removedApprovals > 0) {
+      debugLog(
+        `${TAG} [${reqId}] Rejected pending interactions for session ${sessionKey} ` +
+        `(selections=${removedSelections}, approvals=${removedApprovals})`,
+      );
     }
     waveSessionManager.clearActiveAbortController(sessionKey);
   }

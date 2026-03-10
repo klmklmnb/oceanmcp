@@ -28,6 +28,7 @@ import {
   type Card,
   type CardOption,
 } from "@mihoyo/wave-opensdk";
+import { FLOW_STEP_STATUS } from "@ocean-mcp/shared";
 import type { WaveClients } from "./client";
 import type { PendingSelectionOption } from "./pending-selections";
 
@@ -349,6 +350,82 @@ export async function sendSimpleReply(
 /** Max options count rendered as inline buttons. Above this threshold, use dropdown. */
 const BUTTON_THRESHOLD = 3;
 
+type ExecutePlanStep = {
+  functionId: string;
+  title: string;
+  arguments: Record<string, any>;
+};
+
+type ExecutePlanResult = {
+  totalSteps?: number;
+  completedSteps?: number;
+  results?: Array<{
+    stepIndex: number;
+    title: string;
+    functionId: string;
+    status:
+      | typeof FLOW_STEP_STATUS.SUCCESS
+      | typeof FLOW_STEP_STATUS.FAILED;
+    result?: unknown;
+    error?: string;
+  }>;
+};
+
+function truncateText(value: string, maxLength: number): string {
+  return value.length <= maxLength ? value : `${value.slice(0, maxLength - 1)}...`;
+}
+
+function formatStepArguments(args: Record<string, any>): string {
+  const json = JSON.stringify(args ?? {});
+  return truncateText(json, 180);
+}
+
+function buildExecutePlanMarkdown(
+  intent: string,
+  steps: ExecutePlanStep[],
+  result?: ExecutePlanResult,
+  statusNote?: string,
+): string {
+  const lines: string[] = [`**目标**`, intent];
+
+  if (statusNote) {
+    lines.push("", statusNote);
+  }
+
+  lines.push("", `**步骤 (${steps.length})**`);
+  for (let i = 0; i < steps.length; i++) {
+    const step = steps[i];
+    const stepResult = result?.results?.find((entry) => entry.stepIndex === i);
+    const statusPrefix =
+      stepResult?.status === FLOW_STEP_STATUS.SUCCESS
+        ? "已完成"
+        : stepResult?.status === FLOW_STEP_STATUS.FAILED
+          ? "失败"
+          : "待执行";
+
+    lines.push(
+      `${i + 1}. ${step.title}`,
+      `   - 工具: \`${step.functionId}\``,
+      `   - 参数: \`${formatStepArguments(step.arguments)}\``,
+      `   - 状态: ${statusPrefix}`,
+    );
+
+    if (stepResult?.error) {
+      lines.push(`   - 错误: ${truncateText(stepResult.error, 160)}`);
+    }
+  }
+
+  if (result) {
+    lines.push(
+      "",
+      `**执行结果**`,
+      `已完成 ${result.completedSteps ?? 0}/${result.totalSteps ?? steps.length} 步`,
+    );
+  }
+
+  return lines.join("\n");
+}
+
 /**
  * Build a card with interactive buttons for user selection (≤3 options).
  *
@@ -411,6 +488,82 @@ function buildSelectionConfirmedCard(
   };
 }
 
+function buildExecutePlanCard(
+  intent: string,
+  steps: ExecutePlanStep[],
+): MsgCard["content"] {
+  return {
+    header: cardHeader("待审批执行计划", "info"),
+    card: cardColumn([
+      cardMarkdown(buildExecutePlanMarkdown(intent, steps)),
+      cardFlow([
+        cardButton(
+          "拒绝",
+          cardOptionValue("deny", "拒绝"),
+          { style: "default" },
+        ),
+        cardButton(
+          "批准并执行",
+          cardOptionValue("approve", "批准并执行"),
+          { style: "primary" },
+        ),
+      ]),
+    ]),
+  };
+}
+
+function buildExecutePlanDecisionCard(
+  intent: string,
+  steps: ExecutePlanStep[],
+  decision: "approved" | "denied" | "expired",
+  reason?: string,
+): MsgCard["content"] {
+  const template =
+    decision === "approved"
+      ? "success"
+      : decision === "denied"
+        ? "warning"
+        : "warning";
+  const title =
+    decision === "approved"
+      ? "执行计划已批准"
+      : decision === "denied"
+        ? "执行计划已拒绝"
+        : "执行计划已过期";
+  const note =
+    decision === "approved"
+      ? "_正在执行已批准的步骤..._"
+      : decision === "denied"
+        ? `_${reason || "用户拒绝了本次执行。"}_`
+        : `_${reason || "该执行计划审批已失效，请重新发送消息。"}_`;
+
+  return {
+    header: cardHeader(title, template),
+    card: cardColumn([
+      cardMarkdown(buildExecutePlanMarkdown(intent, steps, undefined, note)),
+    ]),
+  };
+}
+
+function buildExecutePlanResultContent(
+  intent: string,
+  steps: ExecutePlanStep[],
+  result: ExecutePlanResult,
+): MsgCard["content"] {
+  const failed = result.results?.some(
+    (entry) => entry.status === FLOW_STEP_STATUS.FAILED,
+  );
+  const title = failed ? "执行计划执行失败" : "执行计划执行完成";
+  const template = failed ? "warning" : "success";
+
+  return {
+    header: cardHeader(title, template),
+    card: cardColumn([
+      cardMarkdown(buildExecutePlanMarkdown(intent, steps, result)),
+    ]),
+  };
+}
+
 /**
  * Send an interactive user-select card (buttons or dropdown).
  *
@@ -444,6 +597,78 @@ export async function sendUserSelectCard(
       err,
     );
     throw err;
+  }
+}
+
+export async function sendExecutePlanCard(
+  clients: WaveClients,
+  chatId: string,
+  intent: string,
+  steps: ExecutePlanStep[],
+): Promise<string> {
+  const t0 = Date.now();
+  try {
+    const result = await clients.msg.send(
+      chatId,
+      msgCard(buildExecutePlanCard(intent, steps)),
+    );
+    debugLog(`${TAG} msg.send (executePlan card): ${Date.now() - t0}ms`);
+    return result?.msg_id ?? "";
+  } catch (err) {
+    console.error(
+      `${TAG} msg.send (executePlan card) FAILED after ${Date.now() - t0}ms:`,
+      err,
+    );
+    return "";
+  }
+}
+
+export async function updateExecutePlanDecisionCard(
+  clients: WaveClients,
+  cardMessageId: string,
+  intent: string,
+  steps: ExecutePlanStep[],
+  decision: "approved" | "denied" | "expired",
+  reason?: string,
+): Promise<void> {
+  const t0 = Date.now();
+  try {
+    await clients.msg.updateCardActively(
+      cardMessageId,
+      buildExecutePlanDecisionCard(intent, steps, decision, reason),
+    );
+    debugLog(
+      `${TAG} msg.updateCardActively (executePlan ${decision}): ${Date.now() - t0}ms`,
+    );
+  } catch (err) {
+    console.error(
+      `${TAG} msg.updateCardActively (executePlan ${decision}) FAILED after ${Date.now() - t0}ms:`,
+      err,
+    );
+  }
+}
+
+export async function updateExecutePlanResultCard(
+  clients: WaveClients,
+  cardMessageId: string,
+  intent: string,
+  steps: ExecutePlanStep[],
+  result: ExecutePlanResult,
+): Promise<void> {
+  const t0 = Date.now();
+  try {
+    await clients.msg.updateCardActively(
+      cardMessageId,
+      buildExecutePlanResultContent(intent, steps, result),
+    );
+    debugLog(
+      `${TAG} msg.updateCardActively (executePlan result): ${Date.now() - t0}ms`,
+    );
+  } catch (err) {
+    console.error(
+      `${TAG} msg.updateCardActively (executePlan result) FAILED after ${Date.now() - t0}ms:`,
+      err,
+    );
   }
 }
 
@@ -499,11 +724,15 @@ export async function updateCardAfterSelection(
 export async function updateCardAsExpired(
   clients: WaveClients,
   cardMessageId: string,
+  opts?: {
+    title?: string;
+    body?: string;
+  },
 ): Promise<void> {
   const content = {
-    header: cardHeader("选择已过期", "warning"),
+    header: cardHeader(opts?.title || "选择已过期", "warning"),
     card: cardColumn([
-      cardMarkdown("该选择已失效，请重新发送消息。"),
+      cardMarkdown(opts?.body || "该选择已失效，请重新发送消息。"),
     ]),
   };
   const t0 = Date.now();

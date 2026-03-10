@@ -119,7 +119,7 @@ export default {
       "Fetch a JSON endpoint and optionally extract a value using " +
       'a dot-notation path (e.g. "data.items[0].name").',
     type: "code",
-    operationType: "read",
+    operationType: "write",
     code: `
       const { url, path } = args;
 

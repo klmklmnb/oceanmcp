@@ -17,10 +17,19 @@ import { getWaveClients } from "./client";
 import { handleWaveMessage } from "./event-handler";
 import type { WaveEvent } from "./message-parser";
 import {
+  resolvePendingPlanApproval,
+  hasPendingPlanApproval,
+  PLAN_APPROVAL_ACTION,
+} from "./pending-approvals";
+import {
   resolvePendingSelection,
   hasPendingSelection,
 } from "./pending-selections";
-import { updateCardAfterSelection, updateCardAsExpired } from "./message-sender";
+import {
+  updateCardAfterSelection,
+  updateCardAsExpired,
+  updateExecutePlanDecisionCard,
+} from "./message-sender";
 
 let waveConfig: WaveConfig | null = null;
 
@@ -144,7 +153,7 @@ export function registerEventHandlers(config: WaveConfig): void {
   // card's message ID and resolve the corresponding Promise so the
   // tool's execute() can return the selected value to the LLM.
   clients.event.onMsgCardReaction((event) => {
-    const { open_msg_id, token, action } = event.event;
+    const { open_msg_id, action } = event.event;
     const selectedValue = action?.values?.[0];
 
     if (process.env.DEBUG === "true") {
@@ -158,18 +167,71 @@ export function registerEventHandlers(config: WaveConfig): void {
       );
     }
 
+    if (!open_msg_id) {
+      return;
+    }
+
+    if (hasPendingPlanApproval(open_msg_id)) {
+      if (!selectedValue) {
+        console.warn(
+          `[Wave] Plan approval card reaction for ${open_msg_id} has no selected value`,
+        );
+        return;
+      }
+
+      const pending = resolvePendingPlanApproval(open_msg_id, selectedValue as any);
+      if (!pending) return;
+
+      const decision =
+        selectedValue === PLAN_APPROVAL_ACTION.APPROVE
+          ? "approved"
+          : selectedValue === PLAN_APPROVAL_ACTION.DENY
+            ? "denied"
+            : null;
+      if (!decision) {
+        console.warn(
+          `[Wave] Unknown executePlan decision "${selectedValue}" for ${open_msg_id}`,
+        );
+        return;
+      }
+
+      const reason =
+        decision === "denied" ? "用户在 Wave 中拒绝了本次执行。" : undefined;
+      void updateExecutePlanDecisionCard(
+        clients,
+        open_msg_id,
+        pending.intent,
+        pending.steps,
+        decision,
+        reason,
+      ).catch((err) =>
+        console.error("[Wave] Failed to update executePlan approval card:", err),
+      );
+      return;
+    }
+
     // Only handle events for cards we sent (pending userSelect cards).
     // If the card is not pending, it may be stale (server restart, abort,
     // timeout, etc.) — update it to inform the user.
-    if (!open_msg_id || !hasPendingSelection(open_msg_id)) {
+    if (!hasPendingSelection(open_msg_id)) {
       if (process.env.DEBUG === "true") {
         console.log(
           `[Wave][Debug] Card reaction for non-pending card ${open_msg_id}, sending expired notice`,
         );
       }
-      if (open_msg_id) {
-        void updateCardAsExpired(clients, open_msg_id).catch(() => {});
-      }
+      const looksLikePlanDecision =
+        selectedValue === PLAN_APPROVAL_ACTION.APPROVE ||
+        selectedValue === PLAN_APPROVAL_ACTION.DENY;
+      void updateCardAsExpired(
+        clients,
+        open_msg_id,
+        looksLikePlanDecision
+          ? {
+              title: "审批已过期",
+              body: "该执行计划审批已失效，请重新发送消息。",
+            }
+          : undefined,
+      ).catch(() => {});
       return;
     }
 

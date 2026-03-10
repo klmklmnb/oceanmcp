@@ -396,6 +396,80 @@ describe("buildAssistantStoredMessage", () => {
     expect(errorPart.errorText).toBe("Permission denied");
   });
 
+  test("executePlan denied output is stored as output-denied with approval metadata", () => {
+    const steps = [
+      {
+        content: [
+          {
+            type: "tool-call",
+            toolCallId: "call_plan_deny",
+            toolName: "executePlan",
+            input: {
+              intent: "Delete record",
+              steps: [{ functionId: "deleteRecord", title: "Delete", arguments: {} }],
+            },
+          },
+          {
+            type: "tool-result",
+            toolCallId: "call_plan_deny",
+            toolName: "executePlan",
+            input: {
+              intent: "Delete record",
+              steps: [{ functionId: "deleteRecord", title: "Delete", arguments: {} }],
+            },
+            output: {
+              denied: true,
+              reason: "User denied the plan in Wave.",
+              totalSteps: 1,
+              completedSteps: 0,
+              results: [],
+            },
+          },
+        ],
+        text: "",
+        toolCalls: [
+          {
+            toolCallId: "call_plan_deny",
+            toolName: "executePlan",
+            input: {
+              intent: "Delete record",
+              steps: [{ functionId: "deleteRecord", title: "Delete", arguments: {} }],
+            },
+          },
+        ],
+        toolResults: [
+          {
+            toolCallId: "call_plan_deny",
+            toolName: "executePlan",
+            input: {
+              intent: "Delete record",
+              steps: [{ functionId: "deleteRecord", title: "Delete", arguments: {} }],
+            },
+            output: {
+              denied: true,
+              reason: "User denied the plan in Wave.",
+              totalSteps: 1,
+              completedSteps: 0,
+              results: [],
+            },
+          },
+        ],
+      },
+    ];
+
+    const result = buildAssistantStoredMessage(steps as any);
+    const planPart = result!.parts.find(
+      (p) => p.type === "tool-executePlan",
+    ) as any;
+    expect(planPart).toBeDefined();
+    expect(planPart.state).toBe("output-denied");
+    expect(planPart.approval).toEqual({
+      id: "wave-denied-call_plan_deny",
+      approved: false,
+      reason: "User denied the plan in Wave.",
+    });
+  });
+
   test("tool call without result gets input-available state", () => {
     const steps = [
       {

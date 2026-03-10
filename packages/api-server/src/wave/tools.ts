@@ -2,8 +2,9 @@
  * Wave-specific tool merging.
  *
  * Builds the tool set for Wave chat sessions. Similar to getMergedTools()
- * in tools/index.ts but WITHOUT browser proxy tools (browserExecute,
- * executePlan) since there is no browser WebSocket connection.
+ * in tools/index.ts but WITHOUT browser proxy tools (`browserExecute`).
+ * Wave uses its own server-side `executePlan` implementation because there
+ * is no browser WebSocket connection in webhook flows.
  *
  * Tool sources:
  *   1. Server tools: userSelect (Wave-native interactive card), getCurrentUser
@@ -12,6 +13,14 @@
  *   4. File-based skills discovered at startup (global)
  *
  * All tools here have real server-side `execute` functions.
+ *
+ * Write tool guard:
+ *   Skill-bundled tools that require approval (write/mutation operations) are
+ *   wrapped with a guard that rejects direct LLM calls and directs the LLM to
+ *   use `executePlan` instead. When `executePlan` invokes the tool after user
+ *   approval, it passes `__waveExecutePlanApproved: true` in the options,
+ *   bypassing the guard. This mirrors the browser flow's `browserExecute`
+ *   write guard (browser-proxy-tool.ts) adapted for Wave's card-based approval.
  */
 
 import { tool, type Tool } from "ai";
@@ -20,6 +29,7 @@ import type { Sandbox } from "@ocean-mcp/shared";
 import { createLoadSkillTool } from "../ai/skills/loader";
 import type { DiscoveredSkill } from "../ai/skills/discover";
 import type { WaveClients } from "./client";
+import { createWaveExecutePlanTool } from "./execute-plan-tool";
 import { waveSessionManager, type WaveUserInfo } from "./session-manager";
 import { sendUserSelectCard } from "./message-sender";
 import { addPendingSelection, type PendingSelectionOption } from "./pending-selections";
@@ -270,6 +280,68 @@ function createGetImageUrlTool(
   });
 }
 
+// ── Write Tool Guard ─────────────────────────────────────────────────────────
+
+/**
+ * Detect whether a tool requires approval (i.e. is a write/mutation tool).
+ *
+ * In the Vercel AI SDK, `needsApproval` can be `true` (static) or a function
+ * (dynamic validation gate, as used by the browser executePlan tool). Either
+ * form indicates the tool is a write operation that needs user confirmation.
+ *
+ * In the Wave webhook flow there is no browser UI to handle `needsApproval`,
+ * so we intercept these tools and redirect them through `executePlan`.
+ */
+function isWriteTool(t: Tool<any, any>): boolean {
+  const raw = (t as any).needsApproval;
+  return raw === true || typeof raw === "function";
+}
+
+/**
+ * Wrap a write/mutation skill tool with a guard for the Wave context.
+ *
+ * When the LLM calls this tool directly, `execute()` returns an error
+ * instructing it to use `executePlan` instead.
+ *
+ * When `executePlan` calls this tool after the user approves the plan card,
+ * it passes `__waveExecutePlanApproved: true` in the options object,
+ * which bypasses the guard and delegates to the original `execute()`.
+ *
+ * The resulting tool:
+ *   - Preserves the original `description` and `inputSchema`
+ *   - Preserves the original `execute` (accessible to executePlan)
+ *   - Strips `needsApproval` (not applicable in Wave — no browser UI)
+ */
+function wrapWriteToolWithGuard(
+  toolName: string,
+  originalTool: Tool<any, any>,
+): Tool<any, any> {
+  const orig = originalTool as any;
+  const originalExecute = orig.execute as (
+    args: Record<string, any>,
+    options?: Record<string, any>,
+  ) => Promise<any>;
+
+  return tool({
+    description: orig.description,
+    inputSchema: orig.inputSchema,
+    execute: async (args: Record<string, any>, options?: Record<string, any>) => {
+      // executePlan passes this flag after user approval on the Wave card
+      if (options?.__waveExecutePlanApproved) {
+        return originalExecute(args, options);
+      }
+
+      return {
+        error:
+          `Function "${toolName}" is a write/mutation operation and cannot be ` +
+          `called directly in Wave. You MUST use the executePlan tool to ` +
+          `propose a plan that includes this operation, which sends an ` +
+          `approval card for the user to approve before execution.`,
+      };
+    },
+  });
+}
+
 /**
  * Build the merged tool set for a Wave chat session.
  *
@@ -306,14 +378,28 @@ export function buildWaveTools(
 
     // Merge tools exported by skill directories (from tools.ts files).
     // These have real server-side execute functions.
+    //
+    // Write/mutation tools (those with `needsApproval`) are wrapped with a
+    // guard that rejects direct LLM calls and directs the LLM to use
+    // `executePlan`. The guard is bypassed when executePlan invokes the
+    // tool after user approval via the `__waveExecutePlanApproved` flag.
     for (const skill of allSkills) {
       if (!skill.tools) continue;
       for (const [name, skillTool] of Object.entries(skill.tools)) {
         if (tools[name]) continue; // Collision avoidance — first wins
-        tools[name] = skillTool;
+        tools[name] = isWriteTool(skillTool)
+          ? wrapWriteToolWithGuard(name, skillTool)
+          : skillTool;
       }
     }
   }
+
+  tools.executePlan = createWaveExecutePlanTool(
+    () => tools,
+    clients,
+    chatId,
+    sessionKey,
+  );
 
   return tools;
 }

@@ -65,6 +65,18 @@ interface StepResultLike {
   }>;
 }
 
+function isExecutePlanDeniedOutput(
+  toolName: string,
+  output: unknown,
+): output is { denied: true; reason?: string } {
+  return (
+    toolName === "executePlan" &&
+    output !== null &&
+    typeof output === "object" &&
+    (output as { denied?: boolean }).denied === true
+  );
+}
+
 // ── Public API ───────────────────────────────────────────────────────────────
 
 /**
@@ -143,10 +155,23 @@ export function buildAssistantStoredMessage(
             state: matchedError
               ? "output-error"
               : matchedResult
-                ? "output-available"
+                ? isExecutePlanDeniedOutput(toolName, matchedResult.output)
+                  ? "output-denied"
+                  : "output-available"
                 : "input-available",
             input: part.input,
           };
+
+          if (
+            matchedResult &&
+            isExecutePlanDeniedOutput(toolName, matchedResult.output)
+          ) {
+            toolPart.approval = {
+              id: `wave-denied-${toolCallId || "execute-plan"}`,
+              approved: false,
+              reason: matchedResult.output.reason,
+            };
+          }
 
           if (matchedResult) {
             toolPart.output = matchedResult.output;
