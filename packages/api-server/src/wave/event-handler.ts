@@ -51,6 +51,9 @@ function debugLog(...args: unknown[]): void {
   if (process.env.DEBUG === "true") console.log(...args);
 }
 
+const NEW_SESSION_COMMAND = "/new";
+const NEW_SESSION_CONFIRMATION = "已开始新会话。";
+
 /** Cached zip skills per URL — reuses loadSkillsFromZip's HTTP cache */
 const zipSkillsCache = new Map<string, DiscoveredSkill[]>();
 
@@ -106,6 +109,44 @@ function buildWaveSystemPrompt(
   );
 }
 
+function isNewSessionCommand(content: string): boolean {
+  return content.trim() === NEW_SESSION_COMMAND;
+}
+
+export async function tryHandleWaveKeywordCommand(
+  ctx: WaveMessageContext,
+  clients: ReturnType<typeof getWaveClients>,
+): Promise<boolean> {
+  if (!isNewSessionCommand(ctx.content)) {
+    return false;
+  }
+
+  const sessionKey = deriveSessionKey(ctx);
+  const activeController =
+    waveSessionManager.getActiveAbortController(sessionKey);
+  if (activeController) {
+    activeController.abort(new Error("Session reset requested by user"));
+  }
+
+  const removedSelections = removeAllForSession(
+    sessionKey,
+    "User started a new session",
+  );
+  const removedApprovals = removeAllPlanApprovalsForSession(
+    sessionKey,
+    "User started a new session",
+  );
+  await waveSessionManager.clear(sessionKey);
+
+  debugLog(
+    `${TAG} Reset session via ${NEW_SESSION_COMMAND}: key=${sessionKey}, ` +
+      `selections=${removedSelections}, approvals=${removedApprovals}`,
+  );
+
+  await sendSimpleReply(clients, ctx.messageId, NEW_SESSION_CONFIRMATION);
+  return true;
+}
+
 /**
  * Handle an incoming Wave message event.
  *
@@ -140,6 +181,11 @@ export async function handleWaveMessage(
     if (process.env.DEBUG === "true") {
       console.log(`[Wave] Message blocked: ${policy.reason}`);
     }
+    return;
+  }
+
+  if (await tryHandleWaveKeywordCommand(ctx, clients)) {
+    debugLog(`${TAG} [${reqId}] Handled keyword command: ${ctx.content.trim()}`);
     return;
   }
 
