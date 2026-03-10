@@ -39,3 +39,8 @@ export {
   type ZipCacheManifest,
   type CacheControlDirectives,
 } from "./zip-loader";
+export {
+  isCodeFunctionDefinition,
+  wrapCodeFunctionAsTool,
+  wrapCodeFunctionDefinitions,
+} from "./code-tool-adapter";

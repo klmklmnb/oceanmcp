@@ -989,6 +989,236 @@ Read _node-lib/INDEX.md for the index.
 });
 
 // ═════════════════════════════════════════════════════════════════════════════
+// Zip skills with tools.ts — CodeFunctionDefinition support
+// ═════════════════════════════════════════════════════════════════════════════
+
+describe("loadSkillsFromZip — tools.ts with CodeFunctionDefinition", () => {
+  beforeEach(async () => {
+    await clearZipCache();
+  });
+
+  test("root-level zip skill imports tools.ts and wraps CodeFunctionDefinition", async () => {
+    // Root-level SKILL.md with a tools.ts that exports CodeFunctionDefinition objects.
+    // The tools.ts uses a simple default export with a code tool.
+    const zipPath = await createTestZip("root-code-tools", {
+      "SKILL.md": `---
+name: root-code-skill
+description: A root skill with code tools.
+---
+
+# Root Code Skill
+
+Instructions here.
+`,
+      // tools.ts exports a CodeFunctionDefinition — the code is a simple return.
+      // We use valid JS/TS that Bun can import.
+      "tools.ts": `
+export default {
+  myCodeTool: {
+    id: "myCodeTool",
+    name: "My Code Tool",
+    description: "Returns a greeting",
+    type: "code",
+    operationType: "read",
+    code: 'return "hello from code tool"',
+    parameters: [],
+  },
+};
+`,
+    });
+
+    const { url, stop } = serveFile(zipPath);
+    try {
+      const { skills } = await loadSkillsFromZip(sandbox, url);
+
+      expect(skills).toHaveLength(1);
+      expect(skills[0].name).toBe("root-code-skill");
+
+      // tools should have been imported and wrapped
+      expect(skills[0].tools).toBeDefined();
+      expect(skills[0].tools).toHaveProperty("myCodeTool");
+
+      // The wrapped tool should be executable
+      const result = await skills[0].tools!.myCodeTool.execute!(
+        {},
+        { toolCallId: "test", messages: [] } as any,
+      );
+      expect(result).toBe("hello from code tool");
+    } finally {
+      stop();
+    }
+  });
+
+  test("subdirectory zip skill imports tools.ts with CodeFunctionDefinition", async () => {
+    const zipPath = await createTestZip("subdir-code-tools", {
+      "my-skill/SKILL.md": `---
+name: subdir-code-skill
+description: A subdirectory skill with code tools.
+---
+
+# Subdir Code Skill
+`,
+      "my-skill/tools.ts": `
+export default {
+  fetchData: {
+    id: "fetchData",
+    name: "Fetch Data",
+    description: "Returns computed data",
+    type: "code",
+    operationType: "read",
+    code: 'return { sum: args.a + args.b }',
+    parameters: [
+      { name: "a", type: "number", description: "First number", required: true },
+      { name: "b", type: "number", description: "Second number", required: true },
+    ],
+  },
+};
+`,
+    });
+
+    const { url, stop } = serveFile(zipPath);
+    try {
+      const { skills } = await loadSkillsFromZip(sandbox, url);
+
+      expect(skills).toHaveLength(1);
+      expect(skills[0].name).toBe("subdir-code-skill");
+      expect(skills[0].tools).toBeDefined();
+      expect(skills[0].tools).toHaveProperty("fetchData");
+
+      // Execute with args
+      const result = await skills[0].tools!.fetchData.execute!(
+        { a: 3, b: 7 },
+        { toolCallId: "test", messages: [] } as any,
+      );
+      expect(result).toEqual({ sum: 10 });
+    } finally {
+      stop();
+    }
+  });
+
+  test("tools.ts with mixed exports (AI SDK Tool + CodeFunctionDefinition)", async () => {
+    const zipPath = await createTestZip("mixed-tools", {
+      "SKILL.md": `---
+name: mixed-tools-skill
+description: Skill with mixed tool types.
+---
+
+# Mixed Tools
+`,
+      // This tools.ts exports both a CodeFunctionDefinition and a plain object
+      // that looks like a Tool (has description + execute-like shape).
+      // Only the CodeFunctionDefinition should be wrapped.
+      "tools.ts": `
+export default {
+  codeTool: {
+    id: "codeTool",
+    name: "Code Tool",
+    description: "A code tool",
+    type: "code",
+    operationType: "read",
+    code: 'return "from-code"',
+    parameters: [],
+  },
+  plainObj: {
+    description: "Not a real tool but an object",
+    someField: "value",
+  },
+};
+`,
+    });
+
+    const { url, stop } = serveFile(zipPath);
+    try {
+      const { skills } = await loadSkillsFromZip(sandbox, url);
+
+      expect(skills).toHaveLength(1);
+      expect(skills[0].tools).toBeDefined();
+
+      // codeTool should be wrapped and executable
+      expect(skills[0].tools).toHaveProperty("codeTool");
+      const result = await skills[0].tools!.codeTool.execute!(
+        {},
+        { toolCallId: "test", messages: [] } as any,
+      );
+      expect(result).toBe("from-code");
+
+      // plainObj should be passed through (it's a non-code object)
+      expect(skills[0].tools).toHaveProperty("plainObj");
+    } finally {
+      stop();
+    }
+  });
+
+  test("skill without tools.ts still works (no tools field)", async () => {
+    // Verify the original behavior is preserved: a zip without tools.ts
+    // should still discover the skill, just without any tools.
+    const zipPath = await createTestZip("no-tools-file", {
+      "SKILL.md": `---
+name: no-tools-skill
+description: A skill without tools.
+---
+
+# No Tools
+`,
+    });
+
+    const { url, stop } = serveFile(zipPath);
+    try {
+      const { skills } = await loadSkillsFromZip(sandbox, url);
+
+      expect(skills).toHaveLength(1);
+      expect(skills[0].name).toBe("no-tools-skill");
+      // tools should be undefined (no tools.ts file)
+      expect(skills[0].tools).toBeUndefined();
+    } finally {
+      stop();
+    }
+  });
+
+  test("root-level zip skill tools.ts code can access fetch", async () => {
+    // Test that the code has access to the fetch function
+    const zipPath = await createTestZip("root-fetch-tool", {
+      "SKILL.md": `---
+name: fetch-tool-skill
+description: Skill with a fetch-using code tool.
+---
+
+# Fetch Tool
+`,
+      "tools.ts": `
+export default {
+  checkFetch: {
+    id: "checkFetch",
+    name: "Check Fetch",
+    description: "Verifies fetch is available",
+    type: "code",
+    operationType: "read",
+    code: 'return { hasFetch: typeof fetch === "function" }',
+    parameters: [],
+  },
+};
+`,
+    });
+
+    const { url, stop } = serveFile(zipPath);
+    try {
+      const { skills } = await loadSkillsFromZip(sandbox, url);
+
+      expect(skills).toHaveLength(1);
+      expect(skills[0].tools).toHaveProperty("checkFetch");
+
+      const result = await skills[0].tools!.checkFetch.execute!(
+        {},
+        { toolCallId: "test", messages: [] } as any,
+      );
+      expect(result).toEqual({ hasFetch: true });
+    } finally {
+      stop();
+    }
+  });
+});
+
+// ═════════════════════════════════════════════════════════════════════════════
 // Real-world CDN zip (integration smoke test)
 // ═════════════════════════════════════════════════════════════════════════════
 

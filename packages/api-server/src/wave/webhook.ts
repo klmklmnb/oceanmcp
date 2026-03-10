@@ -45,6 +45,12 @@ export async function handleWaveWebhook(req: Request): Promise<Response> {
     const body = await req.json();
     const tParse = Date.now();
     const headers = Object.fromEntries(req.headers.entries());
+
+    if (process.env.DEBUG === "true") {
+      console.log("[Wave][Debug] Webhook query params:", Object.fromEntries(url.searchParams.entries()));
+      console.log("[Wave][Debug] Webhook headers:", headers);
+    }
+
     const clients = getWaveClients();
 
     // Let the SDK handle decryption, verification, and event dispatch.
@@ -102,6 +108,9 @@ export function registerEventHandlers(config: WaveConfig): void {
   // handler call (handle() dispatches synchronously).
 
   clients.event.onMsgDirectSendV2((event) => {
+    if (process.env.DEBUG === "true") {
+      console.log("[Wave][Debug] DM event (decrypted):", JSON.stringify(event, null, 2));
+    }
     // Fire and forget — the webhook response has already been sent
     const zipUrl = currentSkillsZipUrl;
     void handleWaveMessage(event as WaveEvent, config, zipUrl).catch((err) =>
@@ -110,6 +119,9 @@ export function registerEventHandlers(config: WaveConfig): void {
   });
 
   clients.event.onMsgGroupSendV2((event) => {
+    if (process.env.DEBUG === "true") {
+      console.log("[Wave][Debug] Group event (decrypted):", JSON.stringify(event, null, 2));
+    }
     const zipUrl = currentSkillsZipUrl;
     void handleWaveMessage(event as WaveEvent, config, zipUrl).catch((err) =>
       console.error("[Wave] Group handler error:", err),

@@ -101,6 +101,7 @@ import { join } from "path";
 import { mkdir, access, unlink, readFile, writeFile, rm, readdir, stat } from "fs/promises";
 import type { Sandbox, SkillMetadata } from "@ocean-mcp/shared";
 import { discoverSkills, parseFrontmatter, type DiscoveredSkill } from "./discover";
+import { wrapCodeFunctionDefinitions } from "./code-tool-adapter";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -760,6 +761,21 @@ export async function loadSkillsFromZip(
       description: frontmatter.description,
       path: skillRoot,
     };
+
+    // Attempt to import bundled tool definitions (tools.ts) for this
+    // root-level skill. This mirrors the same import logic used by
+    // discoverSkills() for subdirectory skills, ensuring root-level
+    // zip skills can also export tools (both Vercel AI SDK Tool objects
+    // and CodeFunctionDefinition objects).
+    try {
+      const toolsModule = await import(join(skillRoot, "tools.ts"));
+      const exportedTools = toolsModule.default ?? toolsModule.tools;
+      if (exportedTools && typeof exportedTools === "object") {
+        skill.tools = wrapCodeFunctionDefinitions(exportedTools);
+      }
+    } catch {
+      // No tools file or import failed — fine, tools are optional
+    }
 
     return { skills: [skill], extractDir };
   } catch {
