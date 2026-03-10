@@ -9,7 +9,7 @@ describe("sanitizeEvent", () => {
     window.history.replaceState({}, "", "/chat?room=alpha");
   });
 
-  it("sanitizes user, request, extras, breadcrumbs and merges sdk tags", () => {
+  it("preserves a caller-provided request url while sanitizing other fields", () => {
     const longText = "x".repeat(MAX_STRING_LENGTH + 30);
     const sourceEvent = {
       user: { id: "user-1", email: "hidden@sdk.test" },
@@ -30,6 +30,10 @@ describe("sanitizeEvent", () => {
       tags: { toolName: "apply_patch" },
     };
     const event = sanitizeEvent(sourceEvent);
+    expect(event).not.toBeNull();
+    if (!event) {
+      return;
+    }
 
     expect(event.user).toEqual({});
     expect(sourceEvent.user).toEqual({ id: "user-1", email: "hidden@sdk.test" });
@@ -63,5 +67,31 @@ describe("sanitizeEvent", () => {
       }),
     );
     expect(event.tags).not.toHaveProperty("searchParams.room");
+  });
+
+  it("replaces iframe placeholder url and transaction with the host page url", () => {
+    const event = sanitizeEvent({
+      request: {
+        method: "GET",
+        url: "about:blank",
+      },
+      transaction: "about:blank",
+    });
+    expect(event).not.toBeNull();
+    if (!event) {
+      return;
+    }
+
+    expect(event.request).toEqual({
+      method: "GET",
+      url: "https://sdk.test/chat?room=alpha",
+    });
+    expect(event.transaction).toBe("/chat");
+    expect(event.tags).toEqual(
+      expect.objectContaining({
+        href: "https://sdk.test/chat",
+        pathname: "/chat",
+      }),
+    );
   });
 });

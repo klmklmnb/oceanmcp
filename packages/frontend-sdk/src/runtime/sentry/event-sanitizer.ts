@@ -1,19 +1,44 @@
 import { getSdkTags } from "./metadata";
+import { getHostLocation, isIframePlaceholderUrl } from "./location";
 import { normalizeTags, sanitizeRecord, truncateString } from "./sanitize";
 import type { SdkEvent } from "./types";
 
-export function sanitizeEvent<T extends SdkEvent>(event: T): T {
+function getHostPageUrl(): string | undefined {
+  return getHostLocation()?.href;
+}
+
+export function sanitizeEvent(event: SdkEvent): SdkEvent | null {
   const sanitized = { ...event };
 
   if (sanitized.user) {
     sanitized.user = {};
   }
 
-  if (sanitized.request) {
+  const hostUrl = getHostPageUrl();
+  if (hostUrl && isIframePlaceholderUrl(sanitized.request?.url)) {
+    sanitized.request = {
+      ...sanitized.request,
+      url: hostUrl,
+    };
+  } else if (sanitized.request) {
     sanitized.request = {
       method: sanitized.request.method,
       url: sanitized.request.url,
     };
+  }
+
+  if (hostUrl) {
+    if (
+      !sanitized.transaction ||
+      sanitized.transaction === "about:blank" ||
+      sanitized.transaction === "/"
+    ) {
+      try {
+        sanitized.transaction = new URL(hostUrl).pathname;
+      } catch {
+        // keep existing value
+      }
+    }
   }
 
   if (sanitized.extra) {
@@ -21,7 +46,7 @@ export function sanitizeEvent<T extends SdkEvent>(event: T): T {
   }
 
   if (sanitized.contexts) {
-    sanitized.contexts = sanitizeRecord(sanitized.contexts) as T["contexts"];
+    sanitized.contexts = sanitizeRecord(sanitized.contexts) as SdkEvent["contexts"];
   }
 
   if (sanitized.breadcrumbs) {

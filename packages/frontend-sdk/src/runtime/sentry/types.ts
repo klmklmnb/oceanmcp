@@ -24,6 +24,7 @@ export type SdkEventHint = Record<string, unknown> & {
 export type SdkEvent = {
   message?: string;
   level?: SeverityLevel;
+  transaction?: string;
   tags?: Record<string, PrimitiveTagValue>;
   extra?: Record<string, unknown>;
   contexts?: Record<string, Record<string, unknown> | null | undefined>;

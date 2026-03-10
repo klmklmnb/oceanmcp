@@ -362,11 +362,21 @@ The frontend SDK includes a built-in Sentry monitoring layer, but this is an **i
 
 - The implementation lives in `packages/frontend-sdk/src/runtime/sentry.ts`.
 - Initialization starts from `packages/frontend-sdk/src/main.tsx` before `wsClient.connect()`, so startup and connection failures are observable.
+- `initSentryOnce()` is idempotent. Multiple callers may invoke it during startup or mount, but the runtime reuses the same singleton client / in-flight promise rather than calling `Sentry.init()` repeatedly.
 - The SDK loads Mihoyo's browser Sentry bundle inside a hidden `iframe`, rather than attaching directly to the host page global:
   - default base: `https://webstatic.mihoyo.com/neone-resources/scripts`
   - default version: `8.13.0`
   - file: `bundle.min.js`
 - The isolated iframe prevents the SDK's Sentry client from interfering with any host-page Sentry instance or global handler setup.
+
+**Startup event behavior:**
+
+- Startup intentionally records a small set of high-signal SDK events:
+  - `sdk.module_initialized`
+  - `sdk.mount_success`
+- Additional lifecycle breadcrumbs such as `sdk.sentry_initialized`, `ws.connect_attempt`, `ws.connected`, and `ws.disconnected` are attached to later events for diagnostics.
+- In browser transport terms, each uploaded `envelope` corresponds to an event or exception, not to one `initSentryOnce()` call. Seeing multiple `envelope/` requests during startup does not imply repeated SDK initialization.
+- In local development, if the default API server / WebSocket endpoint is unavailable, the reconnect loop may emit repeated `ws_error` exceptions. That behavior is expected from the current implementation, although it can be noisy.
 
 **Internal configuration:**
 
@@ -388,6 +398,8 @@ The frontend SDK includes a built-in Sentry monitoring layer, but this is an **i
   - arrays/objects are size-limited
   - nested objects are depth-limited
   - `user`, request payloads, extras, contexts, and breadcrumb data are scrubbed
+  - if the isolated Sentry iframe reports a placeholder request URL such as `about:blank`, the SDK rewrites it to the host page URL
+  - if the caller already provided a meaningful `request.url`, the SDK preserves it instead of overwriting it with the page URL
 
 **Tagging and context:**
 
@@ -430,6 +442,8 @@ The frontend SDK includes a built-in Sentry monitoring layer, but this is an **i
   - wait-for-connection timeout
   - zip skill registration timeout/failure
   - browser tool execution failure
+- Development / local failure mode:
+  - when `API_URL` falls back to `http://localhost:4000` and no local server is listening, repeated reconnect attempts can produce repeated `ws_error` exception uploads
 - High-signal interaction breadcrumbs:
   - SDK initialization
   - successful mount

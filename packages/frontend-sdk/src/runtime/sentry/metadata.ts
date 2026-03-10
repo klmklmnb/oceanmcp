@@ -1,5 +1,6 @@
 import { API_URL } from "../../config";
 import { RELEASE } from "./constants";
+import { getHostLocation } from "./location";
 import { sentryState } from "./state";
 
 function getApiHost(): string {
@@ -11,11 +12,12 @@ function getApiHost(): string {
 }
 
 function getLocationTags(): Record<string, string> {
-  if (typeof window === "undefined") {
+  const loc = getHostLocation();
+  if (!loc) {
     return {};
   }
 
-  const { origin, pathname } = window.location;
+  const { origin, pathname } = loc;
   return {
     origin,
     href: `${origin}${pathname}`,
