@@ -975,10 +975,10 @@ describe("session AbortController tracking", () => {
     waveSessionManager.clearActiveAbortController(sessionKey);
   });
 
-  test("clear() also removes the abort controller", () => {
+  test("clear() also removes the abort controller", async () => {
     const controller = new AbortController();
     waveSessionManager.setActiveAbortController(sessionKey, controller);
-    waveSessionManager.clear(sessionKey);
+    await waveSessionManager.clear(sessionKey);
     expect(waveSessionManager.getActiveAbortController(sessionKey)).toBeUndefined();
   });
 });

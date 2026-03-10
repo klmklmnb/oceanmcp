@@ -1,13 +1,37 @@
 /**
  * Wave session manager.
  *
- * Maintains per-user/group conversation state (message history) for the
- * Wave chat channel. Each session stores a Vercel AI SDK-compatible
- * messages array that persists across webhook events.
+ * High-level facade over a SessionStore that provides the domain-specific
+ * API used by the Wave event handler and tools. Delegates all persistence
+ * to a pluggable SessionStore implementation (in-memory by default).
  *
- * Sessions are stored in-memory with TTL-based cleanup for inactive
- * conversations.
+ * ## Responsibilities
+ *
+ *   - Message history management (add user/assistant messages, trim, get)
+ *   - User info caching (via SessionStore metadata)
+ *   - Active stream AbortController tracking (in-memory only — cannot
+ *     be serialised, so NOT part of SessionStore)
+ *
+ * ## Async API
+ *
+ * All message/session methods are async to support future migration to
+ * Redis or database-backed SessionStore implementations. The AbortController
+ * methods remain synchronous since they are always in-memory.
  */
+
+import {
+  InMemorySessionStore,
+  type SessionStore,
+  type SessionData,
+  type StoredMessage,
+} from "./session-store";
+import { buildUserStoredMessage } from "./message-history";
+
+// ── Re-exports for backward compatibility ────────────────────────────────────
+
+export type { SessionStore, SessionData, StoredMessage } from "./session-store";
+
+// ── WaveUserInfo ─────────────────────────────────────────────────────────────
 
 /** Cached user info fetched via contact:user API */
 export interface WaveUserInfo {
@@ -21,124 +45,137 @@ export interface WaveUserInfo {
   email: string;
 }
 
-export interface WaveSession {
-  /** Session key: "wave:dm:<userId>" or "wave:group:<chatId>" */
-  sessionKey: string;
-  /** Vercel AI SDK message format */
-  messages: any[];
-  /** Last activity timestamp (epoch ms) */
-  lastActivity: number;
-  /** Cached user info keyed by union_id — avoids repeated contact API calls */
-  userInfo: Map<string, WaveUserInfo>;
-}
+/** Metadata key prefix for user info cache within a session */
+const USER_INFO_PREFIX = "userInfo:";
 
-/** Default session TTL: 2 hours of inactivity */
-const SESSION_TTL_MS = 2 * 60 * 60 * 1000;
-
-/** Cleanup interval: check every 10 minutes */
-const CLEANUP_INTERVAL_MS = 10 * 60 * 1000;
+// ── SessionManager ───────────────────────────────────────────────────────────
 
 class SessionManager {
-  private sessions = new Map<string, WaveSession>();
-  private cleanupTimer: ReturnType<typeof setInterval> | null = null;
+  private store: SessionStore;
 
   /**
    * Active AbortController per session — used to cancel a running
    * streamText() when the user sends a new message.
    *
-   * Kept separate from WaveSession because AbortController is not
+   * Kept separate from SessionStore because AbortController is not
    * serializable and is strictly a runtime concern.
    */
   private activeControllers = new Map<string, AbortController>();
 
-  constructor() {
-    this.startCleanup();
+  constructor(store?: SessionStore) {
+    this.store = store ?? new InMemorySessionStore();
   }
+
+  /**
+   * Replace the backing store (e.g. for testing or migration).
+   */
+  setStore(store: SessionStore): void {
+    this.store = store;
+  }
+
+  /**
+   * Get the backing store (for direct access in tests or advanced usage).
+   */
+  getStore(): SessionStore {
+    return this.store;
+  }
+
+  // ── Session lifecycle ──────────────────────────────────────────────────
 
   /**
    * Get or create a session for the given key.
    */
-  getOrCreate(sessionKey: string): WaveSession {
-    let session = this.sessions.get(sessionKey);
-    if (!session) {
-      session = {
-        sessionKey,
-        messages: [],
-        lastActivity: Date.now(),
-        userInfo: new Map(),
-      };
-      this.sessions.set(sessionKey, session);
-    }
-    session.lastActivity = Date.now();
-    return session;
+  async getOrCreate(sessionKey: string): Promise<SessionData> {
+    return this.store.getOrCreate(sessionKey);
+  }
+
+  /**
+   * Get all messages for a session.
+   */
+  async getMessages(sessionKey: string): Promise<StoredMessage[]> {
+    return this.store.getMessages(sessionKey);
   }
 
   /**
    * Append a user message to the session.
    */
-  addUserMessage(sessionKey: string, text: string): WaveSession {
-    const session = this.getOrCreate(sessionKey);
-    session.messages.push({
-      role: "user",
-      parts: [{ type: "text", text }],
-    });
-    return session;
+  async addUserMessage(sessionKey: string, text: string): Promise<void> {
+    const msg = buildUserStoredMessage(text);
+    await this.store.appendMessages(sessionKey, [msg]);
   }
 
   /**
-   * Append an assistant message to the session.
+   * Append a fully-formed assistant message (with tool parts) to the session.
+   *
+   * The message should be built via `buildAssistantStoredMessage()` from
+   * the `message-history` module, which reconstructs tool call and result
+   * parts from the streamText steps.
    */
-  addAssistantMessage(sessionKey: string, text: string): void {
-    const session = this.getOrCreate(sessionKey);
-    session.messages.push({
-      role: "assistant",
-      parts: [{ type: "text", text }],
-    });
-  }
-
-  /**
-   * Cache user info for a given union_id within a session.
-   */
-  setUserInfo(sessionKey: string, unionId: string, info: WaveUserInfo): void {
-    const session = this.getOrCreate(sessionKey);
-    session.userInfo.set(unionId, info);
-  }
-
-  /**
-   * Retrieve cached user info for a given union_id within a session.
-   */
-  getUserInfo(sessionKey: string, unionId: string): WaveUserInfo | undefined {
-    return this.sessions.get(sessionKey)?.userInfo.get(unionId);
+  async addAssistantMessage(
+    sessionKey: string,
+    message: StoredMessage,
+  ): Promise<void> {
+    await this.store.appendMessages(sessionKey, [message]);
   }
 
   /**
    * Trim session history to keep only the last N messages.
-   * Always keeps at least the system context intact.
    */
-  trimHistory(sessionKey: string, maxMessages: number): void {
-    const session = this.sessions.get(sessionKey);
-    if (!session) return;
-
-    if (session.messages.length > maxMessages) {
-      // Keep the most recent messages
-      session.messages = session.messages.slice(-maxMessages);
-    }
+  async trimHistory(sessionKey: string, maxMessages: number): Promise<void> {
+    await this.store.trimHistory(sessionKey, maxMessages);
   }
 
   /**
    * Get message count for a session.
    */
-  getMessageCount(sessionKey: string): number {
-    return this.sessions.get(sessionKey)?.messages.length ?? 0;
+  async getMessageCount(sessionKey: string): Promise<number> {
+    return this.store.getMessageCount(sessionKey);
+  }
+
+  // ── User info cache (stored as session metadata) ───────────────────────
+
+  /**
+   * Cache user info for a given union_id within a session.
+   */
+  async setUserInfo(
+    sessionKey: string,
+    unionId: string,
+    info: WaveUserInfo,
+  ): Promise<void> {
+    await this.store.setMetadata(
+      sessionKey,
+      `${USER_INFO_PREFIX}${unionId}`,
+      info,
+    );
+  }
+
+  /**
+   * Retrieve cached user info for a given union_id within a session.
+   */
+  async getUserInfo(
+    sessionKey: string,
+    unionId: string,
+  ): Promise<WaveUserInfo | undefined> {
+    const value = await this.store.getMetadata(
+      sessionKey,
+      `${USER_INFO_PREFIX}${unionId}`,
+    );
+    return value as WaveUserInfo | undefined;
   }
 
   // ── Active stream AbortController management ──────────────────────────
+  //
+  // These remain synchronous — AbortController is a runtime-only concern
+  // that cannot be serialised to an external store.
 
   /**
    * Store the AbortController for the currently active streamText() call
    * on a session. Called at the start of handleWaveMessage().
    */
-  setActiveAbortController(sessionKey: string, controller: AbortController): void {
+  setActiveAbortController(
+    sessionKey: string,
+    controller: AbortController,
+  ): void {
     this.activeControllers.set(sessionKey, controller);
   }
 
@@ -146,7 +183,9 @@ class SessionManager {
    * Get the AbortController for the session's current active stream
    * (if any). Returns `undefined` when no stream is running.
    */
-  getActiveAbortController(sessionKey: string): AbortController | undefined {
+  getActiveAbortController(
+    sessionKey: string,
+  ): AbortController | undefined {
     return this.activeControllers.get(sessionKey);
   }
 
@@ -158,48 +197,29 @@ class SessionManager {
     this.activeControllers.delete(sessionKey);
   }
 
+  // ── Cleanup ────────────────────────────────────────────────────────────
+
   /**
-   * Clear a specific session.
+   * Clear a specific session (both store and controller).
    */
-  clear(sessionKey: string): void {
+  async clear(sessionKey: string): Promise<void> {
     this.activeControllers.delete(sessionKey);
-    this.sessions.delete(sessionKey);
+    await this.store.delete(sessionKey);
   }
 
   /**
    * Get total active session count.
    */
-  get size(): number {
-    return this.sessions.size;
+  async size(): Promise<number> {
+    return this.store.size();
   }
 
   /**
-   * Remove stale sessions that have been inactive beyond the TTL.
+   * Shutdown — clean up all resources.
    */
-  private cleanup(): void {
-    const now = Date.now();
-    for (const [key, session] of this.sessions) {
-      if (now - session.lastActivity > SESSION_TTL_MS) {
-        this.sessions.delete(key);
-      }
-    }
-  }
-
-  private startCleanup(): void {
-    this.cleanupTimer = setInterval(() => this.cleanup(), CLEANUP_INTERVAL_MS);
-    // Don't prevent process exit
-    if (this.cleanupTimer.unref) {
-      this.cleanupTimer.unref();
-    }
-  }
-
-  destroy(): void {
-    if (this.cleanupTimer) {
-      clearInterval(this.cleanupTimer);
-      this.cleanupTimer = null;
-    }
+  async destroy(): Promise<void> {
     this.activeControllers.clear();
-    this.sessions.clear();
+    await this.store.destroy();
   }
 }
 
