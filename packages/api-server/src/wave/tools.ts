@@ -35,6 +35,43 @@ import { sendUserSelectCard } from "./message-sender";
 import { addPendingSelection, type PendingSelectionOption } from "./pending-selections";
 import { imageOcr } from "../ai/tools/image-ocr-tool";
 
+const WAVE_BLOB_DOWNLOAD_BASE_URL = "https://oc.app.mihoyo.com/blob/v1/download/";
+
+function normalizeWaveImageReference(value: string): {
+  kind: "public_url" | "blob_token" | "file_key" | "unknown";
+  token?: string;
+  url?: string;
+} {
+  if (/^https?:\/\//.test(value)) {
+    try {
+      const parsed = new URL(value);
+      const segments = parsed.pathname.split("/").filter(Boolean);
+      const lastSegment = segments[segments.length - 1];
+      if (
+        parsed.host === "oc.app.mihoyo.com" &&
+        parsed.pathname.includes("/blob/v1/download/") &&
+        lastSegment
+      ) {
+        return { kind: "public_url", token: lastSegment, url: value };
+      }
+      return { kind: "public_url", url: value };
+    } catch {
+      return { kind: "unknown" };
+    }
+  }
+  if (value.startsWith("of_")) {
+    return { kind: "file_key" };
+  }
+  if (/^[A-Za-z0-9_-]{20,}$/.test(value)) {
+    return {
+      kind: "blob_token",
+      token: value,
+      url: `${WAVE_BLOB_DOWNLOAD_BASE_URL}${value}`,
+    };
+  }
+  return { kind: "unknown" };
+}
+
 /**
  * Create the Wave-native `userSelect` tool.
  *
@@ -247,8 +284,54 @@ function createGetImageUrlTool(
         return { error: "No image keys provided." };
       }
 
+      const normalizedEntries = keys.map((key) => ({
+        original: String(key),
+        normalized: normalizeWaveImageReference(String(key)),
+      }));
+      const directlyResolvableEntries = normalizedEntries.filter(
+        (entry) =>
+          entry.normalized.kind === "public_url" ||
+          entry.normalized.kind === "blob_token",
+      );
+      const fileKeyEntries = normalizedEntries.filter(
+        (entry) => entry.normalized.kind === "file_key",
+      );
+      const unknownEntries = normalizedEntries.filter(
+        (entry) => entry.normalized.kind === "unknown",
+      );
+
+      if (directlyResolvableEntries.length > 0 && fileKeyEntries.length === 0 && unknownEntries.length === 0) {
+        const urls: Record<string, string> = {};
+        for (const entry of directlyResolvableEntries) {
+          if (entry.normalized.url) {
+            urls[entry.original] = entry.normalized.url;
+          }
+        }
+
+        return {
+          urls,
+          invalidKeys: [],
+        };
+      }
+
+      if (fileKeyEntries.length === 0) {
+        const urls: Record<string, string> = {};
+        for (const entry of directlyResolvableEntries) {
+          if (entry.normalized.url) {
+            urls[entry.original] = entry.normalized.url;
+          }
+        }
+
+        return {
+          urls,
+          invalidKeys: unknownEntries.map((entry) => entry.original),
+        };
+      }
+
       try {
-        const result = await clients.file.getFilePublicUrl(keys);
+        const result = await clients.file.getFilePublicUrl(
+          fileKeyEntries.map((entry) => entry.original),
+        );
 
         if (process.env.DEBUG === "true") {
           console.log(
@@ -263,13 +346,21 @@ function createGetImageUrlTool(
         }
 
         const urls: Record<string, string> = {};
+        for (const entry of directlyResolvableEntries) {
+          if (entry.normalized.url) {
+            urls[entry.original] = entry.normalized.url;
+          }
+        }
         for (const entry of result.file_url) {
           urls[entry.file_key] = entry.file_url;
         }
 
         return {
           urls,
-          invalidKeys: result.invalid_file_key,
+          invalidKeys: [
+            ...result.invalid_file_key,
+            ...unknownEntries.map((entry) => entry.original),
+          ],
         };
       } catch (err) {
         const message = err instanceof Error ? err.message : String(err);
