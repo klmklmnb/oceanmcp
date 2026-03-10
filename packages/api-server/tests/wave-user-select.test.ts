@@ -410,6 +410,9 @@ function createMockWaveClients(
     contact: {
       getUsers: overrides.contactGetUsers ?? mock(async () => ({ users: [] })),
     } as any,
+    file: {
+      getFilePublicUrl: mock(async () => ({ file_url: [], invalid_file_key: [] })),
+    } as any,
   };
 }
 

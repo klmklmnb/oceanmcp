@@ -11,10 +11,12 @@ import {
   createAppEvent,
   createAppMsg,
   createAppContact,
+  createAppFile,
   type AppClient,
   type AppEvent,
   type AppMsg,
   type AppContact,
+  type AppFile,
 } from "@mihoyo/wave-opensdk";
 import type { WaveConfig } from "./config";
 
@@ -27,6 +29,8 @@ export interface WaveClients {
   msg: AppMsg;
   /** Contact client — user info lookups via contact:user API */
   contact: AppContact;
+  /** File client — upload, download, get public URLs */
+  file: AppFile;
 }
 
 /** Singleton clients instance, created once by initWave() */
@@ -54,8 +58,9 @@ export function createWaveClients(config: WaveConfig): WaveClients {
   });
   const msg = createAppMsg({ client });
   const contact = createAppContact({ client });
+  const file = createAppFile({ client });
 
-  clients = { client, event, msg, contact };
+  clients = { client, event, msg, contact, file };
   return clients;
 }
 

@@ -205,6 +205,71 @@ function createGetCurrentUserTool(
 }
 
 /**
+ * Create the `getImageUrl` tool.
+ *
+ * Resolves a Wave `image_key` (file reference) to a temporary public URL
+ * via the Wave File API. The returned URL is valid for ~10 minutes.
+ *
+ * @param clients - Wave SDK clients (needs `file` for getFilePublicUrl)
+ */
+function createGetImageUrlTool(
+  clients: WaveClients,
+): Tool<any, any> {
+  return tool({
+    description:
+      "Resolve a Wave image_key to a temporary public URL (valid ~10 minutes). " +
+      "Use this when you need to access the actual image content from an image_key reference. " +
+      "Accepts a single image_key or an array of image_keys for batch resolution.",
+    inputSchema: z.object({
+      imageKeys: z
+        .union([z.string(), z.array(z.string())])
+        .describe(
+          "A single image_key string or an array of image_key strings to resolve.",
+        ),
+    }),
+    execute: async (input) => {
+      const keys = Array.isArray(input.imageKeys)
+        ? input.imageKeys
+        : [input.imageKeys];
+
+      if (keys.length === 0) {
+        return { error: "No image keys provided." };
+      }
+
+      try {
+        const result = await clients.file.getFilePublicUrl(keys);
+
+        if (process.env.DEBUG === "true") {
+          console.log(
+            `[Wave][Debug] getImageUrl: resolved=${result.file_url.length}, invalid=${result.invalid_file_key.length}`,
+          );
+          for (const entry of result.file_url) {
+            console.log(`[Wave][Debug] getImageUrl: ${entry.file_key} → ${entry.file_url}`);
+          }
+          if (result.invalid_file_key.length > 0) {
+            console.log(`[Wave][Debug] getImageUrl invalid keys: ${result.invalid_file_key.join(", ")}`);
+          }
+        }
+
+        const urls: Record<string, string> = {};
+        for (const entry of result.file_url) {
+          urls[entry.file_key] = entry.file_url;
+        }
+
+        return {
+          urls,
+          invalidKeys: result.invalid_file_key,
+        };
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        console.error(`[Wave] getImageUrl failed:`, message);
+        return { error: `Failed to resolve image URLs: ${message}` };
+      }
+    },
+  });
+}
+
+/**
  * Build the merged tool set for a Wave chat session.
  *
  * @param fileSkills - File-based skills discovered at startup
@@ -227,6 +292,7 @@ export function buildWaveTools(
   const tools: Record<string, Tool<any, any>> = {
     userSelect: createWaveUserSelectTool(clients, chatId, sessionKey),
     getCurrentUser: createGetCurrentUserTool(clients, senderId, sessionKey),
+    getImageUrl: createGetImageUrlTool(clients),
   };
 
   const allSkills = [...fileSkills, ...zipSkills];

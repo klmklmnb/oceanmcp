@@ -134,6 +134,27 @@ export async function handleWaveMessage(
     return;
   }
 
+  // 2.5 Resolve image_key references to public URLs
+  if (ctx.imageKeys.length > 0) {
+    const tImg = Date.now();
+    try {
+      const fileResult = await clients.file.getFilePublicUrl(ctx.imageKeys);
+      debugLog(
+        `${TAG} [${reqId}] Resolve image URLs: ${elapsed(tImg)} ` +
+        `(keys=${ctx.imageKeys.length}, resolved=${fileResult.file_url.length}, invalid=${fileResult.invalid_file_key.length})`,
+      );
+      for (const entry of fileResult.file_url) {
+        debugLog(`${TAG} [${reqId}] Image resolved: ${entry.file_key} → ${entry.file_url}`);
+        ctx.content = ctx.content.replaceAll(`[image:${entry.file_key}]`, `[image:${entry.file_url}]`);
+      }
+      if (fileResult.invalid_file_key.length > 0) {
+        debugLog(`${TAG} [${reqId}] Invalid image keys: ${fileResult.invalid_file_key.join(", ")}`);
+      }
+    } catch (err) {
+      console.warn(`${TAG} [${reqId}] Failed to resolve image URLs (${elapsed(tImg)}):`, err);
+    }
+  }
+
   // 3. Load skills from zip URL (if provided)
   const t2 = Date.now();
   const { sandbox, discoveredSkills: fileSkills } = getBasePromptContext();

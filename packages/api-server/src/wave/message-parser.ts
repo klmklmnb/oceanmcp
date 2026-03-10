@@ -39,6 +39,8 @@ export interface WaveMessageContext {
   content: string;
   /** Original message type */
   contentType: string;
+  /** Collected image_key values that need public URL resolution */
+  imageKeys: string[];
 }
 
 // ── Content Parsing ──────────────────────────────────────────────────────────
@@ -62,10 +64,12 @@ function ensureContentObject(content: unknown): Record<string, unknown> {
 
 /**
  * Parse rich text blocks into plain text.
+ * Collects image_key values into the provided array for later URL resolution.
  */
 function parseRichText(
   content: { tags?: Array<{ items?: Array<Record<string, any>> }> },
   appId?: string,
+  imageKeys?: string[],
 ): string {
   const tags = content.tags;
   if (!tags) return "";
@@ -85,8 +89,11 @@ function parseRichText(
             }
             case RichTextType.Emoji:
               return `[emoji:${item.content.code}]`;
-            case RichTextType.Image:
-              return `[image:${item.content.image_key}]`;
+            case RichTextType.Image: {
+              const key = item.content.image_key;
+              if (key && imageKeys) imageKeys.push(key);
+              return `[image:${key}]`;
+            }
             case RichTextType.Text:
               return item.content.text ?? "";
             case RichTextType.Url:
@@ -102,8 +109,9 @@ function parseRichText(
 
 /**
  * Extract text content from a Wave message event.
+ * Collects image_key values into the provided array for later URL resolution.
  */
-function parseMessageContent(event: WaveEvent, appId?: string): string {
+function parseMessageContent(event: WaveEvent, appId?: string, imageKeys?: string[]): string {
   const message = event.event.message;
   const contentObj = ensureContentObject((message as any).content);
 
@@ -112,16 +120,22 @@ function parseMessageContent(event: WaveEvent, appId?: string): string {
       return String(contentObj.text ?? "");
 
     case MsgType.RichText:
-      return parseRichText(contentObj as any, appId);
+      return parseRichText(contentObj as any, appId, imageKeys);
 
     case MsgType.Markdown:
       return String(contentObj.text ?? "");
 
-    case MsgType.Image:
-      return `[image:${contentObj.image_key ?? "unknown"}]`;
+    case MsgType.Image: {
+      const key = String(contentObj.image_key ?? "unknown");
+      if (key !== "unknown" && imageKeys) imageKeys.push(key);
+      return `[image:${key}]`;
+    }
 
-    case MsgType.Video:
-      return `[video:${contentObj.file_key ?? "unknown"}]`;
+    case MsgType.Video: {
+      const thumbKey = contentObj.image_key ? String(contentObj.image_key) : undefined;
+      if (thumbKey && imageKeys) imageKeys.push(thumbKey);
+      return `[video:${contentObj.file_key ?? "unknown"}${thumbKey ? `, thumb:${thumbKey}` : ""}]`;
+    }
 
     case MsgType.File:
       return `[file:${contentObj.file_key ?? "unknown"}, name:${contentObj.file_name ?? "unknown"}]`;
@@ -155,8 +169,9 @@ export function parseWaveEvent(
     (m: { id_type: string; id: string }) => m.id_type === "app_id" && m.id === appId,
   );
 
-  // Parse content
-  let content = parseMessageContent(event, appId);
+  // Parse content and collect image keys for URL resolution
+  const imageKeys: string[] = [];
+  let content = parseMessageContent(event, appId, imageKeys);
 
   // Strip @bot mentions from text
   for (const mention of mentions) {
@@ -181,6 +196,7 @@ export function parseWaveEvent(
     mentionedBot,
     content,
     contentType: (message as any).msg_type,
+    imageKeys,
   };
 }
 
