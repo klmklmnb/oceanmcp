@@ -28,6 +28,7 @@ import { checkPolicy } from "./policy";
 import { waveSessionManager } from "./session-manager";
 import { buildWaveTools } from "./tools";
 import { removeAllForSession } from "./pending-selections";
+import { buildAssistantStoredMessage } from "./message-history";
 import {
   sendInitialReplyCard,
   enableStreaming,
@@ -183,10 +184,10 @@ export async function handleWaveMessage(
     waveSessionManager.clearActiveAbortController(sessionKey);
   }
 
-  waveSessionManager.addUserMessage(sessionKey, ctx.content);
-  waveSessionManager.trimHistory(sessionKey, config.historyLimit);
-  const session = waveSessionManager.getOrCreate(sessionKey);
-  debugLog(`${TAG} [${reqId}] Session setup: ${elapsed(t3)} (key=${sessionKey}, msgs=${session.messages.length})`);
+  await waveSessionManager.addUserMessage(sessionKey, ctx.content);
+  await waveSessionManager.trimHistory(sessionKey, config.historyLimit);
+  const messages = await waveSessionManager.getMessages(sessionKey);
+  debugLog(`${TAG} [${reqId}] Session setup: ${elapsed(t3)} (key=${sessionKey}, msgs=${messages.length})`);
 
   // 4b. Create a new AbortController for this stream
   const abortController = new AbortController();
@@ -199,8 +200,14 @@ export async function handleWaveMessage(
   debugLog(`${TAG} [${reqId}] Build tools+prompt: ${elapsed(t4)} (tools=${Object.keys(tools).length}, promptLen=${systemPrompt.length})`);
 
   // 6. Convert messages to model format
+  //
+  // StoredMessage is a serialization-friendly subset of UIMessage. The
+  // parts array is structurally compatible with UIMessagePart (same field
+  // names and values), but TypeScript's template literal type for tool
+  // part state discriminants doesn't match our simplified union. The cast
+  // is safe because convertToModelMessages reads the same fields we store.
   const t5 = Date.now();
-  const modelMessages = await convertToModelMessages(session.messages);
+  const modelMessages = await convertToModelMessages(messages as any);
   debugLog(`${TAG} [${reqId}] Convert messages: ${elapsed(t5)} (count=${modelMessages.length})`);
 
   // 7. Stream AI response
@@ -346,9 +353,19 @@ async function handleStreamingResponse(
   await finalizeReplyCard(clients, state, ctx.chatId);
   debugLog(`${TAG} [${reqId}] Finalize card: ${elapsed(tFinalize)}`);
 
-  // Save assistant response to session
-  if (state.accumulatedText.trim()) {
-    waveSessionManager.addAssistantMessage(sessionKey, state.accumulatedText);
+  // Save assistant response to session (including tool call/result parts)
+  const tSave = Date.now();
+  try {
+    const steps = await result.steps;
+    const assistantMsg = buildAssistantStoredMessage(steps);
+    if (assistantMsg) {
+      await waveSessionManager.addAssistantMessage(sessionKey, assistantMsg);
+      debugLog(`${TAG} [${reqId}] Save assistant message: ${elapsed(tSave)} (parts=${assistantMsg.parts.length})`);
+    }
+  } catch (err) {
+    // If steps resolution fails (e.g. partial abort), skip saving.
+    // The text was already sent to the user via streaming.
+    debugLog(`${TAG} [${reqId}] Failed to save assistant message: ${err}`);
   }
 
   debugLog(`${TAG} [${reqId}] Post-stream overhead (finalize+save): ${elapsed(tStreamDone)}`);
@@ -398,6 +415,16 @@ async function handleSimpleResponse(
     const tSend = Date.now();
     await sendSimpleReply(clients, ctx.messageId, fullText);
     debugLog(`${TAG} [${reqId}] Send reply: ${elapsed(tSend)}`);
-    waveSessionManager.addAssistantMessage(sessionKey, fullText);
+
+    // Save assistant response with full tool history
+    try {
+      const steps = await result.steps;
+      const assistantMsg = buildAssistantStoredMessage(steps);
+      if (assistantMsg) {
+        await waveSessionManager.addAssistantMessage(sessionKey, assistantMsg);
+      }
+    } catch (err) {
+      debugLog(`${TAG} [${reqId}] Failed to save assistant message: ${err}`);
+    }
   }
 }

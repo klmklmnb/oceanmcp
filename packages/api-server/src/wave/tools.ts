@@ -168,7 +168,7 @@ function createGetCurrentUserTool(
     inputSchema: z.object({}),
     execute: async () => {
       // Check session cache first
-      const cached = waveSessionManager.getUserInfo(sessionKey, senderId);
+      const cached = await waveSessionManager.getUserInfo(sessionKey, senderId);
       if (cached) return cached;
 
       try {
@@ -193,7 +193,7 @@ function createGetCurrentUserTool(
         };
 
         // Cache in session for subsequent calls
-        waveSessionManager.setUserInfo(sessionKey, senderId, userInfo);
+        await waveSessionManager.setUserInfo(sessionKey, senderId, userInfo);
         return userInfo;
       } catch (err) {
         const message = err instanceof Error ? err.message : String(err);
