@@ -22,6 +22,12 @@ import {
   patchCssForShadowDom,
   hoistPropertyRulesToDocument
 } from "./shadow-dom";
+import { commandRegistry } from "./command/command-registry";
+import {
+  registerSessionBuiltinCommands,
+  unregisterSessionBuiltinCommands,
+} from "./command/builtin-commands";
+import { sessionManager } from "./session/session-manager";
 
 // ─── Public types (single source of truth) ───────────────────────────────────
 import type {
@@ -55,6 +61,16 @@ wsClient.connect();
 
 /** Cleanup function returned by the Monaco style observer. */
 let _cleanupMonacoObserver: (() => void) | null = null;
+
+function syncSessionFeatures(): void {
+  const enabled = sdkConfig.sessionEnabled === true;
+  sessionManager.setEnabled(enabled);
+  if (enabled) {
+    registerSessionBuiltinCommands();
+  } else {
+    unregisterSessionBuiltinCommands();
+  }
+}
 
 function captureRootError(
   kind: "uncaught" | "recoverable",
@@ -105,9 +121,13 @@ function mountOceanMCP(target?: MountTarget | MountOptions) {
     if (options.toolRetries != null) {
       sdkConfig.toolRetries = options.toolRetries;
     }
+    if (options.enableSessions != null) {
+      sdkConfig.sessionEnabled = options.enableSessions;
+    }
     if (options.shadowDOM === false) {
       useShadowDOM = false;
     }
+    syncSessionFeatures();
     target = options.root;
   }
 
@@ -502,6 +522,16 @@ const sdk: OceanMCPSDKType = {
     console.log("[OceanMCP] Upload handler unregistered");
   },
 
+  registerCommand(command) {
+    commandRegistry.register(command);
+    console.log(`[OceanMCP] Command registered: /${command.name}`);
+  },
+
+  unregisterCommand(name: string) {
+    commandRegistry.unregister(name);
+    console.log(`[OceanMCP] Command unregistered: /${name}`);
+  },
+
   /**
    * Mount the chat widget to a specific target.
    *
@@ -586,6 +616,7 @@ export type {
   SkillDefinition,
   UploadHandler,
   UploadResult,
+  SlashCommand,
   SupportedLocale,
   SuggestionItem,
   Theme,

@@ -39,6 +39,8 @@ export type SDKConfig = {
   theme?: Theme;
   /** Maximum LLM retry attempts per tool per chat turn. Default: 5. */
   toolRetries?: number;
+  /** Enable frontend session persistence features. Default: false. */
+  sessionEnabled?: boolean;
 };
 
 export const LOCALE_CHANGE_EVENT = "ocean-mcp:locale-change";
@@ -142,5 +144,13 @@ export const sdkConfig = {
 
   set toolRetries(value: number | undefined) {
     config.toolRetries = value;
+  },
+
+  get sessionEnabled(): boolean | undefined {
+    return config.sessionEnabled;
+  },
+
+  set sessionEnabled(value: boolean | undefined) {
+    config.sessionEnabled = value;
   },
 };

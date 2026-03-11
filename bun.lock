@@ -204,7 +204,7 @@
 
     "@microsoft/tsdoc-config": ["@microsoft/tsdoc-config@0.18.1", "https://registry.npmmirror.com/@microsoft/tsdoc-config/-/tsdoc-config-0.18.1.tgz", { "dependencies": { "@microsoft/tsdoc": "0.16.0", "ajv": "~8.18.0", "jju": "~1.4.0", "resolve": "~1.22.2" } }, "sha512-9brPoVdfN9k9g0dcWkFeA7IH9bbcttzDJlXvkf8b2OBzd5MueR1V2wkKBL0abn0otvmkHJC6aapBOTJDDeMCZg=="],
 
-    "@mihoyo/wave-opensdk": ["@mihoyo/wave-opensdk@vendor/mihoyo-wave-opensdk-0.9.0.tgz", { "dependencies": { "@noble/ciphers": "^0.6.0", "@noble/hashes": "^1.5.0", "ofetch": "^1.3.4" } }],
+    "@mihoyo/wave-opensdk": ["@mihoyo/wave-opensdk@vendor/mihoyo-wave-opensdk-0.9.0.tgz", { "dependencies": { "@noble/ciphers": "^0.6.0", "@noble/hashes": "^1.5.0", "ofetch": "^1.3.4" } }, "sha512-MN0WioXgqrJCMWZBCSMYcomAOHJNqEhacRHyzqITuv0UxATxLh0IWkRRcFtSaN8rGFg1IcJdVz/97r3uZj57DQ=="],
 
     "@monaco-editor/loader": ["@monaco-editor/loader@1.7.0", "https://registry.npmmirror.com/@monaco-editor/loader/-/loader-1.7.0.tgz", { "dependencies": { "state-local": "^1.0.6" } }, "sha512-gIwR1HrJrrx+vfyOhYmCZ0/JcWqG5kbfG7+d3f/C1LXk2EvzAbHSg3MQ5lO2sMlo9izoAZ04shohfKLVT6crVA=="],
 

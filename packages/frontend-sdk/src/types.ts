@@ -47,6 +47,7 @@ export type {
 export type { SkillDefinition } from "./registry/skill-registry";
 export type { UploadHandler, UploadResult } from "./runtime/upload-registry";
 export type { SupportedLocale, SuggestionItem, Theme } from "./runtime/sdk-config";
+export type { SlashCommand } from "./command/command-registry";
 
 // ─── SDK-specific types ──────────────────────────────────────────────────────
 
@@ -123,6 +124,17 @@ export interface MountOptions {
    * @default 5
    */
   toolRetries?: number;
+  /**
+   * Enable local session persistence and session switching UI.
+   *
+   * When enabled, the SDK stores conversations in IndexedDB and activates
+   * built-in slash commands:
+   * - `/new`: create and switch to a new session
+   * - `/sessions`: open session history list
+   *
+   * @default false
+   */
+  enableSessions?: boolean;
 }
 
 // ─── SDK Interface ───────────────────────────────────────────────────────────
@@ -221,6 +233,12 @@ export interface OceanMCPSDKType {
 
   /** Remove the registered upload handler. */
   unregisterUploader(): void;
+
+  /** Register a slash command (without leading `/`). */
+  registerCommand(command: import("./command/command-registry").SlashCommand): void;
+
+  /** Unregister a slash command by name. */
+  unregisterCommand(name: string): void;
 
   /**
    * Mount the chat widget to a specific target.
