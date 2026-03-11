@@ -1141,7 +1141,7 @@ export async function updateCardAfterSelection(
  * Used when:
  *   - The server restarted and the pending selection was lost
  *   - The user's previous stream was aborted (new message sent)
- *   - The 10-minute safety timeout fired
+ *   - The 1-hour safety timeout fired
  *
  * Uses `updateCardActively` (by message ID) instead of `updateCard` (by token)
  * because the token-based endpoint has issues with `receiver_id_type` validation

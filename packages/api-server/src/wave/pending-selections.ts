@@ -43,7 +43,7 @@ const sessionIndex = new Map<string, Set<string>>();
 // ── Safety-net timeout ──────────────────────────────────────────────────────
 
 /** Pending selections older than this are auto-rejected. */
-const SELECTION_TIMEOUT_MS = 10 * 60 * 1000; // 10 minutes
+const SELECTION_TIMEOUT_MS = 60 * 60 * 1000; // 1 hour
 
 /** How often to sweep for stale entries. */
 const CLEANUP_INTERVAL_MS = 60 * 1000; // 1 minute
@@ -65,7 +65,7 @@ function startCleanup(): void {
         }
         // Reject the Promise
         entry.reject(
-          new Error("Selection timed out (10 minute safety limit)"),
+          new Error("Selection timed out (1 hour safety limit)"),
         );
       }
     }

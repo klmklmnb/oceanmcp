@@ -1066,12 +1066,12 @@ describe("safety-net timeout", () => {
 
   test("entries can be manually timed out by removing them", async () => {
     // We can't easily test the setInterval-based cleanup without
-    // waiting 10 minutes, but we can verify the pattern works:
+    // waiting 1 hour, but we can verify the pattern works:
     // add entry → simulate timeout by calling removePendingSelection
     const promise = addPendingSelection("card_timeout_sim", [{ value: "a" }], "wave:dm:timeout");
 
     // Simulate what the cleanup sweep would do
-    removePendingSelection("card_timeout_sim", "Selection timed out (10 minute safety limit)");
+    removePendingSelection("card_timeout_sim", "Selection timed out (1 hour safety limit)");
 
     await expect(promise).rejects.toThrow("timed out");
     expect(hasPendingSelection("card_timeout_sim")).toBe(false);
