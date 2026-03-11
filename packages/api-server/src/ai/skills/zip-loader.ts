@@ -101,6 +101,7 @@ import { join } from "path";
 import { mkdir, access, unlink, readFile, writeFile, rm, readdir, stat } from "fs/promises";
 import type { Sandbox, SkillMetadata } from "@ocean-mcp/shared";
 import { discoverSkills, parseFrontmatter, type DiscoveredSkill } from "./discover";
+import { wrapCodeFunctionDefinitions } from "./code-tool-adapter";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -489,12 +490,23 @@ async function _downloadAndExtractCachedImpl(
   const existingIdx = manifest.entries.findIndex((e) => e.url === url);
   const existing = existingIdx >= 0 ? manifest.entries[existingIdx] : null;
 
-  // ── Check if cached extractDir still exists on disk ─────────────────
+  // ── Check if cached extractDir still exists and has content ──────────
+  // A simple `access()` check is not enough — the directory may exist but
+  // be empty (e.g. OS temp cleanup removed contents but not the dir itself,
+  // or a container restart cleared /tmp). We verify the dir has at least
+  // one real entry (ignoring dotfiles) to avoid returning an empty cache
+  // that causes "No skills found" errors downstream.
   let existingValid = false;
   if (existing) {
     try {
-      await access(existing.extractDir);
-      existingValid = true;
+      const entries = await readdir(existing.extractDir);
+      const realEntries = entries.filter((e) => !e.startsWith("."));
+      existingValid = realEntries.length > 0;
+      if (!existingValid) {
+        console.warn(
+          `[ZipCache] Cached extractDir is empty, treating as cache miss: ${existing.extractDir}`,
+        );
+      }
     } catch {
       // extractDir was deleted externally — treat as cache miss
     }
@@ -749,6 +761,21 @@ export async function loadSkillsFromZip(
       description: frontmatter.description,
       path: skillRoot,
     };
+
+    // Attempt to import bundled tool definitions (tools.ts) for this
+    // root-level skill. This mirrors the same import logic used by
+    // discoverSkills() for subdirectory skills, ensuring root-level
+    // zip skills can also export tools (both Vercel AI SDK Tool objects
+    // and CodeFunctionDefinition objects).
+    try {
+      const toolsModule = await import(join(skillRoot, "tools.ts"));
+      const exportedTools = toolsModule.default ?? toolsModule.tools;
+      if (exportedTools && typeof exportedTools === "object") {
+        skill.tools = wrapCodeFunctionDefinitions(exportedTools);
+      }
+    } catch {
+      // No tools file or import failed — fine, tools are optional
+    }
 
     return { skills: [skill], extractDir };
   } catch {

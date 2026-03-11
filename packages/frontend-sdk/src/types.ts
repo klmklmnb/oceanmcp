@@ -106,6 +106,23 @@ export interface MountOptions {
    * - `auto`: Follows the user's operating system preferences.
    */
   theme?: import("./runtime/sdk-config").Theme;
+  /**
+   * Maximum number of times the LLM may retry a failed tool call
+   * (per distinct tool ID, per chat turn).
+   *
+   * When a tool execution fails, the error is sent back to the LLM
+   * which can analyse the failure and regenerate the call with
+   * corrected parameters.  This setting caps how many retry attempts
+   * are allowed before the error is surfaced to the user.
+   *
+   * - Applies independently to each tool ID (tool-A exhausting its
+   *   budget does not affect tool-B).
+   * - For write tools that require user approval (`executePlan`),
+   *   the regenerated plan still goes through the approval flow.
+   *
+   * @default 5
+   */
+  toolRetries?: number;
 }
 
 // ─── SDK Interface ───────────────────────────────────────────────────────────

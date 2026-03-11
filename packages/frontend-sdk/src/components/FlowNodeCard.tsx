@@ -55,6 +55,16 @@ export function FlowNodeCard({
   onDeny,
 }: FlowNodeCardProps) {
   const getStepStatus = (index: number) => {
+    if (state === TOOL_PART_STATE.OUTPUT_DENIED) {
+      return FLOW_STEP_STATUS.FAILED;
+    }
+    if (
+      state === TOOL_PART_STATE.APPROVAL_RESPONDED &&
+      approval?.approved === false
+    ) {
+      return FLOW_STEP_STATUS.FAILED;
+    }
+
     if (!result?.results) {
       // AI SDK v6 states: "approval-requested", "input-available", "output-available", etc.
       if (
@@ -64,20 +74,11 @@ export function FlowNodeCard({
         return FLOW_STEP_STATUS.PENDING;
       }
       if (
-        state === TOOL_PART_STATE.APPROVAL_RESPONDED &&
-        approval?.approved === false
-      ) {
-        return FLOW_STEP_STATUS.FAILED;
-      }
-      if (
         (state === TOOL_PART_STATE.APPROVAL_RESPONDED &&
           approval?.approved === true) ||
         state === TOOL_PART_STATE.INPUT_AVAILABLE
       ) {
         return FLOW_STEP_STATUS.RUNNING;
-      }
-      if (state === TOOL_PART_STATE.OUTPUT_DENIED) {
-        return FLOW_STEP_STATUS.FAILED;
       }
       return FLOW_STEP_STATUS.PENDING;
     }

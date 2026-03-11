@@ -158,3 +158,18 @@ export function getSkillsContext(connectionId?: string) {
     ],
   };
 }
+
+/**
+ * Get the base system prompt components for non-browser channels (e.g. Wave).
+ *
+ * Returns the base prompt text, the sandbox instance, and the file-based
+ * discovered skills. The caller is responsible for merging channel-specific
+ * skills (e.g. zip-loaded) and building the full system prompt.
+ */
+export function getBasePromptContext() {
+  return {
+    basePrompt,
+    sandbox,
+    discoveredSkills,
+  };
+}

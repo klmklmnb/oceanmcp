@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback } from "react";
+import React, { useState, useEffect, useRef, useCallback, useId } from "react";
 import OceanMCPSDK from "../main";
 import { sdkConfig, THEME, resolveTheme, type SupportedLocale, type Theme } from "../runtime/sdk-config";
 
@@ -76,6 +76,106 @@ const darkColors: PanelColors = {
   unselectedBorder: "#4b5563",
   unselectedText: "#9ca3af",
 };
+
+const SAMPLE_OCR_IMAGE_URL =
+  "https://patchwiki.biligame.com/images/ys/8/81/8393e6kjulrau058jy9qolyv30bfkiz.png";
+
+function OcrTester({ c, isDark }: { c: PanelColors; isDark: boolean }) {
+  const [imageUrl, setImageUrl] = useState(SAMPLE_OCR_IMAGE_URL);
+  const [model, setModel] = useState("");
+  const [prompt, setPrompt] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [showAdvanced, setShowAdvanced] = useState(false);
+
+  const handleSend = async () => {
+    if (!imageUrl.trim()) return;
+    setLoading(true);
+    try {
+      const parts: string[] = [
+        `请对以下图片进行 OCR 识别，使用 imageOcr 工具。`,
+        `imageUrl: ${imageUrl.trim()}`,
+      ];
+      if (model.trim()) parts.push(`model: ${model.trim()}`);
+      if (prompt.trim()) parts.push(`prompt: ${prompt.trim()}`);
+      await OceanMCPSDK.chat(parts.join("\n"));
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const inputStyle: React.CSSProperties = {
+    width: "100%",
+    padding: "8px 10px",
+    borderRadius: 8,
+    border: `1px solid ${c.inputBorder}`,
+    fontSize: 12,
+    boxSizing: "border-box",
+    fontFamily: "inherit",
+    background: c.inputBg,
+    color: c.inputText,
+  };
+
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+      <input
+        type="url"
+        value={imageUrl}
+        onChange={(e) => setImageUrl(e.target.value)}
+        placeholder="https://example.com/image.png"
+        style={inputStyle}
+      />
+      <button
+        onClick={() => setShowAdvanced((v) => !v)}
+        style={{
+          background: "none",
+          border: "none",
+          padding: 0,
+          fontSize: 11,
+          color: c.label,
+          cursor: "pointer",
+          textAlign: "left",
+          textDecoration: "underline",
+        }}
+      >
+        {showAdvanced ? "▲ 收起可选参数" : "▼ 展开可选参数 (model / prompt)"}
+      </button>
+      {showAdvanced && (
+        <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+          <input
+            type="text"
+            value={model}
+            onChange={(e) => setModel(e.target.value)}
+            placeholder="model（留空使用默认）"
+            style={inputStyle}
+          />
+          <input
+            type="text"
+            value={prompt}
+            onChange={(e) => setPrompt(e.target.value)}
+            placeholder="prompt（留空使用默认）"
+            style={inputStyle}
+          />
+        </div>
+      )}
+      <button
+        onClick={handleSend}
+        disabled={!imageUrl.trim() || loading}
+        style={{
+          ...btnBase,
+          background:
+            !imageUrl.trim() || loading
+              ? isDark
+                ? "#4b5563"
+                : "#d1d5db"
+              : "#06b6d4",
+          cursor: !imageUrl.trim() || loading ? "not-allowed" : "pointer",
+        }}
+      >
+        {loading ? "Sending..." : "OCR 识别图片"}
+      </button>
+    </div>
+  );
+}
 
 export function TestPanel() {
   const [open, setOpen] = useState(false);
@@ -389,6 +489,16 @@ export function TestPanel() {
               })}
             </div>
           </div>
+
+          {/* OCR test */}
+          <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+            <p style={{ margin: 0, fontSize: 11, color: c.label, fontWeight: 500 }}>
+              <code style={{ background: c.codeBg, padding: "1px 4px", borderRadius: 3, fontSize: 10, color: c.label }}>imageOcr</code> 输入图片 URL，触发 OCR 识别
+            </p>
+            <OcrTester c={c} isDark={isDark} />
+          </div>
+
+          <hr style={{ border: "none", borderTop: `1px solid ${c.border}`, margin: "4px 0" }} />
 
           {/* Text input */}
           <textarea

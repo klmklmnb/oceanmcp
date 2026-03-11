@@ -2,6 +2,8 @@ import { getServerStatus, echo } from "./server-tools";
 import { createBrowserExecuteTool } from "./browser-proxy-tool";
 import { createExecutePlanTool } from "./execute-plan-tool";
 import { userSelect } from "./user-select-tool";
+import { imageOcr } from "./image-ocr-tool";
+import type { ToolRetryTracker } from "./retry-tracker";
 import {
   OPERATION_TYPE,
   PARAMETER_TYPE,
@@ -19,6 +21,7 @@ export const serverTools = {
   userSelect,
   getServerStatus,
   echo,
+  imageOcr,
 };
 
 function dedupeStrings(values: string[]): string[] {
@@ -68,10 +71,11 @@ function deriveCandidateValuesFromDescription(description?: string): string[] {
 
 function getBrowserTools(
   connectionId?: string,
+  retryTracker?: ToolRetryTracker,
 ): Record<string, Tool<any, any>> {
   return {
-    browserExecute: createBrowserExecuteTool(connectionId),
-    executePlan: createExecutePlanTool(connectionId),
+    browserExecute: createBrowserExecuteTool(connectionId, retryTracker),
+    executePlan: createExecutePlanTool(connectionId, retryTracker),
   };
 }
 
@@ -165,6 +169,7 @@ export function createZodSchema(parameters: ParameterDefinition[]) {
 export function createBrowserProxyToolFromSchema(
   schema: FunctionSchema,
   connectionId?: string,
+  retryTracker?: ToolRetryTracker,
 ): Tool<any, any> {
   const requiresApproval =
     schema.operationType === OPERATION_TYPE.WRITE && !schema.autoApprove;
@@ -174,12 +179,35 @@ export function createBrowserProxyToolFromSchema(
     inputSchema: createZodSchema(schema.parameters),
     ...(requiresApproval && { needsApproval: true }),
     execute: async (args) => {
-      return connectionManager.executeBrowserTool(
-        schema.id,
-        args,
-        30_000,
-        connectionId,
-      );
+      try {
+        return await connectionManager.executeBrowserTool(
+          schema.id,
+          args,
+          30_000,
+          connectionId,
+        );
+      } catch (error) {
+        const msg = error instanceof Error ? error.message : String(error);
+
+        if (retryTracker) {
+          const canRetry = retryTracker.recordFailure(schema.id);
+          if (canRetry) {
+            return {
+              error: msg,
+              functionId: schema.id,
+              _retryHint: `Tool execution failed (attempt ${retryTracker.getAttempt(schema.id) - 1}/${retryTracker.max}). Analyze the error and retry with corrected parameters.`,
+            };
+          }
+          return {
+            error: msg,
+            functionId: schema.id,
+            _retryExhausted: true,
+            _retryHint: `Tool execution failed and retry limit (${retryTracker.max}) reached. Report this error to the user and do NOT retry this tool.`,
+          };
+        }
+
+        throw error;
+      }
     },
   });
 }
@@ -201,11 +229,13 @@ export function createBrowserProxyToolFromSchema(
 export function getMergedTools(
   dynamicToolSchemas?: FunctionSchema[],
   connectionId?: string,
+  retryTracker?: ToolRetryTracker,
 ): Record<string, Tool<any, any>> {
   const tools: Record<string, Tool<any, any>> = {
     userSelect,
+    imageOcr,
     // ...serverTools,
-    ...getBrowserTools(connectionId),
+    ...getBrowserTools(connectionId, retryTracker),
   };
 
   // ── Skills integration ─────────────────────────────────────────────────
@@ -244,6 +274,7 @@ export function getMergedTools(
         tools[toolSchema.id] = createBrowserProxyToolFromSchema(
           toolSchema,
           connectionId,
+          retryTracker,
         );
       }
     }
@@ -259,6 +290,7 @@ export function getMergedTools(
       tools[schema.id] = createBrowserProxyToolFromSchema(
         schema,
         connectionId,
+        retryTracker,
       );
     }
   }

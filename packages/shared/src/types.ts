@@ -148,7 +148,7 @@ export interface FunctionSchema {
   description: string;
   type: FunctionType;
   operationType: OperationType;
-  /** @see BaseFunctionDefinition.autoApprove */
+  /** @see BaseFunctionDefinition["autoApprove"] */
   autoApprove?: boolean;
   parameters: ParameterDefinition[];
 }

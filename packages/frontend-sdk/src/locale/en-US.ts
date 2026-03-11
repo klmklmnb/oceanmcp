@@ -18,6 +18,7 @@ const enUS = {
   "tool.status.complete": "Complete",
   "tool.status.error": "Error",
   "tool.status.running": "Running",
+  "tool.status.denied": "Denied",
   "tool.label.result": "Result",
   "tool.label.parameters": "Parameters",
   "tool.renderError": "Render error:",

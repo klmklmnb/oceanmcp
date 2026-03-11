@@ -102,6 +102,9 @@ function mountOceanMCP(target?: MountTarget | MountOptions) {
     if (options.theme) {
       sdkConfig.theme = options.theme;
     }
+    if (options.toolRetries != null) {
+      sdkConfig.toolRetries = options.toolRetries;
+    }
     if (options.shadowDOM === false) {
       useShadowDOM = false;
     }

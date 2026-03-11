@@ -18,6 +18,7 @@ const zhCN = {
   "tool.status.complete": "已完成",
   "tool.status.error": "错误",
   "tool.status.running": "执行中",
+  "tool.status.denied": "已拒绝",
   "tool.label.result": "执行结果",
   "tool.label.parameters": "参数",
   "tool.renderError": "渲染异常：",

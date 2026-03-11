@@ -37,6 +37,8 @@ export type SDKConfig = {
   suggestions?: SuggestionItem[];
   /** UI Theme preference: "light", "dark", or "auto" (follows system preference). Default is "light". */
   theme?: Theme;
+  /** Maximum LLM retry attempts per tool per chat turn. Default: 5. */
+  toolRetries?: number;
 };
 
 export const LOCALE_CHANGE_EVENT = "ocean-mcp:locale-change";
@@ -132,5 +134,13 @@ export const sdkConfig = {
   resolveDisplayName(name: string, cnName?: string): string {
     if (config.locale === "zh-CN" && cnName) return cnName;
     return name;
+  },
+
+  get toolRetries(): number | undefined {
+    return config.toolRetries;
+  },
+
+  set toolRetries(value: number | undefined) {
+    config.toolRetries = value;
   },
 };
