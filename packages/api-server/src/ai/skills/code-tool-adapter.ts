@@ -47,6 +47,7 @@ import {
   type ParameterDefinition,
 } from "@ocean-mcp/shared";
 import { createZodSchema } from "../tools/index";
+import { logger, createCodeToolConsoleMock } from "../../logger";
 
 // ─── Type Detection ──────────────────────────────────────────────────────────
 
@@ -105,7 +106,7 @@ function createBrowserGlobalMock(name: string): Record<string, any> {
       const key = `${name}.${String(prop)}`;
       if (!warned.has(key)) {
         warned.add(key);
-        console.warn(
+        logger.warn(
           `[CodeTool] Code accessed ${key} which is not available server-side`,
         );
       }
@@ -153,19 +154,23 @@ async function executeCodeFunction(
   const serverFetch = createServerFetch();
   const windowMock = createBrowserGlobalMock("window");
   const documentMock = createBrowserGlobalMock("document");
+  const consoleMock = createCodeToolConsoleMock();
 
   try {
     // Create an async function from the code string.
     // Same signature as browser-side: (args, window, document, fetch)
+    // plus `console` so that console.log() in user code is captured by
+    // the structured logger instead of going to raw stdout.
     const fn = new Function(
       "args",
       "window",
       "document",
       "fetch",
+      "console",
       `"use strict"; return (async () => { ${code} })()`,
     );
 
-    return await fn(args, windowMock, documentMock, serverFetch);
+    return await fn(args, windowMock, documentMock, serverFetch, consoleMock);
   } catch (error) {
     throw new Error(
       `Code tool execution failed: ${error instanceof Error ? error.message : String(error)}`,

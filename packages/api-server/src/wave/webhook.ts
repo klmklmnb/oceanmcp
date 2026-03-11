@@ -30,6 +30,7 @@ import {
   updateCardAsExpired,
   updateExecutePlanDecisionCard,
 } from "./message-sender";
+import { logger } from "../logger";
 
 let waveConfig: WaveConfig | null = null;
 
@@ -63,10 +64,8 @@ export async function handleWaveWebhook(req: Request): Promise<Response> {
     const tParse = Date.now();
     const headers = Object.fromEntries(req.headers.entries());
 
-    if (process.env.DEBUG === "true") {
-      console.log("[Wave][Debug] Webhook query params:", Object.fromEntries(url.searchParams.entries()));
-      console.log("[Wave][Debug] Webhook headers:", headers);
-    }
+    logger.debug("[Wave] Webhook query params:", Object.fromEntries(url.searchParams.entries()));
+    logger.debug("[Wave] Webhook headers:", headers);
 
     const clients = getWaveClients();
 
@@ -74,9 +73,7 @@ export async function handleWaveWebhook(req: Request): Promise<Response> {
     // The event handlers are registered in initWave() and process
     // messages asynchronously (fire-and-forget).
     const result = clients.event.handle(body, headers);
-    if (process.env.DEBUG === "true") {
-      console.log(`[Wave][Perf] Webhook: parse=${tParse - t0}ms, decrypt+dispatch=${Date.now() - tParse}ms, total=${Date.now() - t0}ms`);
-    }
+    logger.debug(`[Wave] Webhook: parse=${tParse - t0}ms, decrypt+dispatch=${Date.now() - tParse}ms, total=${Date.now() - t0}ms`);
 
     // For verification events, the SDK returns { challenge: "..." }
     if (result && typeof result === "object" && "challenge" in result) {
@@ -97,7 +94,7 @@ export async function handleWaveWebhook(req: Request): Promise<Response> {
       headers: { "Content-Type": "application/json" },
     });
   } catch (err) {
-    console.error("[Wave] Webhook error:", err);
+    logger.error("[Wave] Webhook error:", err);
     return new Response(
       JSON.stringify({ error: "Internal webhook error" }),
       { status: 500, headers: { "Content-Type": "application/json" } },
@@ -125,23 +122,19 @@ export function registerEventHandlers(config: WaveConfig): void {
   // handler call (handle() dispatches synchronously).
 
   clients.event.onMsgDirectSendV2((event) => {
-    if (process.env.DEBUG === "true") {
-      console.log("[Wave][Debug] DM event (decrypted):", JSON.stringify(event, null, 2));
-    }
+    logger.debug("[Wave] DM event (decrypted):", JSON.stringify(event, null, 2));
     // Fire and forget — the webhook response has already been sent
     const zipUrl = currentSkillsZipUrl;
     void handleWaveMessage(event as WaveEvent, config, zipUrl).catch((err) =>
-      console.error("[Wave] DM handler error:", err),
+      logger.error("[Wave] DM handler error:", err),
     );
   });
 
   clients.event.onMsgGroupSendV2((event) => {
-    if (process.env.DEBUG === "true") {
-      console.log("[Wave][Debug] Group event (decrypted):", JSON.stringify(event, null, 2));
-    }
+    logger.debug("[Wave] Group event (decrypted):", JSON.stringify(event, null, 2));
     const zipUrl = currentSkillsZipUrl;
     void handleWaveMessage(event as WaveEvent, config, zipUrl).catch((err) =>
-      console.error("[Wave] Group handler error:", err),
+      logger.error("[Wave] Group handler error:", err),
     );
   });
 
@@ -156,16 +149,14 @@ export function registerEventHandlers(config: WaveConfig): void {
     const { open_msg_id, action } = event.event;
     const selectedValue = action?.values?.[0];
 
-    if (process.env.DEBUG === "true") {
-      console.log(
-        "[Wave][Debug] Card reaction event:",
-        JSON.stringify(
-          { open_msg_id, selectedValue, allValues: action?.values },
-          null,
-          2,
-        ),
-      );
-    }
+    logger.debug(
+      "[Wave] Card reaction event:",
+      JSON.stringify(
+        { open_msg_id, selectedValue, allValues: action?.values },
+        null,
+        2,
+      ),
+    );
 
     if (!open_msg_id) {
       return;
@@ -173,9 +164,9 @@ export function registerEventHandlers(config: WaveConfig): void {
 
     if (hasPendingPlanApproval(open_msg_id)) {
       if (!selectedValue) {
-        console.warn(
-          `[Wave] Plan approval card reaction for ${open_msg_id} has no selected value`,
-        );
+      logger.warn(
+        `[Wave] Plan approval card reaction for ${open_msg_id} has no selected value`,
+      );
         return;
       }
 
@@ -189,9 +180,9 @@ export function registerEventHandlers(config: WaveConfig): void {
             ? "denied"
             : null;
       if (!decision) {
-        console.warn(
-          `[Wave] Unknown executePlan decision "${selectedValue}" for ${open_msg_id}`,
-        );
+      logger.warn(
+        `[Wave] Unknown executePlan decision "${selectedValue}" for ${open_msg_id}`,
+      );
         return;
       }
 
@@ -205,7 +196,7 @@ export function registerEventHandlers(config: WaveConfig): void {
         decision,
         reason,
       ).catch((err) =>
-        console.error("[Wave] Failed to update executePlan approval card:", err),
+        logger.error("[Wave] Failed to update executePlan approval card:", err),
       );
       return;
     }
@@ -214,11 +205,9 @@ export function registerEventHandlers(config: WaveConfig): void {
     // If the card is not pending, it may be stale (server restart, abort,
     // timeout, etc.) — update it to inform the user.
     if (!hasPendingSelection(open_msg_id)) {
-      if (process.env.DEBUG === "true") {
-        console.log(
-          `[Wave][Debug] Card reaction for non-pending card ${open_msg_id}, sending expired notice`,
-        );
-      }
+      logger.debug(
+        `[Wave] Card reaction for non-pending card ${open_msg_id}, sending expired notice`,
+      );
       const looksLikePlanDecision =
         selectedValue === PLAN_APPROVAL_ACTION.APPROVE ||
         selectedValue === PLAN_APPROVAL_ACTION.DENY;
@@ -236,7 +225,7 @@ export function registerEventHandlers(config: WaveConfig): void {
     }
 
     if (!selectedValue) {
-      console.warn(
+      logger.warn(
         `[Wave] Card reaction for ${open_msg_id} has no selected value`,
       );
       return;
@@ -259,7 +248,7 @@ export function registerEventHandlers(config: WaveConfig): void {
       "选择完成",
       selectedLabel,
     ).catch((err) =>
-      console.error("[Wave] Failed to update card after selection:", err),
+      logger.error("[Wave] Failed to update card after selection:", err),
     );
   });
 }

@@ -14,6 +14,7 @@
 import { loadWaveConfig, type WaveConfig } from "./config";
 import { createWaveClients } from "./client";
 import { setWebhookConfig, registerEventHandlers } from "./webhook";
+import { logger } from "../logger";
 
 export { handleWaveWebhookWithContext } from "./webhook";
 export { loadWaveConfig } from "./config";
@@ -34,7 +35,7 @@ export async function initWave(): Promise<boolean> {
 
   const config = loadWaveConfig();
   if (!config) {
-    console.log("[Wave] Integration disabled (WAVE_ENABLED is not 'true').");
+    logger.info("[Wave] Integration disabled (WAVE_ENABLED is not 'true').");
     return false;
   }
 
@@ -44,14 +45,14 @@ export async function initWave(): Promise<boolean> {
     registerEventHandlers(config);
 
     waveEnabled = true;
-    console.log(
+    logger.info(
       `[Wave] Initialized (appId: ${config.appId}, env: ${config.env}, ` +
       `dm: ${config.dmPolicy}, group: ${config.groupPolicy}, ` +
       `streaming: ${config.streaming})`,
     );
     return true;
   } catch (err) {
-    console.error("[Wave] Initialization failed:", err);
+    logger.error("[Wave] Initialization failed:", err);
     return false;
   }
 }

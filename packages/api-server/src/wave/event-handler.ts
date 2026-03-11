@@ -47,6 +47,7 @@ import {
   type ToolActivity,
   type CardSegment,
 } from "./message-sender";
+import { logger } from "../logger";
 
 // ── Debug Timing Helpers ─────────────────────────────────────────────────────
 
@@ -57,7 +58,7 @@ function elapsed(startMs: number): string {
 }
 
 function debugLog(...args: unknown[]): void {
-  if (process.env.DEBUG === "true") console.log(...args);
+  logger.debug(args.map(a => typeof a === 'string' ? a : JSON.stringify(a)).join(' '));
 }
 
 const NEW_SESSION_COMMAND = "/new";
@@ -88,10 +89,10 @@ async function loadZipSkills(
     // If loading fails but we have a cached copy, use it
     const cached = zipSkillsCache.get(url);
     if (cached) {
-      console.warn(`[Wave] Failed to load skills from ${url}, using cached: ${err}`);
+      logger.warn(`[Wave] Failed to load skills from ${url}, using cached: ${err}`);
       return cached;
     }
-    console.error(`[Wave] Failed to load skills from ${url}:`, err);
+    logger.error(`[Wave] Failed to load skills from ${url}:`, err);
     return [];
   }
 }
@@ -187,9 +188,7 @@ export async function handleWaveMessage(
   const policy = checkPolicy(ctx, config);
   debugLog(`${TAG} [${reqId}] Policy check: ${elapsed(t1)} (allowed=${policy.allowed})`);
   if (!policy.allowed) {
-    if (process.env.DEBUG === "true") {
-      console.log(`[Wave] Message blocked: ${policy.reason}`);
-    }
+    logger.debug(`[Wave] Message blocked: ${policy.reason}`);
     return;
   }
 
@@ -215,7 +214,7 @@ export async function handleWaveMessage(
         debugLog(`${TAG} [${reqId}] Invalid image keys: ${fileResult.invalid_file_key.join(", ")}`);
       }
     } catch (err) {
-      console.warn(`${TAG} [${reqId}] Failed to resolve image URLs (${elapsed(tImg)}):`, err);
+      logger.warn(`${TAG} [${reqId}] Failed to resolve image URLs (${elapsed(tImg)}):`, err);
     }
   }
 
@@ -309,7 +308,7 @@ export async function handleWaveMessage(
       return; // Don't send error reply — user already moved on
     }
 
-    console.error(`${TAG} [${reqId}] ── Error after ${elapsed(t0)} ──`, err);
+    logger.error(`${TAG} [${reqId}] ── Error after ${elapsed(t0)} ──`, err);
     try {
       await sendSimpleReply(
         clients,

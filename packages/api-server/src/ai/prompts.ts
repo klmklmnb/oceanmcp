@@ -30,6 +30,7 @@ import {
   type DiscoveredSkill,
 } from "./skills";
 import { connectionManager } from "../ws/connection-manager";
+import { logger } from "../logger";
 import basePrompt from "./prompt.md" with { type: "text" };
 
 const __filename = fileURLToPath(import.meta.url);
@@ -77,11 +78,11 @@ let discoveredSkills: DiscoveredSkill[] = [];
 export async function initSkills(): Promise<void> {
   discoveredSkills = await discoverSkills(sandbox, skillDirectories);
   if (discoveredSkills.length > 0) {
-    console.log(
+    logger.info(
       `[Skills] Discovered ${discoveredSkills.length} skill(s): ${discoveredSkills.map((s) => s.name).join(", ")}`,
     );
   } else {
-    console.log("[Skills] No skills discovered.");
+    logger.info("[Skills] No skills discovered.");
   }
 }
 

@@ -102,6 +102,7 @@ import { mkdir, access, unlink, readFile, writeFile, rm, readdir, stat } from "f
 import type { Sandbox, SkillMetadata } from "@ocean-mcp/shared";
 import { discoverSkills, parseFrontmatter, type DiscoveredSkill } from "./discover";
 import { wrapCodeFunctionDefinitions } from "./code-tool-adapter";
+import { logger } from "../../logger";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -317,7 +318,7 @@ export async function evictIfNeeded(manifest: ZipCacheManifest): Promise<void> {
   await Promise.all(
     toEvict.map((entry) =>
       rm(entry.extractDir, { recursive: true, force: true }).catch((err) =>
-        console.error(
+        logger.error(
           `[ZipCache] Failed to evict dir: ${entry.extractDir}`,
           err,
         ),
@@ -326,7 +327,7 @@ export async function evictIfNeeded(manifest: ZipCacheManifest): Promise<void> {
   );
 
   await saveCacheManifest(manifest);
-  console.log(
+  logger.info(
     `[ZipCache] Evicted ${toEvict.length} entry(ies) to stay under ${formatMB(maxBytes)} limit`,
   );
 }
@@ -503,7 +504,7 @@ async function _downloadAndExtractCachedImpl(
       const realEntries = entries.filter((e) => !e.startsWith("."));
       existingValid = realEntries.length > 0;
       if (!existingValid) {
-        console.warn(
+        logger.warn(
           `[ZipCache] Cached extractDir is empty, treating as cache miss: ${existing.extractDir}`,
         );
       }
@@ -530,7 +531,7 @@ async function _downloadAndExtractCachedImpl(
   } catch (err) {
     // ── Stale-on-error: if fetch fails and we have a valid cache, use it
     if (existingValid && existing) {
-      console.warn(
+      logger.warn(
         `[ZipCache] Fetch failed for ${url}, serving stale cache: ${err instanceof Error ? err.message : String(err)}`,
       );
       // Update fetchedAt so this stale entry doesn't get evicted immediately
@@ -554,7 +555,7 @@ async function _downloadAndExtractCachedImpl(
 
     // Fire-and-forget eviction
     evictIfNeeded(manifest).catch((err) =>
-      console.error("[ZipCache] Eviction error:", err),
+      logger.error("[ZipCache] Eviction error:", err),
     );
 
     return { extractDir: existing.extractDir, cacheEntry: existing };
@@ -562,7 +563,7 @@ async function _downloadAndExtractCachedImpl(
 
   // ── Handle 5xx with stale cache ─────────────────────────────────────
   if (result.status >= 500 && existingValid && existing) {
-    console.warn(
+    logger.warn(
       `[ZipCache] Server returned ${result.status} for ${url}, serving stale cache`,
     );
     existing.fetchedAt = Date.now();
@@ -611,7 +612,7 @@ async function _downloadAndExtractCachedImpl(
     // Clean up old extraction dir (different from new one)
     if (existing && existing.extractDir !== result.extractDir) {
       rm(existing.extractDir, { recursive: true, force: true }).catch((err) =>
-        console.error(
+        logger.error(
           `[ZipCache] Failed to clean up old cache dir: ${existing.extractDir}`,
           err,
         ),
@@ -625,7 +626,7 @@ async function _downloadAndExtractCachedImpl(
 
   // Fire-and-forget eviction
   evictIfNeeded(manifest).catch((err) =>
-    console.error("[ZipCache] Eviction error:", err),
+    logger.error("[ZipCache] Eviction error:", err),
   );
 
   return { extractDir: result.extractDir, cacheEntry: newEntry };

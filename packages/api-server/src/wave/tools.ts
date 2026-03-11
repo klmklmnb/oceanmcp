@@ -34,6 +34,7 @@ import { waveSessionManager, type WaveUserInfo } from "./session-manager";
 import { sendUserSelectCard } from "./message-sender";
 import { addPendingSelection, type PendingSelectionOption } from "./pending-selections";
 import { imageOcr } from "../ai/tools/image-ocr-tool";
+import { logger } from "../logger";
 
 const WAVE_BLOB_DOWNLOAD_BASE_URL = "https://oc.app.mihoyo.com/blob/v1/download/";
 
@@ -186,7 +187,7 @@ function createWaveUserSelectTool(
         return { selectedValue, selectedLabel };
       } catch (err) {
         const message = err instanceof Error ? err.message : String(err);
-        console.error(`[Wave] userSelect failed:`, message);
+        logger.error(`[Wave] userSelect failed:`, message);
         return { error: `Selection failed: ${message}` };
       }
     },
@@ -245,7 +246,7 @@ function createGetCurrentUserTool(
         return userInfo;
       } catch (err) {
         const message = err instanceof Error ? err.message : String(err);
-        console.error(`[Wave] getCurrentUser failed for ${senderId}:`, message);
+        logger.error(`[Wave] getCurrentUser failed for ${senderId}:`, message);
         return { error: `Failed to fetch user info: ${message}` };
       }
     },
@@ -333,16 +334,14 @@ function createGetImageUrlTool(
           fileKeyEntries.map((entry) => entry.original),
         );
 
-        if (process.env.DEBUG === "true") {
-          console.log(
-            `[Wave][Debug] getImageUrl: resolved=${result.file_url.length}, invalid=${result.invalid_file_key.length}`,
-          );
-          for (const entry of result.file_url) {
-            console.log(`[Wave][Debug] getImageUrl: ${entry.file_key} → ${entry.file_url}`);
-          }
-          if (result.invalid_file_key.length > 0) {
-            console.log(`[Wave][Debug] getImageUrl invalid keys: ${result.invalid_file_key.join(", ")}`);
-          }
+        logger.debug(
+          `[Wave] getImageUrl: resolved=${result.file_url.length}, invalid=${result.invalid_file_key.length}`,
+        );
+        for (const entry of result.file_url) {
+          logger.debug(`[Wave] getImageUrl: ${entry.file_key} → ${entry.file_url}`);
+        }
+        if (result.invalid_file_key.length > 0) {
+          logger.debug(`[Wave] getImageUrl invalid keys: ${result.invalid_file_key.join(", ")}`);
         }
 
         const urls: Record<string, string> = {};
@@ -364,7 +363,7 @@ function createGetImageUrlTool(
         };
       } catch (err) {
         const message = err instanceof Error ? err.message : String(err);
-        console.error(`[Wave] getImageUrl failed:`, message);
+        logger.error(`[Wave] getImageUrl failed:`, message);
         return { error: `Failed to resolve image URLs: ${message}` };
       }
     },

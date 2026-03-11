@@ -5,6 +5,8 @@
  * `WAVE_`. The module exports a typed config object and a loader function.
  */
 
+import { logger } from "../logger";
+
 /** Wave API environment */
 export type WaveEnv = "Dev" | "Prod";
 
@@ -62,7 +64,7 @@ export function loadWaveConfig(): WaveConfig | null {
   const token = process.env.WAVE_TOKEN ?? "";
 
   if (!appId || !appSecret) {
-    console.warn("[Wave] WAVE_ENABLED=true but WAVE_APP_ID or WAVE_APP_SECRET is missing. Wave integration disabled.");
+    logger.warn("[Wave] WAVE_ENABLED=true but WAVE_APP_ID or WAVE_APP_SECRET is missing. Wave integration disabled.");
     return null;
   }
 

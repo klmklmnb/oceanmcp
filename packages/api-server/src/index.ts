@@ -12,6 +12,7 @@ import { connectionManager } from "./ws/connection-manager";
 import { initSkills, getSkillsContext } from "./ai/prompts";
 import { loadSkillsFromZip } from "./ai/skills";
 import { initWave, handleWaveWebhookWithContext } from "./wave";
+import { logger } from "./logger";
 
 const PORT = Number(process.env.PORT) || 4000;
 
@@ -82,7 +83,7 @@ const server = Bun.serve<{ connectionId: string }>({
           payload: { connectionId },
         }),
       );
-      console.log(`[WS] Client connected: ${connectionId}`);
+      logger.info(`[WS] Client connected: ${connectionId}`);
     },
 
     message(
@@ -119,7 +120,7 @@ const server = Bun.serve<{ connectionId: string }>({
                 }
               ).skills,
             );
-            console.log(
+            logger.info(
               `[WS] Capabilities registered for ${ws.data.connectionId}: ` +
                 `${(msg.payload as { tools: FunctionSchema[] }).tools.length} tool(s), ` +
                 `${(msg.payload as { skills: SkillSchema[] }).skills.length} skill(s)`,
@@ -135,7 +136,7 @@ const server = Bun.serve<{ connectionId: string }>({
               requestId: string;
               url: string;
             };
-            console.log(
+            logger.info(
               `[WS] Zip skill registration requested: ${url} (${requestId})`,
             );
 
@@ -163,7 +164,7 @@ const server = Bun.serve<{ connectionId: string }>({
                     payload: { requestId, skills: skillMeta },
                   }),
                 );
-                console.log(
+                logger.info(
                   `[WS] Zip skill(s) registered for ${ws.data.connectionId}: ${newSkills.map((s) => s.name).join(", ") || "(none)"}`,
                 );
               })
@@ -176,7 +177,7 @@ const server = Bun.serve<{ connectionId: string }>({
                     payload: { requestId, error },
                   }),
                 );
-                console.error(
+                logger.error(
                   `[WS] Zip skill registration failed: ${error}`,
                 );
               });
@@ -184,17 +185,17 @@ const server = Bun.serve<{ connectionId: string }>({
           }
         }
       } catch (err) {
-        console.error("[WS] Failed to parse message:", err);
+        logger.error("[WS] Failed to parse message:", err);
       }
     },
 
     close(ws: ServerWebSocket<{ connectionId: string }>) {
       connectionManager.removeConnection(ws.data.connectionId);
-      console.log(`[WS] Client disconnected: ${ws.data.connectionId}`);
+      logger.info(`[WS] Client disconnected: ${ws.data.connectionId}`);
     },
   },
 });
 
-console.log(
-  `🌊 OceanMCP API Server running on http://localhost:${server.port}`,
+logger.info(
+  `OceanMCP API Server running on http://localhost:${server.port}`,
 );

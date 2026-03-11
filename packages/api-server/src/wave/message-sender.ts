@@ -32,11 +32,12 @@ import {
 import { FLOW_STEP_STATUS } from "@ocean-mcp/shared";
 import type { WaveClients } from "./client";
 import type { PendingSelectionOption } from "./pending-selections";
+import { logger } from "../logger";
 
 const TAG = "[Wave][Perf]";
 
 function debugLog(...args: unknown[]): void {
-  if (process.env.DEBUG === "true") console.log(...args);
+  logger.debug(args.map(a => typeof a === 'string' ? a : JSON.stringify(a)).join(' '));
 }
 
 /** Named Markdown component for streaming updates */
@@ -395,7 +396,7 @@ export async function sendInitialReplyCard(
     debugLog(`${TAG} msg.reply (initial card): ${Date.now() - t0}ms`);
     return result?.msg_id ?? "";
   } catch (err) {
-    console.error(`${TAG} msg.reply (initial card) FAILED after ${Date.now() - t0}ms:`, err);
+    logger.error(`${TAG} msg.reply (initial card) FAILED after ${Date.now() - t0}ms:`, err);
     throw err;
   }
 }
@@ -422,7 +423,7 @@ export async function enableStreaming(
     state.streamingEnabled = true;
     debugLog(`${TAG} msg.updateCardMode (enable streaming): ${Date.now() - t0}ms`);
   } catch (err) {
-    console.error(`${TAG} msg.updateCardMode (enable streaming) FAILED after ${Date.now() - t0}ms:`, err);
+    logger.error(`${TAG} msg.updateCardMode (enable streaming) FAILED after ${Date.now() - t0}ms:`, err);
     state.fallbackToCardUpdate = true;
   }
 }
@@ -454,7 +455,7 @@ export async function updateStreamingText(
       );
       debugLog(`${TAG} msg.updateCardActively (fallback): ${Date.now() - t0}ms`);
     } catch (err) {
-      console.error(`${TAG} msg.updateCardActively (fallback) FAILED after ${Date.now() - t0}ms:`, err);
+      logger.error(`${TAG} msg.updateCardActively (fallback) FAILED after ${Date.now() - t0}ms:`, err);
     }
     return;
   }
@@ -485,7 +486,7 @@ export async function updateStreamingText(
         debugLog(`${TAG} msg.updateCardStreamingActively: ${dur}ms (SLOW)`);
       }
     } catch (err) {
-      console.error(`${TAG} msg.updateCardStreamingActively FAILED after ${Date.now() - t0}ms:`, err);
+      logger.error(`${TAG} msg.updateCardStreamingActively FAILED after ${Date.now() - t0}ms:`, err);
       state.streamingEnabled = false;
       state.streamingId = "";
       state.fallbackToCardUpdate = true;
@@ -558,7 +559,7 @@ export async function updateCardFromSegments(
       debugLog(`${TAG} msg.updateCardActively (tool status): ${dur}ms (SLOW)`);
     }
   } catch (err) {
-    console.error(
+    logger.error(
       `${TAG} msg.updateCardActively (tool status) FAILED after ${Date.now() - t0}ms:`,
       err,
     );
@@ -610,7 +611,7 @@ export async function finalizeReplyCardFromSegments(
       });
       debugLog(`${TAG} msg.updateCardMode (disable streaming): ${Date.now() - t0}ms`);
     } catch (err) {
-      console.error(`${TAG} msg.updateCardMode (disable streaming) FAILED after ${Date.now() - t0}ms:`, err);
+      logger.error(`${TAG} msg.updateCardMode (disable streaming) FAILED after ${Date.now() - t0}ms:`, err);
     }
   }
 
@@ -632,7 +633,7 @@ export async function finalizeReplyCardFromSegments(
     );
     debugLog(`${TAG} msg.updateCardActively (final with tools): ${Date.now() - t1}ms (chunks=${chunks.length})`);
   } catch (err) {
-    console.error(`${TAG} msg.updateCardActively (final with tools) FAILED after ${Date.now() - t1}ms:`, err);
+    logger.error(`${TAG} msg.updateCardActively (final with tools) FAILED after ${Date.now() - t1}ms:`, err);
   }
 
   // Remaining chunks as new messages (markdown only, no tool status)
@@ -642,7 +643,7 @@ export async function finalizeReplyCardFromSegments(
       await clients.msg.send(chatId, msgMarkdown(chunks[i]));
       debugLog(`${TAG} msg.send (continuation ${i + 1}/${chunks.length}): ${Date.now() - t2}ms`);
     } catch (err) {
-      console.error(`${TAG} msg.send (continuation ${i + 1}/${chunks.length}) FAILED after ${Date.now() - t2}ms:`, err);
+      logger.error(`${TAG} msg.send (continuation ${i + 1}/${chunks.length}) FAILED after ${Date.now() - t2}ms:`, err);
     }
   }
 }
@@ -684,7 +685,7 @@ export async function finalizeReplyCard(
       });
       debugLog(`${TAG} msg.updateCardMode (disable streaming): ${Date.now() - t0}ms`);
     } catch (err) {
-      console.error(`${TAG} msg.updateCardMode (disable streaming) FAILED after ${Date.now() - t0}ms:`, err);
+      logger.error(`${TAG} msg.updateCardMode (disable streaming) FAILED after ${Date.now() - t0}ms:`, err);
     }
   }
 
@@ -700,7 +701,7 @@ export async function finalizeReplyCard(
     );
     debugLog(`${TAG} msg.updateCardActively (final): ${Date.now() - t1}ms (chunks=${chunks.length})`);
   } catch (err) {
-    console.error(`${TAG} msg.updateCardActively (final) FAILED after ${Date.now() - t1}ms:`, err);
+    logger.error(`${TAG} msg.updateCardActively (final) FAILED after ${Date.now() - t1}ms:`, err);
   }
 
   // Remaining chunks as new messages
@@ -710,7 +711,7 @@ export async function finalizeReplyCard(
       await clients.msg.send(chatId, msgMarkdown(chunks[i]));
       debugLog(`${TAG} msg.send (continuation ${i + 1}/${chunks.length}): ${Date.now() - t2}ms`);
     } catch (err) {
-      console.error(`${TAG} msg.send (continuation ${i + 1}/${chunks.length}) FAILED after ${Date.now() - t2}ms:`, err);
+      logger.error(`${TAG} msg.send (continuation ${i + 1}/${chunks.length}) FAILED after ${Date.now() - t2}ms:`, err);
     }
   }
 }
@@ -980,7 +981,7 @@ export async function sendUserSelectCard(
     );
     return result?.msg_id ?? "";
   } catch (err) {
-    console.error(
+    logger.error(
       `${TAG} msg.send (userSelect card) FAILED after ${Date.now() - t0}ms:`,
       err,
     );
@@ -1003,7 +1004,7 @@ export async function sendExecutePlanCard(
     debugLog(`${TAG} msg.send (executePlan card): ${Date.now() - t0}ms`);
     return result?.msg_id ?? "";
   } catch (err) {
-    console.error(
+    logger.error(
       `${TAG} msg.send (executePlan card) FAILED after ${Date.now() - t0}ms:`,
       err,
     );
@@ -1029,7 +1030,7 @@ export async function updateExecutePlanDecisionCard(
       `${TAG} msg.updateCardActively (executePlan ${decision}): ${Date.now() - t0}ms`,
     );
   } catch (err) {
-    console.error(
+    logger.error(
       `${TAG} msg.updateCardActively (executePlan ${decision}) FAILED after ${Date.now() - t0}ms:`,
       err,
     );
@@ -1053,7 +1054,7 @@ export async function updateExecutePlanResultCard(
       `${TAG} msg.updateCardActively (executePlan result): ${Date.now() - t0}ms`,
     );
   } catch (err) {
-    console.error(
+    logger.error(
       `${TAG} msg.updateCardActively (executePlan result) FAILED after ${Date.now() - t0}ms:`,
       err,
     );
@@ -1086,7 +1087,7 @@ export async function updateCardAfterSelection(
     await clients.msg.updateCardActively(cardMessageId, content);
     debugLog(`${TAG} msg.updateCardActively (selection confirmed): ${Date.now() - t0}ms`);
   } catch (err) {
-    console.error(
+    logger.error(
       `${TAG} msg.updateCardActively (selection confirmed) FAILED after ${Date.now() - t0}ms:`,
       err,
     );
@@ -1128,7 +1129,7 @@ export async function updateCardAsExpired(
     await clients.msg.updateCardActively(cardMessageId, content);
     debugLog(`${TAG} msg.updateCardActively (selection expired): ${Date.now() - t0}ms`);
   } catch (err) {
-    console.error(
+    logger.error(
       `${TAG} msg.updateCardActively (selection expired) FAILED after ${Date.now() - t0}ms:`,
       err,
     );

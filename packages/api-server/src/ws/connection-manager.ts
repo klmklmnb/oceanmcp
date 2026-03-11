@@ -8,6 +8,7 @@ import {
   type SkillSchema,
 } from "@ocean-mcp/shared";
 import type { DiscoveredSkill } from "../ai/skills/discover";
+import { logger } from "../logger";
 
 type PendingRequest = {
   resolve: (value: any) => void;
@@ -202,7 +203,7 @@ class ConnectionManager {
 
     const existing = urlMap.get(url);
     if (existing) {
-      console.log(
+      logger.info(
         `[WS] Replacing zip skills for URL: ${url} (connection ${connectionId})`,
       );
     }
@@ -247,7 +248,7 @@ class ConnectionManager {
     if (!urlMap) return;
 
     this.zipSkillsByUrl.delete(connectionId);
-    console.log(
+    logger.info(
       `[WS] Released ${urlMap.size} zip skill set(s) for disconnected connection ${connectionId}`,
     );
   }
