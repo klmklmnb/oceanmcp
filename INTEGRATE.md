@@ -143,6 +143,10 @@ OceanMCPSDK.mount({
     },
     { label: "What can you do?" }, // text omitted → sends "What can you do?"
   ],
+  session: {
+    enable: true, // Optional: enable session persistence and slash commands
+    namespace: "my-app", // Optional: isolate storage by app namespace on same origin
+  },
 });
 ```
 
@@ -155,6 +159,7 @@ OceanMCPSDK.mount({
 | `avatar`      | `string`                      | `undefined`               | URL for the AI assistant's avatar image in the chat.                                                                                                                                                                                                                                              |
 | `theme`       | `"light" \| "dark" \| "auto"` | `undefined`               | UI theme preference. Set to `"light"`, `"dark"`, or `"auto"` (follows system preference). When not set (`undefined`), defaults to light theme. **Reactive** — can be changed at runtime via `sdkConfig.theme`.                                                                                    |
 | `model`       | `ModelConfig`                 | `undefined`               | LLM model configuration. Controls which model and parameters are used for chat requests. See [Model Configuration](#model-configuration) below.                                                                                                                                                   |
+| `session`     | `SessionOptions`              | `undefined`               | Session persistence options. `enable: true` turns on local session storage and built-in slash commands (`/new`, `/sessions`). `namespace` isolates IndexedDB data between apps on the same origin.                                                                                                                                       |
 | `shadowDOM`   | `boolean`                     | `true`                    | When `true`, the widget renders inside a Shadow DOM for full CSS isolation — your app's styles won't affect the widget and vice versa. Set to `false` for debugging or in environments where Shadow DOM causes issues.                                                                            |
 | `suggestions` | `SuggestionItem[]`            | `undefined`               | Custom suggestion questions displayed on the welcome screen. Each item has a `label` (button display text) and an optional `text` (the message sent when clicked). When provided, replaces the default suggestions entirely. If `text` is omitted, `label` is used as both display and send text. |
 
@@ -231,6 +236,31 @@ OceanMCPSDK.mount({
 ```
 
 This is useful when you want the suggestion buttons to show short, user-friendly labels while sending more detailed or structured prompts to the AI behind the scenes.
+
+### Session Configuration
+
+Session support is configured through the `session` option:
+
+```ts
+OceanMCPSDK.mount({
+  session: {
+    enable: true,
+    namespace: "my-app",
+  },
+});
+```
+
+`SessionOptions` fields:
+
+- `enable` (`boolean`): turn session persistence on or off
+- `namespace?` (`string`): optional storage namespace for isolating multiple apps on the same origin
+
+Behavior when enabled:
+
+- Sessions are stored in IndexedDB (`ocean-mcp-sessions` + optional `:${namespace}`)
+- Built-in slash commands `/new` and `/sessions` are enabled
+- Sessions are lazily created: empty draft state is not persisted
+- A new persisted session is created only when there are messages to save
 
 ### Runtime Configuration Changes
 
@@ -669,6 +699,27 @@ This is useful for:
 - Pre-filling the chat input based on user context
 - Building custom chat UI that wraps the SDK
 
+### Slash Commands
+
+When `session.enable` is `true`, built-in slash commands are available:
+
+- `/new`: start a new draft session
+- `/sessions`: open session history list and switch sessions
+
+You can also register your own slash commands:
+
+```ts
+OceanMCPSDK.registerCommand({
+  name: "helpdesk",
+  description: "Open helpdesk workflow",
+  execute: async (args) => {
+    await OceanMCPSDK.chat(`Helpdesk workflow: ${args ?? "default"}`);
+  },
+});
+
+OceanMCPSDK.unregisterCommand("helpdesk");
+```
+
 ---
 
 ## Unregistering & Cleanup
@@ -724,6 +775,8 @@ const connectionId = OceanMCPSDK.wsClient.currentConnectionId;
 | `setInput(text)`            | `Promise<void>`            | Set the input box text without sending.                                        |
 | `getMessages()`             | `Promise<any[]>`           | Get all current chat messages.                                                 |
 | `clearMessages()`           | `Promise<void>`            | Clear all chat messages.                                                       |
+| `registerCommand(command)`  | `void`                     | Register a custom slash command.                                               |
+| `unregisterCommand(name)`   | `void`                     | Unregister a slash command by name.                                            |
 
 ---
 
@@ -820,6 +873,25 @@ interface SuggestionItem {
 }
 ```
 
+### SessionOptions
+
+```ts
+interface SessionOptions {
+  enable: boolean;
+  namespace?: string;
+}
+```
+
+### SlashCommand
+
+```ts
+interface SlashCommand {
+  name: string; // Command name without "/" prefix
+  description: string;
+  execute: (args?: string) => void | Promise<void>;
+}
+```
+
 ---
 
 ## TypeScript Support
@@ -852,6 +924,8 @@ import type {
   MountOptions,
   FunctionDefinition,
   SkillDefinition,
+  SessionOptions,
+  SlashCommand,
   ParameterDefinition,
   UploadResult,
   ModelConfig,

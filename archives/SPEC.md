@@ -300,6 +300,19 @@ type ParameterDefinition = {
   description?: string;
   required: boolean;
 };
+
+// Session mount options (frontend-sdk)
+type SessionOptions = {
+  enable: boolean;
+  namespace?: string;
+};
+
+// Slash command API (frontend-sdk)
+type SlashCommand = {
+  name: string;
+  description: string;
+  execute: (args?: string) => void | Promise<void>;
+};
 ```
 
 **Pre-registered Tools:** Defined in `registry/mockFunctions.ts` (and similar files), bundled with the SDK. These are `CodeFunctionDefinition` entries.
@@ -326,7 +339,51 @@ window.OceanMCPSDK.registerTool({
 
 **Merging:** On each chat request, the SDK collects all registered tools (pre-registered + dynamically registered) and sends the full tool schema list to the server. The server then provides these as `tools` to the Vercel AI SDK `streamText()` call.
 
-#### C. Execution Engine
+#### C. Session System & Slash Commands
+
+The frontend SDK now includes an extensible session layer and a slash-command system for multi-session workflows.
+
+**Session architecture:**
+
+- `SessionAdapter` interface defines abstract CRUD capabilities (`create`, `get`, `list`, `update`, `delete`, `clear`).
+- `IndexedDBSessionAdapter` is the current default implementation for browser-local persistence.
+- `SessionManager` manages active session lifecycle (initialize, switch, save, create new draft, delete).
+- Session persistence is **lazy**: empty draft sessions are not stored.
+
+**Mount configuration:**
+
+```ts
+OceanMCPSDK.mount({
+  session: {
+    enable: true,
+    namespace: "my-app", // optional: isolate storage across apps under same origin
+  },
+});
+```
+
+- `session.enable` turns on session persistence and built-in slash commands.
+- `session.namespace` isolates IndexedDB databases (`ocean-mcp-sessions[:namespace]`).
+
+**Slash commands:**
+
+- Built-in:
+  - `/new`: reset into a new draft session
+  - `/sessions`: open history list for search/switch/delete
+- Host app can register custom commands through SDK APIs.
+
+```ts
+window.OceanMCPSDK.registerCommand({
+  name: "helpdesk",
+  description: "Open helpdesk workflow",
+  execute: async (args) => {
+    await window.OceanMCPSDK.chat(`Helpdesk workflow: ${args ?? "default"}`);
+  },
+});
+
+window.OceanMCPSDK.unregisterCommand("helpdesk");
+```
+
+#### D. Execution Engine
 
 **For `code` type functions:**
 
@@ -346,7 +403,7 @@ window.OceanMCPSDK.registerTool({
 4. Server executes the steps → results stream back as tool output parts.
 5. Each step's status updates in-line: `pending → running → success / failed`.
 
-#### D. Built-in Monitoring (Internal Sentry Integration)
+#### E. Built-in Monitoring (Internal Sentry Integration)
 
 The frontend SDK includes a built-in Sentry monitoring layer, but this is an **internal SDK implementation detail**, not part of the host application's public integration surface.
 
@@ -550,6 +607,9 @@ Integration:
    - Implement inline tool-call rendering in message components (flow nodes, approval buttons).
    - Implement the Function Registry supporting both `code` and `executor` types.
    - Expose `window.OceanMCPSDK.registerTool()` for dynamic tool registration.
+   - Add session subsystem (`SessionAdapter`, `IndexedDBSessionAdapter`, `SessionManager`) with lazy persistence (do not store empty sessions).
+   - Support mount config `session: { enable: boolean; namespace?: string }` for feature toggle + storage isolation.
+   - Add slash command registry with built-ins (`/new`, `/sessions`) and host APIs `registerCommand()` / `unregisterCommand()`.
    - Implement the Execution Engine (code string runner + executor invoker).
    - Implement the internal Sentry monitoring runtime:
      - initialize before WebSocket connect
