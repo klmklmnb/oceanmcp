@@ -532,19 +532,26 @@ async function handleStreamingResponse(
     `${toolSegs.filter(s => s.activity.status === "error").length} errors)`,
   );
 
-  // Save assistant response to session (including tool call/result parts)
+  // Save assistant response to session (including tool call/result parts).
+  // Guard: if the session was reset (e.g. /new command) while the stream was
+  // running, skip the save to avoid re-creating a cleared session with stale
+  // data (image references, tool history, etc.).
   const tSave = Date.now();
-  try {
-    const steps = await result.steps;
-    const assistantMsg = buildAssistantStoredMessage(steps);
-    if (assistantMsg) {
-      await waveSessionManager.addAssistantMessage(sessionKey, assistantMsg);
-      debugLog(`${TAG} [${reqId}] Save assistant message: ${elapsed(tSave)} (parts=${assistantMsg.parts.length})`);
+  if (abortSignal.aborted) {
+    debugLog(`${TAG} [${reqId}] Skipping assistant message save — session was reset`);
+  } else {
+    try {
+      const steps = await result.steps;
+      const assistantMsg = buildAssistantStoredMessage(steps);
+      if (assistantMsg) {
+        await waveSessionManager.addAssistantMessage(sessionKey, assistantMsg);
+        debugLog(`${TAG} [${reqId}] Save assistant message: ${elapsed(tSave)} (parts=${assistantMsg.parts.length})`);
+      }
+    } catch (err) {
+      // If steps resolution fails (e.g. partial abort), skip saving.
+      // The text was already sent to the user via streaming.
+      debugLog(`${TAG} [${reqId}] Failed to save assistant message: ${err}`);
     }
-  } catch (err) {
-    // If steps resolution fails (e.g. partial abort), skip saving.
-    // The text was already sent to the user via streaming.
-    debugLog(`${TAG} [${reqId}] Failed to save assistant message: ${err}`);
   }
 
   debugLog(`${TAG} [${reqId}] Post-stream overhead (finalize+save): ${elapsed(tStreamDone)}`);
@@ -665,15 +672,19 @@ async function handleSimpleResponse(
     }
     debugLog(`${TAG} [${reqId}] Send reply: ${elapsed(tSend)}`);
 
-    // Save assistant response with full tool history
-    try {
-      const steps = await result.steps;
-      const assistantMsg = buildAssistantStoredMessage(steps);
-      if (assistantMsg) {
-        await waveSessionManager.addAssistantMessage(sessionKey, assistantMsg);
+    // Save assistant response with full tool history.
+    // Guard: skip if session was reset (/new) to avoid re-creating a cleared
+    // session with stale data (image references, tool history, etc.).
+    if (!abortSignal.aborted) {
+      try {
+        const steps = await result.steps;
+        const assistantMsg = buildAssistantStoredMessage(steps);
+        if (assistantMsg) {
+          await waveSessionManager.addAssistantMessage(sessionKey, assistantMsg);
+        }
+      } catch (err) {
+        debugLog(`${TAG} [${reqId}] Failed to save assistant message: ${err}`);
       }
-    } catch (err) {
-      debugLog(`${TAG} [${reqId}] Failed to save assistant message: ${err}`);
     }
   }
 }
