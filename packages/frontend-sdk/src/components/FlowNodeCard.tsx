@@ -2,6 +2,7 @@ import React from "react";
 import { FLOW_STEP_STATUS, TOOL_PART_STATE } from "@ocean-mcp/shared";
 import type { ColumnConfig } from "@ocean-mcp/shared";
 import { functionRegistry } from "../registry";
+import { isDOMRenderDescriptor, DOMContainer } from "./DOMContainer";
 import { sdkConfig } from "../runtime/sdk-config";
 import { t } from "../locale";
 import { ArrayTable, RawDataBlock, tryParseArray, isObjectArray } from "./ArrayTable";
@@ -176,6 +177,9 @@ export function FlowNodeCard({
                           arguments: step.arguments || {},
                           status: status as any,
                         });
+                        if (isDOMRenderDescriptor(rendered)) {
+                          return <DOMContainer descriptor={rendered} />;
+                        }
                         if (React.isValidElement(rendered)) return rendered;
                         return null;
                       } catch {

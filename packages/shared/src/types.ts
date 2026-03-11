@@ -101,6 +101,27 @@ export interface ParameterDefinition {
   columns?: Record<string, ColumnConfig>;
 }
 
+// ─── DOM Render Descriptor ───────────────────────────────────────────────────
+
+/**
+ * Framework-agnostic render descriptor for `showRender`.
+ *
+ * Instead of returning a React element (which requires the same React instance
+ * as the SDK), host applications can return a `DOMRenderDescriptor`. The SDK
+ * will create a container `<div>`, pass it to `render`, and call `cleanup` on
+ * unmount.
+ *
+ * This allows the host to render with any technology: vanilla DOM, Vue,
+ * Angular, a different React version, or imperative libraries like G2.
+ */
+export interface DOMRenderDescriptor {
+  type: "dom";
+  /** Called with a mounted DOM container — render your content into it. */
+  render: (container: HTMLElement) => void;
+  /** Called when the SDK unmounts the container — clean up resources here. */
+  cleanup?: () => void;
+}
+
 // ─── Function Definitions ────────────────────────────────────────────────────
 
 /** Common fields shared by all function definition variants */
@@ -121,7 +142,13 @@ export interface BaseFunctionDefinition {
    */
   autoApprove?: boolean;
   parameters: ParameterDefinition[];
-  /** Custom render for the FlowNodeCard; receives the FlowStep info and should return a valid React node */
+  /**
+   * Custom render for the tool card UI.
+   *
+   * Can return either:
+   * - A React node (for SDK-internal tools sharing the same React instance)
+   * - A {@link DOMRenderDescriptor} (for host applications — framework-agnostic)
+   */
   showRender?: (step: FlowStep) => any;
 }
 
