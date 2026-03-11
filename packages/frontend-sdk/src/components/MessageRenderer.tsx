@@ -14,6 +14,7 @@ import { ApprovalButtons } from "./ApprovalButtons";
 import { UserSelectCard } from "./UserSelectCard";
 import { MarkdownRenderer } from "./MarkdownRenderer";
 import { functionRegistry, skillRegistry } from "../registry";
+import { isDOMRenderDescriptor, DOMContainer } from "./DOMContainer";
 import { sdkConfig } from "../runtime/sdk-config";
 import { captureException } from "../runtime/sentry";
 import { t } from "../locale";
@@ -135,9 +136,8 @@ function ToolCallCard({
 }: ToolCallCardProps) {
   const isReadOp = fnDef?.operationType === OPERATION_TYPE.READ;
   const isLoadSkill = toolName === "loadSkill";
-  const [expanded, setExpanded] = useState(!isReadOp && !isLoadSkill);
-
   const hasCustomRender = !!fnDef?.showRender;
+  const [expanded, setExpanded] = useState(hasCustomRender || (!isReadOp && !isLoadSkill));
 
   // Detect error embedded in a successful tool result (e.g. retry logic
   // returns { error: "...", _retryHint: "..." } as output instead of throwing).
@@ -201,17 +201,23 @@ function ToolCallCard({
         <>
           {hasCustomRender ? (
             <div className="px-4 py-3">
-              {fnDef!.showRender!({
-                id: fnDef!.id,
-                functionId: fnDef!.id,
-                title: displayName,
-                arguments: fnArgs,
-                status: (state === TOOL_PART_STATE.OUTPUT_AVAILABLE && !isOutputError)
-                  ? ("success" as any)
-                  : (state === TOOL_PART_STATE.OUTPUT_ERROR || isOutputError)
-                    ? ("failed" as any)
-                    : ("running" as any),
-              })}
+              {(() => {
+                const rendered = fnDef!.showRender!({
+                  id: fnDef!.id,
+                  functionId: fnDef!.id,
+                  title: displayName,
+                  arguments: fnArgs,
+                  status: (state === TOOL_PART_STATE.OUTPUT_AVAILABLE && !isOutputError)
+                    ? ("success" as any)
+                    : (state === TOOL_PART_STATE.OUTPUT_ERROR || isOutputError)
+                      ? ("failed" as any)
+                      : ("running" as any),
+                });
+                if (isDOMRenderDescriptor(rendered)) {
+                  return <DOMContainer descriptor={rendered} />;
+                }
+                return rendered;
+              })()}
               {state === TOOL_PART_STATE.OUTPUT_AVAILABLE &&
                 !isOutputError &&
                 output !== undefined && (

@@ -562,6 +562,114 @@ parameters: [
 
 ---
 
+## Custom Tool Rendering (`showRender`)
+
+Tools can provide a `showRender` callback to customise their UI inside the chat. The callback receives a `FlowStep` object and can return either:
+
+- **A React node** — for SDK-internal tools that share the same React instance.
+- **A `DOMRenderDescriptor`** — for host applications that may use a different React version or a different framework entirely (Vue, Angular, vanilla JS, etc.).
+
+### DOMRenderDescriptor
+
+`DOMRenderDescriptor` is a framework-agnostic container callback pattern. The SDK creates a `<div>`, mounts it in the chat UI, then passes the raw DOM element to the host's `render` callback. On unmount it calls `cleanup()` to release resources.
+
+```ts
+interface DOMRenderDescriptor {
+  type: "dom";
+  render: (container: HTMLElement) => void;
+  cleanup?: () => void;
+}
+```
+
+### Example: Chart rendering with @antv/g2
+
+```ts
+import { Chart } from "@antv/g2";
+
+OceanMCPSDK.registerTool({
+  id: "renderChart",
+  name: "Render Chart",
+  description: "Visualise query results as a chart",
+  operationType: "read",
+  executor: async (args) => args,
+  parameters: [
+    { name: "data", type: "array", required: true, description: "Chart data" },
+    { name: "xField", type: "string", required: true },
+    { name: "yField", type: "string", required: true },
+  ],
+  showRender: (step) => {
+    let chart: Chart | null = null;
+    return {
+      type: "dom",
+      render: (container) => {
+        chart = new Chart({ container, autoFit: true, height: 300 });
+        chart.data(step.arguments.data);
+        chart
+          .interval()
+          .encode("x", step.arguments.xField)
+          .encode("y", step.arguments.yField);
+        chart.render();
+      },
+      cleanup: () => {
+        chart?.destroy();
+        chart = null;
+      },
+    };
+  },
+});
+```
+
+### Example: Using host React + Ant Design Charts
+
+```ts
+import React from "react";
+import ReactDOM from "react-dom";
+import { Line } from "@ant-design/charts";
+
+showRender: (step) => ({
+  type: "dom",
+  render: (container) => {
+    ReactDOM.render(
+      React.createElement(Line, {
+        data: step.arguments.data,
+        xField: step.arguments.xField,
+        yField: step.arguments.yField,
+      }),
+      container,
+    );
+  },
+  cleanup: () => {
+    ReactDOM.unmountComponentAtNode(container);
+  },
+})
+```
+
+### Example: Vue 3
+
+```ts
+import { createApp } from "vue";
+import ChartView from "./ChartView.vue";
+
+showRender: (step) => {
+  let app = null;
+  return {
+    type: "dom",
+    render: (container) => {
+      app = createApp(ChartView, { data: step.arguments.data });
+      app.mount(container);
+    },
+    cleanup: () => {
+      app?.unmount();
+      app = null;
+    },
+  };
+}
+```
+
+> **Why DOMRenderDescriptor?** The SDK bundles its own React instance (React 19). When the host application uses a different React version, returning React elements from `showRender` causes reconciler incompatibility errors (e.g. React error #525). `DOMRenderDescriptor` avoids this by letting the SDK create the container element with its own React, then handing a raw DOM node to the host — the two React instances never cross paths.
+
+---
+
 ## Registering Skills from a ZIP File
 
 For skills that are maintained separately or distributed via CDN, you can register them from a `.zip` file:
