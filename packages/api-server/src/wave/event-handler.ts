@@ -30,13 +30,22 @@ import { buildWaveTools } from "./tools";
 import { removeAllPlanApprovalsForSession } from "./pending-approvals";
 import { removeAllForSession } from "./pending-selections";
 import { buildAssistantStoredMessage } from "./message-history";
+import { msgCard } from "@mihoyo/wave-opensdk";
 import {
   sendInitialReplyCard,
   enableStreaming,
   updateStreamingText,
+  updateCardFromSegments,
   finalizeReplyCard,
+  finalizeReplyCardFromSegments,
+  buildReplyCardFromSegments,
   sendSimpleReply,
+  summariseToolArgs,
+  isDisplayableTool,
+  hasDisplayableTools,
   type StreamingCardState,
+  type ToolActivity,
+  type CardSegment,
 } from "./message-sender";
 
 // ── Debug Timing Helpers ─────────────────────────────────────────────────────
@@ -370,32 +379,126 @@ async function handleStreamingResponse(
     }),
   );
 
-  // Consume the text stream and push updates to Wave
+  // Consume the full stream (text + tool events) and push updates to Wave
   let lastUpdateTime = 0;
   let firstTokenTime = 0;
   let updateCount = 0;
   const MIN_UPDATE_INTERVAL_MS = 300; // Throttle updates to avoid rate limits
+  const segments: CardSegment[] = [];
+  let hasToolCalls = false;
 
-  for await (const textPart of result.textStream) {
-    if (!textPart) continue;
+  /**
+   * Get or create the trailing text segment. When text-delta events
+   * arrive, they append to this segment. When a tool event interrupts,
+   * the next text-delta will create a new text segment after the tool.
+   */
+  function currentTextSegment(): Extract<CardSegment, { kind: "text" }> {
+    const last = segments[segments.length - 1];
+    if (last && last.kind === "text") return last;
+    const seg: CardSegment = { kind: "text", text: "" };
+    segments.push(seg);
+    return seg as Extract<CardSegment, { kind: "text" }>;
+  }
 
-    if (!firstTokenTime) {
-      firstTokenTime = Date.now();
-      debugLog(`${TAG} [${reqId}] First token (TTFT): ${elapsed(tLlm)}`);
-    }
+  /** Get accumulated text across all text segments (for state tracking). */
+  function getFullText(): string {
+    return segments
+      .filter((s): s is Extract<CardSegment, { kind: "text" }> => s.kind === "text")
+      .map((s) => s.text)
+      .join("");
+  }
 
-    state.accumulatedText += textPart;
+  for await (const part of result.fullStream) {
+    switch (part.type) {
+      case "text-delta": {
+        if (!part.text) break;
+        if (!firstTokenTime) {
+          firstTokenTime = Date.now();
+          debugLog(`${TAG} [${reqId}] First token (TTFT): ${elapsed(tLlm)}`);
+        }
 
-    const now = Date.now();
-    if (now - lastUpdateTime >= MIN_UPDATE_INTERVAL_MS) {
-      const tUpd = Date.now();
-      await updateStreamingText(clients, state, state.accumulatedText);
-      lastUpdateTime = now;
-      updateCount++;
-      // Log every 5th update to avoid log spam
-      if (updateCount <= 3 || updateCount % 5 === 0) {
-        debugLog(`${TAG} [${reqId}] Stream update #${updateCount}: ${elapsed(tUpd)} (${state.accumulatedText.length} chars)`);
+        currentTextSegment().text += part.text;
+        state.accumulatedText = getFullText();
+
+        const now = Date.now();
+        if (now - lastUpdateTime >= MIN_UPDATE_INTERVAL_MS) {
+          const tUpd = Date.now();
+          if (hasToolCalls) {
+            await updateCardFromSegments(clients, state, segments);
+          } else {
+            await updateStreamingText(clients, state, state.accumulatedText);
+          }
+          lastUpdateTime = now;
+          updateCount++;
+          if (updateCount <= 3 || updateCount % 5 === 0) {
+            debugLog(`${TAG} [${reqId}] Stream update #${updateCount}: ${elapsed(tUpd)} (${state.accumulatedText.length} chars)`);
+          }
+        }
+        break;
       }
+
+      case "tool-call": {
+        hasToolCalls = true;
+        const activity: ToolActivity = {
+          toolCallId: (part as any).toolCallId ?? "",
+          toolName: (part as any).toolName ?? "unknown",
+          argsSummary: summariseToolArgs(
+            (part as any).toolName ?? "unknown",
+            (part as any).input,
+          ),
+          status: "running",
+        };
+        segments.push({ kind: "tool", activity });
+        debugLog(`${TAG} [${reqId}] Tool call: ${activity.toolName}(${activity.argsSummary})`);
+
+        // Immediately update card to show the tool status
+        await updateCardFromSegments(clients, state, segments);
+        lastUpdateTime = Date.now();
+        break;
+      }
+
+      case "tool-result": {
+        const callId = (part as any).toolCallId ?? "";
+        const existing = segments.find(
+          (s): s is Extract<CardSegment, { kind: "tool" }> =>
+            s.kind === "tool" && s.activity.toolCallId === callId,
+        );
+        if (existing) {
+          existing.activity.status = "complete";
+          debugLog(`${TAG} [${reqId}] Tool result: ${existing.activity.toolName} — complete`);
+        }
+        // Update card to show completion
+        await updateCardFromSegments(clients, state, segments);
+        lastUpdateTime = Date.now();
+        break;
+      }
+
+      case "tool-error": {
+        const callId = (part as any).toolCallId ?? "";
+        const existing = segments.find(
+          (s): s is Extract<CardSegment, { kind: "tool" }> =>
+            s.kind === "tool" && s.activity.toolCallId === callId,
+        );
+        if (existing) {
+          existing.activity.status = "error";
+          const errObj = (part as any).error;
+          existing.activity.errorMessage =
+            errObj instanceof Error
+              ? errObj.message
+              : typeof errObj === "string"
+                ? errObj
+                : "执行失败";
+          debugLog(`${TAG} [${reqId}] Tool error: ${existing.activity.toolName} — ${existing.activity.errorMessage}`);
+        }
+        // Update card to show error
+        await updateCardFromSegments(clients, state, segments);
+        lastUpdateTime = Date.now();
+        break;
+      }
+
+      // Skip other event types (reasoning, step boundaries, sources, etc.)
+      default:
+        break;
     }
   }
 
@@ -405,14 +508,29 @@ async function handleStreamingResponse(
   // Final update with any remaining text
   if (state.accumulatedText) {
     const tFinalUpd = Date.now();
-    await updateStreamingText(clients, state, state.accumulatedText);
+    if (hasToolCalls) {
+      await updateCardFromSegments(clients, state, segments);
+    } else {
+      await updateStreamingText(clients, state, state.accumulatedText);
+    }
     debugLog(`${TAG} [${reqId}] Final stream update: ${elapsed(tFinalUpd)}`);
   }
 
   // Finalize
   const tFinalize = Date.now();
-  await finalizeReplyCard(clients, state, ctx.chatId);
+  if (hasToolCalls) {
+    await finalizeReplyCardFromSegments(clients, state, ctx.chatId, segments);
+  } else {
+    await finalizeReplyCard(clients, state, ctx.chatId);
+  }
   debugLog(`${TAG} [${reqId}] Finalize card: ${elapsed(tFinalize)}`);
+
+  const toolSegs = segments.filter((s): s is Extract<CardSegment, { kind: "tool" }> => s.kind === "tool");
+  debugLog(
+    `${TAG} [${reqId}] Tool activity: ${toolSegs.length} calls ` +
+    `(${toolSegs.filter(s => s.activity.status === "complete").length} complete, ` +
+    `${toolSegs.filter(s => s.activity.status === "error").length} errors)`,
+  );
 
   // Save assistant response to session (including tool call/result parts)
   const tSave = Date.now();
@@ -460,21 +578,91 @@ async function handleSimpleResponse(
     }),
   );
 
-  // Collect full text
-  let fullText = "";
+  // Collect ordered segments (text + tool) preserving LLM output order
   let firstTokenTime = 0;
-  for await (const textPart of result.textStream) {
-    if (!firstTokenTime && textPart) {
-      firstTokenTime = Date.now();
-      debugLog(`${TAG} [${reqId}] First token (TTFT): ${elapsed(tLlm)}`);
-    }
-    fullText += textPart;
-  }
-  debugLog(`${TAG} [${reqId}] LLM complete: ${elapsed(tLlm)} (chars=${fullText.length})`);
+  const segments: CardSegment[] = [];
 
-  if (fullText.trim()) {
+  function currentTextSeg(): Extract<CardSegment, { kind: "text" }> {
+    const last = segments[segments.length - 1];
+    if (last && last.kind === "text") return last;
+    const seg: CardSegment = { kind: "text", text: "" };
+    segments.push(seg);
+    return seg as Extract<CardSegment, { kind: "text" }>;
+  }
+
+  for await (const part of result.fullStream) {
+    switch (part.type) {
+      case "text-delta": {
+        if (!part.text) break;
+        if (!firstTokenTime) {
+          firstTokenTime = Date.now();
+          debugLog(`${TAG} [${reqId}] First token (TTFT): ${elapsed(tLlm)}`);
+        }
+        currentTextSeg().text += part.text;
+        break;
+      }
+      case "tool-call": {
+        segments.push({
+          kind: "tool",
+          activity: {
+            toolCallId: (part as any).toolCallId ?? "",
+            toolName: (part as any).toolName ?? "unknown",
+            argsSummary: summariseToolArgs(
+              (part as any).toolName ?? "unknown",
+              (part as any).input,
+            ),
+            status: "running",
+          },
+        });
+        break;
+      }
+      case "tool-result": {
+        const callId = (part as any).toolCallId ?? "";
+        const existing = segments.find(
+          (s): s is Extract<CardSegment, { kind: "tool" }> =>
+            s.kind === "tool" && s.activity.toolCallId === callId,
+        );
+        if (existing) existing.activity.status = "complete";
+        break;
+      }
+      case "tool-error": {
+        const callId = (part as any).toolCallId ?? "";
+        const existing = segments.find(
+          (s): s is Extract<CardSegment, { kind: "tool" }> =>
+            s.kind === "tool" && s.activity.toolCallId === callId,
+        );
+        if (existing) {
+          existing.activity.status = "error";
+          const errObj = (part as any).error;
+          existing.activity.errorMessage =
+            errObj instanceof Error
+              ? errObj.message
+              : typeof errObj === "string"
+                ? errObj
+                : "执行失败";
+        }
+        break;
+      }
+      default:
+        break;
+    }
+  }
+
+  const fullText = segments
+    .filter((s): s is Extract<CardSegment, { kind: "text" }> => s.kind === "text")
+    .map((s) => s.text)
+    .join("");
+  debugLog(`${TAG} [${reqId}] LLM complete: ${elapsed(tLlm)} (chars=${fullText.length}, segments=${segments.length})`);
+
+  if (fullText.trim() || hasDisplayableTools(segments)) {
     const tSend = Date.now();
-    await sendSimpleReply(clients, ctx.messageId, fullText);
+    if (hasDisplayableTools(segments)) {
+      // Send as a card with ordered tool status + markdown segments
+      const content = buildReplyCardFromSegments(segments);
+      await clients.msg.reply(ctx.messageId, msgCard(content));
+    } else {
+      await sendSimpleReply(clients, ctx.messageId, fullText);
+    }
     debugLog(`${TAG} [${reqId}] Send reply: ${elapsed(tSend)}`);
 
     // Save assistant response with full tool history

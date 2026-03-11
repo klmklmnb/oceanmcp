@@ -18,6 +18,7 @@ import {
   msgCard,
   msgMarkdown,
   cardMarkdown,
+  cardPlainText,
   cardButton,
   cardOptionValue,
   cardDropdown,
@@ -183,6 +184,183 @@ function splitTextForCards(text: string): string[] {
   return chunks;
 }
 
+// ── Tool Activity Display ────────────────────────────────────────────────────
+
+/**
+ * Tracked tool call activity, used to render status lines in the Wave card.
+ */
+export interface ToolActivity {
+  toolCallId: string;
+  toolName: string;
+  /** Summarised args for display */
+  argsSummary: string;
+  status: "running" | "complete" | "error";
+  errorMessage?: string;
+}
+
+/**
+ * An ordered segment of card content. Segments are rendered in order as
+ * Wave card elements, preserving the natural interleaving of text and
+ * tool invocations from the LLM stream.
+ *
+ *   - `text`  → rendered as a CardMarkdown element
+ *   - `tool`  → rendered as a CardPlainText element with lines=1
+ */
+export type CardSegment =
+  | { kind: "text"; text: string }
+  | { kind: "tool"; activity: ToolActivity };
+
+/** Tools that manage their own UI and should NOT appear as tool status lines. */
+const HIDDEN_TOOL_NAMES = new Set(["userSelect", "executePlan"]);
+
+/** Check whether a tool activity is displayable (not hidden). */
+export function isDisplayableTool(toolName: string): boolean {
+  return !HIDDEN_TOOL_NAMES.has(toolName);
+}
+
+/**
+ * Format a single tool activity into a display string for plain_text element.
+ */
+function formatToolActivityText(activity: ToolActivity): string {
+  const nameLabel =
+    activity.toolName === "loadSkill" ? "技能装填" : activity.toolName;
+  const argsLabel = activity.argsSummary ? `(${activity.argsSummary})` : "";
+  const statusLabel =
+    activity.status === "running"
+      ? "执行中..."
+      : activity.status === "complete"
+        ? "完成"
+        : `失败${activity.errorMessage ? `: ${activity.errorMessage}` : ""}`;
+
+  // Let Wave handle truncation via plain_text lines=1
+  return `🔧 ${nameLabel}${argsLabel} — ${statusLabel}`;
+}
+
+/**
+ * Summarise tool input args into a short string for display.
+ * e.g. { name: "math-skill" } → 'math-skill'
+ * e.g. { expression: "2+2" } → 'expression: 2+2'
+ */
+export function summariseToolArgs(toolName: string, input: unknown): string {
+  if (!input || typeof input !== "object") return "";
+  const obj = input as Record<string, unknown>;
+  const keys = Object.keys(obj);
+  if (keys.length === 0) return "";
+
+  // For loadSkill, just show the skill name
+  if (toolName === "loadSkill" && typeof obj.name === "string") {
+    return obj.name;
+  }
+
+  // For single-key inputs, show value directly
+  if (keys.length === 1) {
+    return String(obj[keys[0]] ?? "");
+  }
+
+  // For multi-key inputs, show key: value pairs
+  return keys
+    .map((key) => {
+      const val = String(obj[key] ?? "");
+      return `${key}: ${val}`;
+    })
+    .join(", ");
+}
+
+/**
+ * Check if a segments list has any displayable tool segments.
+ */
+export function hasDisplayableTools(segments: CardSegment[]): boolean {
+  return segments.some(
+    (s) => s.kind === "tool" && isDisplayableTool(s.activity.toolName),
+  );
+}
+
+/**
+ * Build a card from ordered segments, preserving the interleaving of
+ * text and tool invocations from the LLM stream.
+ *
+ * Each segment becomes a Wave card element in order:
+ *   - `text` segments  → CardMarkdown
+ *   - `tool` segments  → CardPlainText with lines=1
+ *
+ * The LAST text segment carries the `name` attribute used by the
+ * streaming API so that live text updates target the correct element.
+ *
+ * If there are no displayable tool segments, falls back to the
+ * standard single-markdown card layout.
+ */
+export function buildReplyCardFromSegments(
+  segments: CardSegment[],
+  opts?: { streaming?: boolean; streamingMode?: boolean },
+): MsgCard["content"] {
+  // Filter out hidden tools but keep text segments as-is
+  const visible = segments.filter(
+    (s) => s.kind === "text" || isDisplayableTool(s.activity.toolName),
+  );
+
+  // No displayable tool segments? Fall back to plain markdown card
+  const hasTools = visible.some((s) => s.kind === "tool");
+  if (!hasTools) {
+    const fullText = visible
+      .filter((s): s is Extract<CardSegment, { kind: "text" }> => s.kind === "text")
+      .map((s) => s.text)
+      .join("");
+    return buildReplyCardContent(fullText || "...", opts);
+  }
+
+  const elements: Card[] = [];
+
+  // Find the index of the last text segment (it gets the streaming name)
+  let lastTextIdx = -1;
+  for (let i = visible.length - 1; i >= 0; i--) {
+    if (visible[i].kind === "text") {
+      lastTextIdx = i;
+      break;
+    }
+  }
+
+  for (let i = 0; i < visible.length; i++) {
+    const seg = visible[i];
+    if (seg.kind === "tool") {
+      elements.push(
+        cardPlainText(formatToolActivityText(seg.activity), { lines: 1 }),
+      );
+    } else {
+      const formatted = formatWaveReplyText(seg.text || "...");
+      const isLast = i === lastTextIdx;
+      elements.push({
+        tag: CardTag.Markdown,
+        text: formatted,
+        ...(isLast ? { name: STREAMING_COMPONENT_NAME } : {}),
+      } as Card);
+    }
+  }
+
+  // If there are no text segments at all, add a placeholder
+  if (lastTextIdx === -1) {
+    elements.push({
+      tag: CardTag.Markdown,
+      text: "...",
+      name: STREAMING_COMPONENT_NAME,
+    } as Card);
+  }
+
+  return {
+    card: {
+      tag: CardTag.Column,
+      elements,
+    },
+    ...(opts?.streaming && {
+      config: {
+        ...(opts?.streamingMode && { mode: "streaming" as const }),
+        streaming_config: {
+          component_name: STREAMING_COMPONENT_NAME,
+        },
+      },
+    }),
+  };
+}
+
 // ── Streaming Response Sender ────────────────────────────────────────────────
 
 export interface StreamingCardState {
@@ -322,6 +500,149 @@ export async function updateStreamingText(
       } catch {
         // best effort
       }
+    }
+  }
+}
+
+/**
+ * Update the card with tool status lines and the current markdown text.
+ *
+ * Uses `updateCardActively` (full card replacement) to add/update the
+ * plain_text tool status elements. This is called when a tool event
+ * occurs (tool-call start, tool-result, tool-error).
+ *
+ * IMPORTANT: The Wave API does not allow `updateCardActively` while
+ * streaming mode is active (retcode 10401200 "卡片模式异常"). When a
+ * tool event arrives mid-stream, we must first disable streaming mode
+ * before switching to full card updates. Once switched, we stay on
+ * full card updates for the remainder of this response.
+ */
+export async function updateCardFromSegments(
+  clients: WaveClients,
+  state: StreamingCardState,
+  segments: CardSegment[],
+): Promise<void> {
+  if (!state.cardMessageId) return;
+
+  // If streaming mode is active, disable it first — updateCardActively
+  // cannot be used while the card is in streaming mode.
+  if (state.streamingEnabled) {
+    const tMode = Date.now();
+    try {
+      await clients.msg.updateCardMode(state.cardMessageId, {
+        name: STREAMING_COMPONENT_NAME,
+        sequence: state.sequence++,
+        mode: "normal",
+        content: JSON.stringify(
+          buildReplyCardFromSegments(segments),
+        ),
+      });
+      debugLog(`${TAG} msg.updateCardMode (disable for tool status): ${Date.now() - tMode}ms`);
+    } catch (err) {
+      debugLog(`${TAG} msg.updateCardMode (disable for tool status) FAILED after ${Date.now() - tMode}ms:`, err);
+    }
+    state.streamingEnabled = false;
+    state.streamingId = "";
+    // Mark as fallback so subsequent text-delta updates also use
+    // updateCardActively instead of trying to re-enable streaming.
+    state.fallbackToCardUpdate = true;
+    return; // The updateCardMode content already contains the latest state
+  }
+
+  const t0 = Date.now();
+  try {
+    const content = buildReplyCardFromSegments(segments);
+    await clients.msg.updateCardActively(state.cardMessageId, content);
+    const dur = Date.now() - t0;
+    if (dur > 200) {
+      debugLog(`${TAG} msg.updateCardActively (tool status): ${dur}ms (SLOW)`);
+    }
+  } catch (err) {
+    console.error(
+      `${TAG} msg.updateCardActively (tool status) FAILED after ${Date.now() - t0}ms:`,
+      err,
+    );
+  }
+}
+
+/**
+ * Finalize a card that includes tool status lines.
+ *
+ * Similar to `finalizeReplyCard` but preserves the tool status
+ * plain_text elements in the final card layout. Handles content
+ * splitting the same way.
+ */
+export async function finalizeReplyCardFromSegments(
+  clients: WaveClients,
+  state: StreamingCardState,
+  chatId: string,
+  segments: CardSegment[],
+): Promise<void> {
+  if (!state.cardMessageId) return;
+
+  const hasContent =
+    segments.some((s) => s.kind === "text" && s.text.trim()) ||
+    segments.some((s) => s.kind === "tool" && isDisplayableTool(s.activity.toolName));
+
+  if (!hasContent) {
+    // No content and no tools — recall the empty card
+    const t0 = Date.now();
+    try {
+      await clients.msg.recall(state.cardMessageId);
+      debugLog(`${TAG} msg.recall (empty card): ${Date.now() - t0}ms`);
+    } catch {
+      // best effort
+    }
+    return;
+  }
+
+  // Disable streaming mode if it was enabled
+  if (state.streamingEnabled) {
+    const t0 = Date.now();
+    try {
+      await clients.msg.updateCardMode(state.cardMessageId, {
+        name: STREAMING_COMPONENT_NAME,
+        sequence: state.sequence++,
+        mode: "normal",
+        content: JSON.stringify(
+          buildReplyCardFromSegments(segments),
+        ),
+      });
+      debugLog(`${TAG} msg.updateCardMode (disable streaming): ${Date.now() - t0}ms`);
+    } catch (err) {
+      console.error(`${TAG} msg.updateCardMode (disable streaming) FAILED after ${Date.now() - t0}ms:`, err);
+    }
+  }
+
+  // For the final card, we can't easily split segments across multiple
+  // cards, so we just use the full segments in the first card.
+  // If the accumulated text is very long, split for continuation messages.
+  const fullText = segments
+    .filter((s): s is Extract<CardSegment, { kind: "text" }> => s.kind === "text")
+    .map((s) => s.text)
+    .join("");
+  const chunks = splitTextForCards(fullText);
+
+  // First chunk: render the full segments card
+  const t1 = Date.now();
+  try {
+    await clients.msg.updateCardActively(
+      state.cardMessageId,
+      buildReplyCardFromSegments(segments),
+    );
+    debugLog(`${TAG} msg.updateCardActively (final with tools): ${Date.now() - t1}ms (chunks=${chunks.length})`);
+  } catch (err) {
+    console.error(`${TAG} msg.updateCardActively (final with tools) FAILED after ${Date.now() - t1}ms:`, err);
+  }
+
+  // Remaining chunks as new messages (markdown only, no tool status)
+  for (let i = 1; i < chunks.length; i++) {
+    const t2 = Date.now();
+    try {
+      await clients.msg.send(chatId, msgMarkdown(chunks[i]));
+      debugLog(`${TAG} msg.send (continuation ${i + 1}/${chunks.length}): ${Date.now() - t2}ms`);
+    } catch (err) {
+      console.error(`${TAG} msg.send (continuation ${i + 1}/${chunks.length}) FAILED after ${Date.now() - t2}ms:`, err);
     }
   }
 }
