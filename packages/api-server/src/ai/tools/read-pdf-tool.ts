@@ -2,6 +2,9 @@ import { tool } from "ai";
 import { z } from "zod";
 import * as pdfjsLib from "pdfjs-dist/legacy/build/pdf.mjs";
 
+// 禁用 worker（服务端环境不需要）
+pdfjsLib.GlobalWorkerOptions.workerSrc = "";
+
 export const readPdf = tool({
   description: "解析 PDF 文件并提取文本内容。支持公开 URL 和内部 CDN URL。",
   inputSchema: z.object({
