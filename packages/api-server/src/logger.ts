@@ -20,7 +20,7 @@
  *   - `{LOG_PREFIX}-error.log`     — error level only
  *
  * Console transport:
- *   - Always active. Colorized in dev mode, plain JSON in production.
+ *   - Always active. Colorized in dev mode, JSON in production.
  */
 
 import { join, dirname } from "path";
@@ -70,13 +70,21 @@ const logFormat = printf((info) => {
   return `${ts} [${level}] [${LOG_PREFIX}] ${message}${metaStr}`;
 });
 
-// File transports: errors → timestamp → UPPERCASE level → printf
+// File transports: errors → timestamp → normalized keys → JSON
 const fileFormat = combine(
   errors({ stack: true }),
   timestamp(),
-  // Uppercase the level for file output (no ANSI codes to worry about)
-  winston.format((info) => { info.level = info.level.toUpperCase(); return info; })(),
-  logFormat,
+  printf((info) => {
+    const { timestamp: time, message, level, ...meta } = info;
+
+    return JSON.stringify({
+      time,
+      level: level.toUpperCase(),
+      content:
+        typeof message === "string" ? message : JSON.stringify(message),
+      ...meta,
+    });
+  }),
 );
 
 // Console transport: errors → timestamp → colorize (uppercased level) → printf
