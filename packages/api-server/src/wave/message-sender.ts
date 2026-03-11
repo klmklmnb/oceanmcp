@@ -1186,7 +1186,7 @@ export async function updateCardAsExpired(
  * Layout:
  *   header    (success template, "执行完成")
  *   markdown  task summary + prompt for next action
- *   flow      [总结当前会话] [开启新回话]
+ *   flow      [总结当前会话] [开启新会话]
  *
  * @param clients        - Wave SDK clients
  * @param chatId         - The chat/receiver ID to send to
@@ -1204,7 +1204,7 @@ export async function sendPostExecutePlanActionsCard(
     `**${intent}**\n` +
     `已成功执行 ${completedSteps} 个步骤。你可以选择：\n` +
     `- **总结当前会话** — 生成本次会话的内容摘要\n` +
-    `- **开启新回话** — 清除历史记录，开始全新对话`;
+    `- **开启新会话** — 清除历史记录，开始全新对话`;
 
   const content = {
     header: cardHeader("执行完成", "success"),
@@ -1217,8 +1217,8 @@ export async function sendPostExecutePlanActionsCard(
           { style: "primary" },
         ),
         cardButton(
-          "开启新回话",
-          cardOptionValue("new_session", "开启新回话"),
+          "开启新会话",
+          cardOptionValue("new_session", "开启新会话"),
           { style: "default" },
         ),
       ]),

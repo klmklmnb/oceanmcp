@@ -386,13 +386,13 @@ describe("Wave executePlan tool", () => {
     expect(markdownEl.text).toContain("Create and publish a draft");
     expect(markdownEl.text).toContain("已成功执行 2 个步骤");
     expect(markdownEl.text).toContain("总结当前会话");
-    expect(markdownEl.text).toContain("开启新回话");
+    expect(markdownEl.text).toContain("开启新会话");
     // Second element: flow with the two buttons
     const flowEl = actionsCard.card.elements[1];
     expect(flowEl.tag).toBe("flow");
     expect(flowEl.elements).toHaveLength(2);
     expect(flowEl.elements[0].text).toBe("总结当前会话");
-    expect(flowEl.elements[1].text).toBe("开启新回话");
+    expect(flowEl.elements[1].text).toBe("开启新会话");
   });
 
   test("failed plan does not send post-plan actions card", async () => {

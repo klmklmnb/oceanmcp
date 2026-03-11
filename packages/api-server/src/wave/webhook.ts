@@ -211,7 +211,7 @@ export function registerEventHandlers(config: WaveConfig): void {
       return;
     }
 
-    // ── Post-executePlan action buttons (总结当前会话 / 开启新回话) ─────
+    // ── Post-executePlan action buttons (总结当前会话 / 开启新会话) ─────
     if (hasPendingPostPlanAction(open_msg_id)) {
       const pendingAction = resolvePendingPostPlanAction(open_msg_id);
       if (!pendingAction) return;
@@ -247,7 +247,7 @@ export function registerEventHandlers(config: WaveConfig): void {
         void updatePostExecutePlanActionsCard(
           clients,
           open_msg_id,
-          "开启新回话",
+          "开启新会话",
         ).catch((err) =>
           logger.error("[Wave] Failed to update post-plan action card:", err),
         );

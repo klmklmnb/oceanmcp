@@ -1,7 +1,7 @@
 /**
  * Pending post-plan action store for Wave executePlan follow-up buttons.
  *
- * After a successful executePlan, a card with "总结当前会话" and "开启新回话"
+ * After a successful executePlan, a card with "总结当前会话" and "开启新会话"
  * buttons is sent. This store tracks which card messages correspond to which
  * sessions so the onMsgCardReaction callback can dispatch the appropriate action.
  *
