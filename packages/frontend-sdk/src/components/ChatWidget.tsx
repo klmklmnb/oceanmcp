@@ -69,6 +69,84 @@ function isPendingUserSelect(part: any): boolean {
 }
 
 /**
+ * Pure-logic helper extracted from the `sendAutomaticallyWhen` callback so
+ * it can be unit-tested without rendering the ChatWidget component.
+ *
+ * Returns `{ decision, approvalIds, userSelectIds }` where:
+ *   - `decision` — whether `useChat` should automatically send a new request
+ *   - `approvalIds` — approval IDs that should be marked as submitted
+ *   - `userSelectIds` — userSelect toolCallIds that should be marked as submitted
+ */
+export function evaluateSendAutomatically(
+  messages: any[],
+  submittedApprovalIds: Set<string>,
+  submittedUserSelectIds: Set<string>,
+): { decision: boolean; approvalIds: string[]; userSelectIds: string[] } {
+  const lastMsg = messages[messages.length - 1];
+  if (!lastMsg || lastMsg.role !== MESSAGE_ROLE.ASSISTANT) {
+    return { decision: false, approvalIds: [], userSelectIds: [] };
+  }
+
+  const toolParts = (lastMsg.parts || []).filter(isToolPart);
+
+  const approvalRespondedParts = toolParts.filter((part: any) => {
+    return (
+      part.state === TOOL_PART_STATE.APPROVAL_RESPONDED &&
+      part.approval?.approved != null &&
+      !submittedApprovalIds.has(part.approval?.id)
+    );
+  });
+
+  const hasAnyApprovalResponse = approvalRespondedParts.length > 0;
+
+  const allToolPartsSettled = toolParts.every((part: any) => {
+    return (
+      part.state === TOOL_PART_STATE.OUTPUT_AVAILABLE ||
+      part.state === TOOL_PART_STATE.OUTPUT_ERROR ||
+      part.state === TOOL_PART_STATE.APPROVAL_RESPONDED ||
+      part.state === TOOL_PART_STATE.OUTPUT_DENIED ||
+      // APPROVAL_REQUESTED and INPUT_AVAILABLE are "settled enough"
+      // for auto-send purposes — the stream has ended and these parts
+      // will be resolved by their own interaction flows (approval
+      // buttons / userSelect cards). Without this, a resolved
+      // userSelect sitting next to an unresolved approval (or vice
+      // versa) would block the auto-send indefinitely.
+      part.state === TOOL_PART_STATE.APPROVAL_REQUESTED ||
+      part.state === TOOL_PART_STATE.INPUT_AVAILABLE
+    );
+  });
+
+  const settledUserSelectParts = toolParts.filter((part: any) => {
+    if (getToolName(part) !== "userSelect") return false;
+    if (!part.toolCallId) return false;
+    if (submittedUserSelectIds.has(part.toolCallId)) return false;
+    return (
+      part.state === TOOL_PART_STATE.OUTPUT_AVAILABLE ||
+      part.state === TOOL_PART_STATE.OUTPUT_ERROR
+    );
+  });
+
+  const hasUserSelectResult = settledUserSelectParts.length > 0;
+
+  const decision = Boolean(
+    allToolPartsSettled && (hasAnyApprovalResponse || hasUserSelectResult),
+  );
+
+  const approvalIds = decision
+    ? approvalRespondedParts
+        .map((p: any) => p.approval?.id)
+        .filter(Boolean) as string[]
+    : [];
+  const userSelectIds = decision
+    ? settledUserSelectParts
+        .map((p: any) => p.toolCallId)
+        .filter(Boolean) as string[]
+    : [];
+
+  return { decision, approvalIds, userSelectIds };
+}
+
+/**
  * Apply the `dark` class on the shadow host element so that the
  * `:host(.dark)` selector fires.  This is necessary because Tailwind's
  * `@theme` variables (e.g. `--color-surface-secondary`) are defined on
@@ -290,62 +368,23 @@ export function ChatWidget({ avatar }: { avatar?: string }) {
 
   const sendAutomaticallyWhen = useCallback(
     ({ messages: msgs }: { messages: any[] }) => {
-      const lastMsg = msgs[msgs.length - 1];
-      if (!lastMsg || lastMsg.role !== MESSAGE_ROLE.ASSISTANT) return false;
-
-      const toolParts = (lastMsg.parts || []).filter(isToolPart);
-
-      const approvalRespondedParts = toolParts.filter((part: any) => {
-        return (
-          part.state === TOOL_PART_STATE.APPROVAL_RESPONDED &&
-          part.approval?.approved != null &&
-          !submittedApprovalIdsRef.current.has(part.approval?.id)
+      const { decision, approvalIds, userSelectIds } =
+        evaluateSendAutomatically(
+          msgs,
+          submittedApprovalIdsRef.current,
+          submittedUserSelectIdsRef.current,
         );
-      });
-
-      const hasAnyApprovalResponse = approvalRespondedParts.length > 0;
-
-      const allToolPartsSettled = toolParts.every((part: any) => {
-        return (
-          part.state === TOOL_PART_STATE.OUTPUT_AVAILABLE ||
-          part.state === TOOL_PART_STATE.OUTPUT_ERROR ||
-          part.state === TOOL_PART_STATE.APPROVAL_RESPONDED ||
-          part.state === TOOL_PART_STATE.OUTPUT_DENIED
-        );
-      });
-
-      const settledUserSelectParts = toolParts.filter((part: any) => {
-        if (getToolName(part) !== "userSelect") return false;
-        if (!part.toolCallId) return false;
-        if (submittedUserSelectIdsRef.current.has(part.toolCallId))
-          return false;
-        return (
-          part.state === TOOL_PART_STATE.OUTPUT_AVAILABLE ||
-          part.state === TOOL_PART_STATE.OUTPUT_ERROR
-        );
-      });
-
-      const hasUserSelectResult = settledUserSelectParts.length > 0;
-
-      const decision = Boolean(
-        allToolPartsSettled &&
-          (hasAnyApprovalResponse || hasUserSelectResult),
-      );
 
       if (decision) {
         console.log(
           "[OceanMCP] sendAutomaticallyWhen → true",
-          { approvalCount: approvalRespondedParts.length, userSelectCount: settledUserSelectParts.length },
+          { approvalCount: approvalIds.length, userSelectCount: userSelectIds.length },
         );
-        for (const part of approvalRespondedParts) {
-          if ((part as any).approval?.id) {
-            submittedApprovalIdsRef.current.add((part as any).approval.id);
-          }
+        for (const id of approvalIds) {
+          submittedApprovalIdsRef.current.add(id);
         }
-        for (const part of settledUserSelectParts) {
-          if ((part as any).toolCallId) {
-            submittedUserSelectIdsRef.current.add((part as any).toolCallId);
-          }
+        for (const id of userSelectIds) {
+          submittedUserSelectIdsRef.current.add(id);
         }
       }
 
