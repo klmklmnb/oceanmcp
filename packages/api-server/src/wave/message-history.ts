@@ -229,3 +229,70 @@ export function buildUserStoredMessage(text: string): StoredMessage {
     createdAt: Date.now(),
   };
 }
+
+/**
+ * Flatten stored messages into text-only messages.
+ *
+ * Converts tool-call and tool-result parts into human-readable text
+ * descriptions so the conversation history can be sent to the model
+ * without requiring tool definitions. This is used for the "summarize
+ * session" flow where we need the model to read the history but don't
+ * want to register every tool that was used in previous turns.
+ *
+ * Example output for a tool part:
+ *   [调用工具 createDraft] 参数: {"name":"release-note"}
+ *   [工具结果] {"id":"draft-release-note","name":"release-note"}
+ */
+export function flattenMessagesToTextOnly(
+  messages: ReadonlyArray<StoredMessage>,
+): StoredMessage[] {
+  return messages.map((msg) => {
+    // User messages are already text-only
+    if (msg.role === "user") return msg;
+
+    const textParts: StoredMessagePart[] = [];
+
+    for (const part of msg.parts) {
+      if (part.type === "text" || part.type === "reasoning") {
+        textParts.push(part);
+      } else if (part.type === "step-start") {
+        // Skip step-start markers — they have no user-facing meaning
+        continue;
+      } else if (part.type.startsWith("tool-")) {
+        // Tool part — convert to readable text
+        const toolPart = part as StoredToolPart;
+        const toolName = toolPart.type.replace(/^tool-/, "");
+        const lines: string[] = [];
+
+        // Tool invocation
+        const argsStr = toolPart.input != null
+          ? JSON.stringify(toolPart.input)
+          : "{}";
+        lines.push(`[调用工具 ${toolName}] 参数: ${argsStr}`);
+
+        // Tool result
+        if (toolPart.state === "output-available" && toolPart.output != null) {
+          lines.push(`[工具结果] ${JSON.stringify(toolPart.output)}`);
+        } else if (toolPart.state === "output-error") {
+          lines.push(`[工具错误] ${toolPart.errorText ?? "执行失败"}`);
+        } else if (toolPart.state === "output-denied") {
+          const reason = toolPart.approval?.reason ?? "用户拒绝";
+          lines.push(`[用户拒绝] ${reason}`);
+        }
+
+        textParts.push({ type: "text", text: lines.join("\n") });
+      }
+    }
+
+    // If all parts were tool-only and produced text, ensure we don't
+    // return an empty assistant message
+    if (textParts.length === 0) {
+      return null;
+    }
+
+    return {
+      ...msg,
+      parts: textParts,
+    };
+  }).filter((msg): msg is StoredMessage => msg !== null);
+}

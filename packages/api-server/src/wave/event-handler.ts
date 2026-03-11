@@ -30,7 +30,7 @@ import { buildWaveTools } from "./tools";
 import { removeAllPlanApprovalsForSession } from "./pending-approvals";
 import { removeAllForSession } from "./pending-selections";
 import { removeAllPostPlanActionsForSession } from "./pending-post-plan-actions";
-import { buildAssistantStoredMessage } from "./message-history";
+import { buildAssistantStoredMessage, flattenMessagesToTextOnly } from "./message-history";
 import { msgCard } from "@mihoyo/wave-opensdk";
 import {
   sendInitialReplyCard,
@@ -292,7 +292,13 @@ export async function handleWaveMessageFromContext(
 
   // 5. Build tools and system prompt
   const t4 = Date.now();
-  const tools = buildWaveTools(fileSkills, zipSkills, sandbox, clients, ctx.senderId, sessionKey, ctx.chatId);
+  // When sendAsNewMessage is set (e.g. post-executePlan summary), skip tools
+  // entirely — the model only needs to read the conversation history and
+  // produce a text response. Tools aren't needed and their absence would
+  // cause errors when the history contains tool-call/tool-result pairs.
+  const tools = ctx.sendAsNewMessage
+    ? {}
+    : buildWaveTools(fileSkills, zipSkills, sandbox, clients, ctx.senderId, sessionKey, ctx.chatId);
   const systemPrompt = buildWaveSystemPrompt(fileSkills, zipSkills);
   debugLog(`${TAG} [${reqId}] Build tools+prompt: ${elapsed(t4)} (tools=${Object.keys(tools).length}, promptLen=${systemPrompt.length})`);
 
@@ -303,8 +309,14 @@ export async function handleWaveMessageFromContext(
   // names and values), but TypeScript's template literal type for tool
   // part state discriminants doesn't match our simplified union. The cast
   // is safe because convertToModelMessages reads the same fields we store.
+  //
+  // When sendAsNewMessage is set, flatten tool parts into text descriptions
+  // so the model can read the full history without needing tool definitions.
   const t5 = Date.now();
-  const modelMessages = await convertToModelMessages(messages as any);
+  const messagesToConvert = ctx.sendAsNewMessage
+    ? flattenMessagesToTextOnly(messages)
+    : messages;
+  const modelMessages = await convertToModelMessages(messagesToConvert as any);
   debugLog(`${TAG} [${reqId}] Convert messages: ${elapsed(t5)} (count=${modelMessages.length})`);
 
   // 7. Stream AI response
