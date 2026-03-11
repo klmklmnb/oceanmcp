@@ -12,6 +12,7 @@ import {
   wrapCodeFunctionAsTool,
   wrapCodeFunctionDefinitions,
 } from "../src/ai/skills/code-tool-adapter";
+import { logger } from "../src/logger";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Unit tests for code-tool-adapter.ts
@@ -233,8 +234,8 @@ describe("wrapCodeFunctionAsTool", () => {
 
   test("window access returns undefined and logs warning", async () => {
     const warnings: string[] = [];
-    const originalWarn = console.warn;
-    console.warn = (...args: any[]) => warnings.push(args.join(" "));
+    const originalWarn = logger.warn.bind(logger);
+    logger.warn = ((...args: any[]) => { warnings.push(args.map(String).join(" ")); return logger; }) as any;
 
     try {
       const def: CodeFunctionDefinition = {
@@ -261,14 +262,14 @@ describe("wrapCodeFunctionAsTool", () => {
       expect(warnings.some((w) => w.includes("window.location"))).toBe(true);
       expect(warnings.some((w) => w.includes("document.title"))).toBe(true);
     } finally {
-      console.warn = originalWarn;
+      logger.warn = originalWarn;
     }
   });
 
   test("window warning is logged only once per property", async () => {
     const warnings: string[] = [];
-    const originalWarn = console.warn;
-    console.warn = (...args: any[]) => warnings.push(args.join(" "));
+    const originalWarn = logger.warn.bind(logger);
+    logger.warn = ((...args: any[]) => { warnings.push(args.map(String).join(" ")); return logger; }) as any;
 
     try {
       const def: CodeFunctionDefinition = {
@@ -292,7 +293,7 @@ describe("wrapCodeFunctionAsTool", () => {
       const fooWarnings = warnings.filter((w) => w.includes("window.foo"));
       expect(fooWarnings).toHaveLength(1);
     } finally {
-      console.warn = originalWarn;
+      logger.warn = originalWarn;
     }
   });
 

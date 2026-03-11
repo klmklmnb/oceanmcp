@@ -20,6 +20,7 @@ import {
   isCodeFunctionDefinition,
   wrapCodeFunctionDefinitions,
 } from "../src/ai/skills/code-tool-adapter";
+import { logger } from "../src/logger";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Integration tests for CodeFunctionDefinition tools loaded from fixture files.
@@ -969,8 +970,8 @@ describe("loadSkill tool e2e — zip with code tools + resources", () => {
 describe("CodeFunctionDefinition edge cases", () => {
   test("code tool accessing window/document logs warnings but does not crash", async () => {
     const warnings: string[] = [];
-    const originalWarn = console.warn;
-    console.warn = (...args: any[]) => warnings.push(args.join(" "));
+    const originalWarn = logger.warn.bind(logger);
+    logger.warn = ((...args: any[]) => { warnings.push(args.map(String).join(" ")); return logger; }) as any;
 
     try {
       const exports = wrapCodeFunctionDefinitions({
@@ -1003,7 +1004,7 @@ describe("CodeFunctionDefinition edge cases", () => {
         warnings.some((w) => w.includes("document.title")),
       ).toBe(true);
     } finally {
-      console.warn = originalWarn;
+      logger.warn = originalWarn;
     }
   });
 
