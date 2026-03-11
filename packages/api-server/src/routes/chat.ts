@@ -141,7 +141,7 @@ export async function handleChatRequest(req: Request): Promise<Response> {
         messages: modelMessages,
         tools: mergedTools,
         maxOutputTokens: resolveMaxTokens(modelConfig?.maxTokens),
-        stopWhen: stepCountIs(10),
+        stopWhen: stepCountIs(100),
       }),
     );
 

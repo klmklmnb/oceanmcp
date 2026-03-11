@@ -33,7 +33,7 @@ export interface PendingPlanApproval {
 const pendingMap = new Map<string, PendingPlanApproval>();
 const sessionIndex = new Map<string, Set<string>>();
 
-const APPROVAL_TIMEOUT_MS = 10 * 60 * 1000; // 10 minutes
+const APPROVAL_TIMEOUT_MS = 60 * 60 * 1000; // 1 hour
 const CLEANUP_INTERVAL_MS = 60 * 1000; // 1 minute
 
 let cleanupTimer: ReturnType<typeof setInterval> | null = null;
@@ -51,7 +51,7 @@ function startCleanup(): void {
           if (sessionSet.size === 0) sessionIndex.delete(entry.sessionKey);
         }
         entry.reject(
-          new Error("Plan approval timed out (10 minute safety limit)"),
+          new Error("Plan approval timed out (1 hour safety limit)"),
         );
       }
     }

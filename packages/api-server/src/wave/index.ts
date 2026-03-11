@@ -21,6 +21,15 @@ export { loadWaveConfig } from "./config";
 
 let waveEnabled = false;
 
+function maskSecret(value: string, visiblePrefix = 4, visibleSuffix = 2): string {
+  if (!value) return "<missing>";
+  if (value.length <= visiblePrefix + visibleSuffix) {
+    return `${"*".repeat(value.length)} (len=${value.length})`;
+  }
+
+  return `${value.slice(0, visiblePrefix)}***${value.slice(-visibleSuffix)} (len=${value.length})`;
+}
+
 /**
  * Initialize the Wave integration.
  *
@@ -40,6 +49,19 @@ export async function initWave(): Promise<boolean> {
   }
 
   try {
+    logger.info("[Wave] Initializing Wave clients", {
+      appId: config.appId,
+      env: config.env,
+      token: maskSecret(config.token),
+      aesKey: maskSecret(config.aesKey),
+      appSecret: maskSecret(config.appSecret),
+      dmPolicy: config.dmPolicy,
+      groupPolicy: config.groupPolicy,
+      requireMention: config.requireMention,
+      historyLimit: config.historyLimit,
+      streaming: config.streaming,
+    });
+
     createWaveClients(config);
     setWebhookConfig(config);
     registerEventHandlers(config);

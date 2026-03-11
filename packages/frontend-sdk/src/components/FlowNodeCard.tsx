@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useState, useRef, useEffect } from "react";
 import { FLOW_STEP_STATUS, TOOL_PART_STATE } from "@ocean-mcp/shared";
 import type { ColumnConfig } from "@ocean-mcp/shared";
 import { functionRegistry } from "../registry";
@@ -6,6 +6,72 @@ import { isDOMRenderDescriptor, DOMContainer } from "./DOMContainer";
 import { sdkConfig } from "../runtime/sdk-config";
 import { t } from "../locale";
 import { ArrayTable, RawDataBlock, tryParseArray, isObjectArray } from "./ArrayTable";
+
+// ─── CollapsibleError ───────────────────────────────────────────────────────
+
+/** Max height (in px) when collapsed — roughly 3 lines of text-xs */
+const COLLAPSED_MAX_HEIGHT = 60;
+
+/**
+ * Collapsible error message block — collapsed by default for long errors.
+ * Short errors that fit within the collapsed height are displayed normally
+ * without a toggle button.
+ */
+export function CollapsibleError({
+  error,
+  className = "",
+}: {
+  error: string;
+  className?: string;
+}) {
+  const [expanded, setExpanded] = useState(false);
+  const [overflows, setOverflows] = useState(false);
+  const contentRef = useRef<HTMLPreElement>(null);
+
+  useEffect(() => {
+    const el = contentRef.current;
+    if (el) {
+      setOverflows(el.scrollHeight > COLLAPSED_MAX_HEIGHT);
+    }
+  }, [error]);
+
+  return (
+    <div className={`mt-1 ${className}`}>
+      <pre
+        ref={contentRef}
+        className={`text-xs text-red-500 whitespace-pre-wrap break-words font-mono overflow-hidden transition-[max-height] duration-200 ${
+          expanded ? "" : "relative"
+        }`}
+        style={
+          !expanded && overflows
+            ? { maxHeight: `${COLLAPSED_MAX_HEIGHT}px` }
+            : undefined
+        }
+      >
+        {error}
+        {/* Gradient fade overlay when collapsed and overflowing */}
+        {!expanded && overflows && (
+          <span
+            className="absolute bottom-0 left-0 right-0 h-6 pointer-events-none"
+            style={{
+              background:
+                "linear-gradient(to bottom, transparent, var(--color-surface, white))",
+            }}
+          />
+        )}
+      </pre>
+      {overflows && (
+        <button
+          onClick={() => setExpanded((v) => !v)}
+          className="mt-0.5 text-xs text-red-400 hover:text-red-600 transition-colors cursor-pointer flex items-center gap-1"
+        >
+          <span className="text-[10px]">{expanded ? "▼" : "▶"}</span>
+          {expanded ? t("flow.hideError") : t("flow.showError")}
+        </button>
+      )}
+    </div>
+  );
+}
 
 // ─── FlowNodeCard ───────────────────────────────────────────────────────────
 
@@ -289,9 +355,13 @@ export function FlowNodeCard({
                     )}
                   {stepResult?.status === FLOW_STEP_STATUS.FAILED &&
                     stepResult.error && (
-                      <p className="mt-1 text-xs text-red-500">
-                        {typeof stepResult.error === "string" ? stepResult.error : JSON.stringify(stepResult.error)}
-                      </p>
+                      <CollapsibleError
+                        error={
+                          typeof stepResult.error === "string"
+                            ? stepResult.error
+                            : JSON.stringify(stepResult.error)
+                        }
+                      />
                     )}
                 </div>
               </div>

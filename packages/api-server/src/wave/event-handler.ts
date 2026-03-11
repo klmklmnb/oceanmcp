@@ -412,7 +412,7 @@ async function handleStreamingResponse(
       messages: modelMessages,
       tools,
       maxOutputTokens: resolveMaxTokens(),
-      stopWhen: stepCountIs(10),
+      stopWhen: stepCountIs(100),
       abortSignal,
     }),
   );
@@ -618,7 +618,7 @@ async function handleSimpleResponse(
       messages: modelMessages,
       tools,
       maxOutputTokens: resolveMaxTokens(),
-      stopWhen: stepCountIs(10),
+      stopWhen: stepCountIs(100),
       abortSignal,
     }),
   );

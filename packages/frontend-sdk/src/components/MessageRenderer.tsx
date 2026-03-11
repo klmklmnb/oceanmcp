@@ -9,7 +9,7 @@ import {
   OPERATION_TYPE,
   type FileAttachment,
 } from "@ocean-mcp/shared";
-import { FlowNodeCard } from "./FlowNodeCard";
+import { FlowNodeCard, CollapsibleError } from "./FlowNodeCard";
 import { ApprovalButtons } from "./ApprovalButtons";
 import { UserSelectCard } from "./UserSelectCard";
 import { MarkdownRenderer } from "./MarkdownRenderer";
@@ -703,8 +703,14 @@ export function MessageRenderer({
                   onDeny={onDeny}
                 />
                 {state === TOOL_PART_STATE.OUTPUT_ERROR && errorText && (
-                  <div className="my-2 px-4 py-2 bg-red-50 border border-red-200 rounded-xl text-sm text-red-600">
-                    <strong>Error:</strong> {typeof errorText === "string" ? errorText : JSON.stringify(errorText)}
+                  <div className="my-2 px-4 py-2 bg-red-50 border border-red-200 rounded-xl">
+                    <CollapsibleError
+                      error={
+                        typeof errorText === "string"
+                          ? errorText
+                          : JSON.stringify(errorText)
+                      }
+                    />
                   </div>
                 )}
               </>

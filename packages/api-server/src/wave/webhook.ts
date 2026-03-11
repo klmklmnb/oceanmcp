@@ -44,6 +44,81 @@ import { logger } from "../logger";
 
 let waveConfig: WaveConfig | null = null;
 
+function maskSecret(value: string | undefined, visiblePrefix = 4, visibleSuffix = 2): string {
+  if (!value) return "<missing>";
+  if (value.length <= visiblePrefix + visibleSuffix) {
+    return `${"*".repeat(value.length)} (len=${value.length})`;
+  }
+
+  return `${value.slice(0, visiblePrefix)}***${value.slice(-visibleSuffix)} (len=${value.length})`;
+}
+
+function redactHeaders(headers: Record<string, string>): Record<string, string> {
+  const redacted: Record<string, string> = {};
+
+  for (const [key, value] of Object.entries(headers)) {
+    const lowerKey = key.toLowerCase();
+    if (
+      lowerKey.includes("authorization") ||
+      lowerKey.includes("cookie") ||
+      lowerKey.includes("secret") ||
+      lowerKey.includes("token")
+    ) {
+      redacted[key] = "<redacted>";
+      continue;
+    }
+
+    redacted[key] = value;
+  }
+
+  return redacted;
+}
+
+function summarizeBody(body: unknown): Record<string, unknown> {
+  if (body === null) return { type: "null" };
+  if (body === undefined) return { type: "undefined" };
+  if (typeof body !== "object") return { type: typeof body, value: body };
+
+  const objectBody = body as Record<string, unknown>;
+  const event = typeof objectBody.event === "object" && objectBody.event !== null
+    ? (objectBody.event as Record<string, unknown>)
+    : null;
+
+  return {
+    type: Array.isArray(body) ? "array" : "object",
+    keys: Object.keys(objectBody),
+    hasChallenge: typeof objectBody.challenge === "string",
+    encryptLength:
+      typeof objectBody.encrypt === "string" ? objectBody.encrypt.length : undefined,
+    eventType:
+      typeof objectBody.event_type === "string"
+        ? objectBody.event_type
+        : typeof event?.event_type === "string"
+          ? event.event_type
+          : undefined,
+    openMessageId:
+      typeof event?.open_msg_id === "string" ? event.open_msg_id : undefined,
+  };
+}
+
+function previewText(text: string, limit = 1200): string {
+  if (!text) return "";
+  return text.length > limit ? `${text.slice(0, limit)}...<truncated>` : text;
+}
+
+function serializeError(error: unknown): Record<string, unknown> {
+  if (error instanceof Error) {
+    return {
+      name: error.name,
+      message: error.message,
+      stack: error.stack,
+      cause: error.cause,
+    };
+  }
+
+  return { value: error };
+}
+
 /**
  * Set the config for the webhook handler. Called by initWave().
  */
@@ -67,26 +142,107 @@ export async function handleWaveWebhook(req: Request): Promise<Response> {
   // Extract ?skills= URL from query params
   const url = new URL(req.url, "http://localhost");
   const skillsZipUrl = url.searchParams.get("skills") || undefined;
+  const requestId = `wave-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
+  let rawBody = "";
+  let parsedBody: unknown;
+  let headers: Record<string, string> = {};
 
   try {
     const t0 = Date.now();
-    const body = await req.json();
+    rawBody = await req.text();
     const tParse = Date.now();
-    const headers = Object.fromEntries(req.headers.entries());
+    headers = Object.fromEntries(req.headers.entries());
+    logger.info("[Wave] Webhook request received", {
+      requestId,
+      method: req.method,
+      url: req.url,
+      pathname: url.pathname,
+      query: Object.fromEntries(url.searchParams.entries()),
+      skillsZipUrl,
+      contentType: req.headers.get("content-type"),
+      contentLength: rawBody.length,
+      userAgent: req.headers.get("user-agent"),
+      forwardedFor: req.headers.get("x-forwarded-for"),
+    });
+    logger.debug("[Wave] Webhook headers", {
+      requestId,
+      headers: redactHeaders(headers),
+    });
+    logger.debug("[Wave] Webhook raw body preview", {
+      requestId,
+      preview: previewText(rawBody),
+    });
 
-    logger.debug("[Wave] Webhook query params:", Object.fromEntries(url.searchParams.entries()));
-    logger.debug("[Wave] Webhook headers:", headers);
+    try {
+      parsedBody = rawBody ? JSON.parse(rawBody) : {};
+    } catch (parseError) {
+      logger.error("[Wave] Failed to parse webhook JSON body", {
+        requestId,
+        error: serializeError(parseError),
+        contentType: req.headers.get("content-type"),
+        rawBodyPreview: previewText(rawBody),
+      });
+      throw parseError;
+    }
+
+    logger.info("[Wave] Webhook body summary", {
+      requestId,
+      summary: summarizeBody(parsedBody),
+    });
 
     const clients = getWaveClients();
+    logger.debug("[Wave] Webhook verification context", {
+      requestId,
+      appId: waveConfig.appId,
+      env: waveConfig.env,
+      token: maskSecret(waveConfig.token),
+      aesKey: maskSecret(waveConfig.aesKey),
+      skillsZipUrl,
+    });
 
     // Let the SDK handle decryption, verification, and event dispatch.
     // The event handlers are registered in initWave() and process
     // messages asynchronously (fire-and-forget).
-    const result = clients.event.handle(body, headers);
-    logger.debug(`[Wave] Webhook: parse=${tParse - t0}ms, decrypt+dispatch=${Date.now() - tParse}ms, total=${Date.now() - t0}ms`);
+    let result: unknown;
+    const bodyForHandle = parsedBody as Parameters<typeof clients.event.handle>[0];
+    try {
+      result = clients.event.handle(bodyForHandle, headers);
+    } catch (handleError) {
+      logger.error("[Wave] SDK webhook handle failed", {
+        requestId,
+        error: serializeError(handleError),
+        headers: redactHeaders(headers),
+        bodySummary: summarizeBody(parsedBody),
+        rawBodyPreview: previewText(rawBody),
+      });
+      throw handleError;
+    }
+    logger.info("[Wave] Webhook dispatch completed", {
+      requestId,
+      parseMs: tParse - t0,
+      handleMs: Date.now() - tParse,
+      totalMs: Date.now() - t0,
+      resultType: result === null ? "null" : typeof result,
+      resultSummary:
+        result && typeof result === "object"
+          ? {
+              keys: Object.keys(result as Record<string, unknown>),
+              hasChallenge: "challenge" in (result as Record<string, unknown>),
+              challengeLength:
+                typeof (result as Record<string, unknown>).challenge === "string"
+                  ? ((result as Record<string, unknown>).challenge as string).length
+                  : undefined,
+            }
+          : result,
+    });
 
     // For verification events, the SDK returns { challenge: "..." }
     if (result && typeof result === "object" && "challenge" in result) {
+      logger.info("[Wave] Responding to webhook challenge", {
+        requestId,
+        challengeLength:
+          typeof result.challenge === "string" ? result.challenge.length : undefined,
+      });
       return new Response(JSON.stringify(result), {
         status: 200,
         headers: { "Content-Type": "application/json" },
@@ -104,7 +260,16 @@ export async function handleWaveWebhook(req: Request): Promise<Response> {
       headers: { "Content-Type": "application/json" },
     });
   } catch (err) {
-    logger.error("[Wave] Webhook error:", err);
+    logger.error("[Wave] Webhook request failed", {
+      requestId,
+      error: serializeError(err),
+      method: req.method,
+      url: req.url,
+      query: Object.fromEntries(url.searchParams.entries()),
+      headers: redactHeaders(headers),
+      bodySummary: summarizeBody(parsedBody),
+      rawBodyPreview: previewText(rawBody),
+    });
     return new Response(
       JSON.stringify({ error: "Internal webhook error" }),
       { status: 500, headers: { "Content-Type": "application/json" } },
@@ -341,6 +506,10 @@ let currentSkillsZipUrl: string | undefined;
 export async function handleWaveWebhookWithContext(req: Request): Promise<Response> {
   const url = new URL(req.url, "http://localhost");
   currentSkillsZipUrl = url.searchParams.get("skills") || undefined;
+  logger.debug("[Wave] Bound webhook request context", {
+    pathname: url.pathname,
+    skillsZipUrl: currentSkillsZipUrl,
+  });
   try {
     return await handleWaveWebhook(req);
   } finally {
