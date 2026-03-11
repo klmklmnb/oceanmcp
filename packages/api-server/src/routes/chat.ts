@@ -12,6 +12,7 @@ import type { ModelConfig } from "@ocean-mcp/shared";
 import { getLanguageModel, resolveMaxTokens, resolveThinkingConfig, withThinkingConfig } from "../ai/providers";
 import { getSystemPrompt } from "../ai/prompts";
 import { getMergedTools } from "../ai/tools";
+import { ToolRetryTracker } from "../ai/tools/retry-tracker";
 import { connectionManager } from "../ws/connection-manager";
 import { deduplicateAssistantParts } from "./deduplicate-parts";
 import { normalizeStaleInteractions } from "./normalize-stale-interactions";
@@ -79,11 +80,13 @@ export async function handleChatRequest(req: Request): Promise<Response> {
       modelConfig,
       connectionId,
       locale,
+      toolRetries,
     }: {
       messages: any[];
       modelConfig?: ModelConfig;
       connectionId?: string;
       locale?: string;
+      toolRetries?: number;
     } = body;
 
     if (!messages || !Array.isArray(messages)) {
@@ -114,7 +117,8 @@ export async function handleChatRequest(req: Request): Promise<Response> {
 
     // Scope tools to the requesting browser connection when available.
     const dynamicSchemas = connectionManager.getToolSchemas(connectionId);
-    const mergedTools = getMergedTools(dynamicSchemas, connectionId);
+    const retryTracker = new ToolRetryTracker(toolRetries ?? 5);
+    const mergedTools = getMergedTools(dynamicSchemas, connectionId, retryTracker);
 
     const normalizedMessages = materialiseFileAttachments(
       deduplicateAssistantParts(normalizeStaleInteractions(messages)),

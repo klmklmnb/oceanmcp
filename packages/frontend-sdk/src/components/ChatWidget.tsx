@@ -282,6 +282,7 @@ export function ChatWidget({ avatar }: { avatar?: string }) {
         body: () => ({
           connectionId: wsClient.currentConnectionId ?? undefined,
           modelConfig: sdkConfig.model ?? undefined,
+          toolRetries: sdkConfig.toolRetries ?? undefined,
         }),
       }),
     [],
@@ -301,10 +302,6 @@ export function ChatWidget({ avatar }: { avatar?: string }) {
           !submittedApprovalIdsRef.current.has(part.approval?.id)
         );
       });
-
-      const hasApprovedApprovalResponse = approvalRespondedParts.some(
-        (part: any) => part.approval?.approved === true,
-      );
 
       const hasAnyApprovalResponse = approvalRespondedParts.length > 0;
 
@@ -332,9 +329,7 @@ export function ChatWidget({ avatar }: { avatar?: string }) {
 
       const decision = Boolean(
         allToolPartsSettled &&
-          (hasAnyApprovalResponse
-            ? hasApprovedApprovalResponse
-            : hasUserSelectResult),
+          (hasAnyApprovalResponse || hasUserSelectResult),
       );
 
       if (decision) {

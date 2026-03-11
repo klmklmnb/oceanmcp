@@ -2,6 +2,7 @@ import { tool } from "ai";
 import { z } from "zod";
 import { OPERATION_TYPE } from "@ocean-mcp/shared";
 import { connectionManager } from "../../ws/connection-manager";
+import type { ToolRetryTracker } from "./retry-tracker";
 
 /**
  * Prefix used to namespace server-side tool IDs in the blocklist.
@@ -89,7 +90,7 @@ const browserExecuteParameters = z.object({
  * `autoApprove: true` are allowed here; other write/mutation operations
  * must use the executePlan tool which requires user approval.
  */
-export function createBrowserExecuteTool(connectionId?: string) {
+export function createBrowserExecuteTool(connectionId?: string, retryTracker?: ToolRetryTracker) {
   return tool({
     description:
       "Execute a registered function on the browser side. This runs in the user's authenticated browser session and can access the host web application's APIs, DOM, and state. Supports all READ operations and WRITE operations that have autoApprove enabled. For write/mutation operations without autoApprove, you MUST use the executePlan tool to generate a plan that requires user approval.",
@@ -145,10 +146,26 @@ export function createBrowserExecuteTool(connectionId?: string) {
           connectionId,
         );
       } catch (error) {
-        return {
-          error: error instanceof Error ? error.message : String(error),
-          functionId,
-        };
+        const msg = error instanceof Error ? error.message : String(error);
+
+        if (retryTracker) {
+          const canRetry = retryTracker.recordFailure(functionId);
+          if (canRetry) {
+            return {
+              error: msg,
+              functionId,
+              _retryHint: `Tool execution failed (attempt ${retryTracker.getAttempt(functionId) - 1}/${retryTracker.max}). Analyze the error and retry with corrected parameters.`,
+            };
+          }
+          return {
+            error: msg,
+            functionId,
+            _retryExhausted: true,
+            _retryHint: `Tool execution failed and retry limit (${retryTracker.max}) reached. Report this error to the user and do NOT retry this tool.`,
+          };
+        }
+
+        return { error: msg, functionId };
       }
     },
   });

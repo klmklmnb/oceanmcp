@@ -5,6 +5,7 @@ import { connectionManager } from "../../ws/connection-manager";
 import { createZodSchema } from "./index";
 import { containsVariableRef, resolveVariableRefs } from "./variable-ref";
 import { isServerSideTool } from "./browser-proxy-tool";
+import type { ToolRetryTracker } from "./retry-tracker";
 
 type Step = {
   functionId: string;
@@ -83,7 +84,7 @@ function validateSteps(steps: Step[], connectionId?: string): string | null {
  * - If validation fails  → returns false → execute runs immediately, returns
  *   the error to the LLM for silent retry. The user never sees the bad plan.
  */
-export function createExecutePlanTool(connectionId?: string) {
+export function createExecutePlanTool(connectionId?: string, retryTracker?: ToolRetryTracker) {
   return tool({
     description:
       "Execute a multi-step plan with write/mutation operations on the host web application. Each step calls a registered browser-side function. The user must approve the plan before execution proceeds.",
@@ -135,11 +136,27 @@ export function createExecutePlanTool(connectionId?: string) {
       // immediately and returns the error to the LLM for retry.
       const validationError = validateSteps(steps, connectionId);
       if (validationError) {
+        // When a retry tracker is present, consume a retry attempt for the
+        // "executePlan" pseudo-function so the LLM cannot loop forever.
+        const canRetry = retryTracker
+          ? retryTracker.recordFailure("executePlan")
+          : true; // backward compat: no tracker → always allow retry
+
+        if (canRetry) {
+          return {
+            _silentRetry: true,
+            totalSteps: steps.length,
+            completedSteps: 0,
+            validationError: `Validation failed — ${validationError}. Please regenerate the plan with correct parameters.`,
+          };
+        }
+
+        // Retry budget exhausted — surface the error to the user.
         return {
-          _silentRetry: true,
           totalSteps: steps.length,
           completedSteps: 0,
-          validationError: `Validation failed — ${validationError}. Please regenerate the plan with correct parameters.`,
+          validationError: `Validation failed after ${retryTracker!.max} retries — ${validationError}. Report this error to the user.`,
+          _retryExhausted: true,
         };
       }
 
@@ -184,12 +201,27 @@ export function createExecutePlanTool(connectionId?: string) {
             result,
           });
         } catch (error) {
+          const errMsg = error instanceof Error ? error.message : String(error);
+          const canRetry = retryTracker
+            ? retryTracker.recordFailure(step.functionId)
+            : false;
+
           results.push({
             stepIndex: i,
             title: step.title,
             functionId: step.functionId,
             status: FLOW_STEP_STATUS.FAILED,
-            error: error instanceof Error ? error.message : String(error),
+            error: errMsg,
+            ...(retryTracker && canRetry
+              ? {
+                  _retryHint: `Step execution failed (attempt ${retryTracker.getAttempt(step.functionId) - 1}/${retryTracker.max}). Regenerate the plan with corrected parameters for this step.`,
+                }
+              : retryTracker
+                ? {
+                    _retryExhausted: true,
+                    _retryHint: `Step execution failed and retry limit (${retryTracker.max}) reached. Report this error to the user.`,
+                  }
+                : {}),
           });
           // Stop on first failure
           break;

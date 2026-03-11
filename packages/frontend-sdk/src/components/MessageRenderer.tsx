@@ -112,6 +112,7 @@ type ToolCallCardProps = {
   errorText?: string;
   fnDef?: ReturnType<typeof functionRegistry.get>;
   fnArgs: Record<string, any>;
+  approval?: { approved?: boolean; reason?: string };
   approvalId?: string;
   onApprove?: (toolCallId: string, toolName: string, approvalId?: string) => void;
   onDeny?: (toolCallId: string, toolName: string, approvalId?: string) => void;
@@ -127,6 +128,7 @@ function ToolCallCard({
   errorText,
   fnDef,
   fnArgs,
+  approval,
   approvalId,
   onApprove,
   onDeny,
@@ -136,6 +138,14 @@ function ToolCallCard({
   const [expanded, setExpanded] = useState(!isReadOp && !isLoadSkill);
 
   const hasCustomRender = !!fnDef?.showRender;
+
+  // Detect error embedded in a successful tool result (e.g. retry logic
+  // returns { error: "...", _retryHint: "..." } as output instead of throwing).
+  const isOutputError =
+    state === TOOL_PART_STATE.OUTPUT_AVAILABLE &&
+    output != null &&
+    typeof output === "object" &&
+    typeof output.error === "string";
 
   return (
     <div className="my-3 rounded-xl border border-border bg-surface overflow-hidden shadow-card ocean-fade-in">
@@ -154,20 +164,29 @@ function ToolCallCard({
           >
             {displayName}
           </span>
-          {state === TOOL_PART_STATE.OUTPUT_AVAILABLE && (
+          {state === TOOL_PART_STATE.OUTPUT_AVAILABLE && !isOutputError && (
             <span className="ml-auto flex whitespace-nowrap items-center gap-1.5 text-xs text-emerald-600">
               <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
               {t("tool.status.complete")}
             </span>
           )}
-          {state === TOOL_PART_STATE.OUTPUT_ERROR && (
+          {(state === TOOL_PART_STATE.OUTPUT_ERROR || isOutputError) && (
             <span className="ml-auto flex whitespace-nowrap items-center gap-1.5 text-xs text-red-500">
               <span className="w-1.5 h-1.5 rounded-full bg-red-400" />
               {t("tool.status.error")}
             </span>
           )}
+          {(state === TOOL_PART_STATE.OUTPUT_DENIED ||
+            (state === TOOL_PART_STATE.APPROVAL_RESPONDED &&
+              approval?.approved === false)) && (
+            <span className="ml-auto flex whitespace-nowrap items-center gap-1.5 text-xs text-text-tertiary">
+              <span className="w-1.5 h-1.5 rounded-full bg-gray-400" />
+              {t("tool.status.denied")}
+            </span>
+          )}
           {(state === TOOL_PART_STATE.INPUT_AVAILABLE ||
-            state === TOOL_PART_STATE.APPROVAL_RESPONDED) && (
+            (state === TOOL_PART_STATE.APPROVAL_RESPONDED &&
+              approval?.approved !== false)) && (
             <span className="ml-auto flex whitespace-nowrap items-center gap-1.5 text-xs text-ocean-500">
               <span
                 className="inline-block w-3 h-3 border-2 border-ocean-500 border-t-transparent rounded-full"
@@ -187,13 +206,14 @@ function ToolCallCard({
                 functionId: fnDef!.id,
                 title: displayName,
                 arguments: fnArgs,
-                status: state === TOOL_PART_STATE.OUTPUT_AVAILABLE
+                status: (state === TOOL_PART_STATE.OUTPUT_AVAILABLE && !isOutputError)
                   ? ("success" as any)
-                  : state === TOOL_PART_STATE.OUTPUT_ERROR
+                  : (state === TOOL_PART_STATE.OUTPUT_ERROR || isOutputError)
                     ? ("failed" as any)
                     : ("running" as any),
               })}
               {state === TOOL_PART_STATE.OUTPUT_AVAILABLE &&
+                !isOutputError &&
                 output !== undefined && (
                 <div className="pt-2">
                   <p className="text-xs font-medium text-text-tertiary mb-1.5">{t("tool.label.result")}</p>
@@ -219,6 +239,7 @@ function ToolCallCard({
                 </div>
                 )}
               {state === TOOL_PART_STATE.OUTPUT_AVAILABLE &&
+                !isOutputError &&
                 output !== undefined && (
                 <div className="px-4 pt-2 pb-3">
                   <p className="text-xs font-medium text-text-tertiary mb-1.5">{t("tool.label.result")}</p>
@@ -231,9 +252,13 @@ function ToolCallCard({
                 )}
             </>
           )}
-          {state === TOOL_PART_STATE.OUTPUT_ERROR && errorText && (
+          {(state === TOOL_PART_STATE.OUTPUT_ERROR || isOutputError) && (
             <div className="p-4">
-              <p className="text-xs text-red-500">{typeof errorText === "string" ? errorText : JSON.stringify(errorText)}</p>
+              <p className="text-xs text-red-500">
+                {isOutputError
+                  ? output.error
+                  : typeof errorText === "string" ? errorText : JSON.stringify(errorText)}
+              </p>
             </div>
           )}
         </>
@@ -752,6 +777,7 @@ export function MessageRenderer({
               errorText={errorText}
               fnDef={fnDef}
               fnArgs={fnArgs}
+              approval={approval}
               approvalId={approvalId}
               onApprove={onApprove}
               onDeny={onDeny}
