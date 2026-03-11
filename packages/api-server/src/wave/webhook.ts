@@ -14,8 +14,12 @@
 
 import type { WaveConfig } from "./config";
 import { getWaveClients } from "./client";
-import { handleWaveMessage } from "./event-handler";
-import type { WaveEvent } from "./message-parser";
+import {
+  handleWaveMessage,
+  handleWaveMessageFromContext,
+  tryHandleWaveKeywordCommand,
+} from "./event-handler";
+import type { WaveEvent, WaveMessageContext } from "./message-parser";
 import {
   resolvePendingPlanApproval,
   hasPendingPlanApproval,
@@ -26,9 +30,15 @@ import {
   hasPendingSelection,
 } from "./pending-selections";
 import {
+  hasPendingPostPlanAction,
+  resolvePendingPostPlanAction,
+  POST_PLAN_ACTION,
+} from "./pending-post-plan-actions";
+import {
   updateCardAfterSelection,
   updateCardAsExpired,
   updateExecutePlanDecisionCard,
+  updatePostExecutePlanActionsCard,
 } from "./message-sender";
 import { logger } from "../logger";
 
@@ -198,6 +208,71 @@ export function registerEventHandlers(config: WaveConfig): void {
       ).catch((err) =>
         logger.error("[Wave] Failed to update executePlan approval card:", err),
       );
+      return;
+    }
+
+    // ── Post-executePlan action buttons (总结当前会话 / 开启新回话) ─────
+    if (hasPendingPostPlanAction(open_msg_id)) {
+      const pendingAction = resolvePendingPostPlanAction(open_msg_id);
+      if (!pendingAction) return;
+
+      if (selectedValue === POST_PLAN_ACTION.SUMMARIZE) {
+        // Update card to show confirmation
+        void updatePostExecutePlanActionsCard(
+          clients,
+          open_msg_id,
+          "总结当前会话",
+        ).catch((err) =>
+          logger.error("[Wave] Failed to update post-plan action card:", err),
+        );
+
+        // Construct a synthetic context and trigger the AI summary pipeline
+        const syntheticCtx: WaveMessageContext = {
+          chatId: pendingAction.chatId,
+          messageId: open_msg_id,
+          senderId: pendingAction.senderId,
+          senderIdType: "union_id",
+          chatType: pendingAction.chatId.startsWith("oc_") ? "group" : "p2p",
+          mentionedBot: false,
+          content: "请总结当前会话的内容",
+          contentType: "text",
+          imageKeys: [],
+          sendAsNewMessage: true,
+        };
+        void handleWaveMessageFromContext(syntheticCtx, config).catch((err) =>
+          logger.error("[Wave] Failed to handle post-plan summary:", err),
+        );
+      } else if (selectedValue === POST_PLAN_ACTION.NEW_SESSION) {
+        // Update card to show confirmation
+        void updatePostExecutePlanActionsCard(
+          clients,
+          open_msg_id,
+          "开启新回话",
+        ).catch((err) =>
+          logger.error("[Wave] Failed to update post-plan action card:", err),
+        );
+
+        // Perform the same action as the /new command
+        const syntheticCtx: WaveMessageContext = {
+          chatId: pendingAction.chatId,
+          messageId: open_msg_id,
+          senderId: pendingAction.senderId,
+          senderIdType: "union_id",
+          chatType: pendingAction.chatId.startsWith("oc_") ? "group" : "p2p",
+          mentionedBot: false,
+          content: "/new",
+          contentType: "text",
+          imageKeys: [],
+          sendAsNewMessage: true,
+        };
+        void tryHandleWaveKeywordCommand(syntheticCtx, clients).catch((err) =>
+          logger.error("[Wave] Failed to handle post-plan new session:", err),
+        );
+      } else {
+        logger.warn(
+          `[Wave] Unknown post-plan action "${selectedValue}" for ${open_msg_id}`,
+        );
+      }
       return;
     }
 

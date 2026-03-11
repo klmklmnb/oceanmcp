@@ -284,9 +284,21 @@ describe("Wave executePlan tool", () => {
   });
 
   test("approved plan executes server-side steps and resolves variable refs", async () => {
+    const sendCalls: Array<{ chatId: string; content: any }> = [];
     const updateCalls: Array<{ msgId: string; content: any }> = [];
+    let sendCallCount = 0;
     const clients = createMockWaveClients({
-      msgSend: mock(async () => ({ msg_id: "wave_plan_approve_card" })),
+      msgSend: mock(async (chatId: string, msg: any) => {
+        sendCalls.push({ chatId, content: msg.content });
+        sendCallCount++;
+        // First call: approval card; second call: post-plan actions card
+        return {
+          msg_id:
+            sendCallCount === 1
+              ? "wave_plan_approve_card"
+              : "wave_post_plan_actions_card",
+        };
+      }),
       msgUpdateCardActively: mock(async (msgId: string, content: any) => {
         updateCalls.push({ msgId, content });
         return {};
@@ -362,6 +374,88 @@ describe("Wave executePlan tool", () => {
     expect(updateCalls[0].content.card.elements[0].text).toContain(
       '```json\n{\n  "published": true,\n  "draftId": "draft-release-note",\n  "channel": "wave"\n}\n```',
     );
+
+    // Verify post-plan actions card was sent (second msg.send call)
+    expect(sendCalls).toHaveLength(2);
+    const actionsCard = sendCalls[1].content;
+    expect(actionsCard.header.title).toBe("执行完成");
+    expect(actionsCard.card.tag).toBe("column");
+    // First element: markdown with task summary
+    const markdownEl = actionsCard.card.elements[0];
+    expect(markdownEl.tag).toBe("markdown");
+    expect(markdownEl.text).toContain("Create and publish a draft");
+    expect(markdownEl.text).toContain("已成功执行 2 个步骤");
+    expect(markdownEl.text).toContain("总结当前会话");
+    expect(markdownEl.text).toContain("开启新回话");
+    // Second element: flow with the two buttons
+    const flowEl = actionsCard.card.elements[1];
+    expect(flowEl.tag).toBe("flow");
+    expect(flowEl.elements).toHaveLength(2);
+    expect(flowEl.elements[0].text).toBe("总结当前会话");
+    expect(flowEl.elements[1].text).toBe("开启新回话");
+  });
+
+  test("failed plan does not send post-plan actions card", async () => {
+    const sendCalls: Array<{ chatId: string; content: any }> = [];
+    let sendCallCount = 0;
+    const clients = createMockWaveClients({
+      msgSend: mock(async (chatId: string, msg: any) => {
+        sendCalls.push({ chatId, content: msg.content });
+        sendCallCount++;
+        return { msg_id: sendCallCount === 1 ? "wave_plan_fail_card" : "should_not_be_sent" };
+      }),
+      msgUpdateCardActively: mock(async () => ({})),
+    });
+
+    const failingTool = tool({
+      description: "A tool that always fails",
+      inputSchema: z.object({ id: z.string() }),
+      execute: async ({ id }: { id: string }) => {
+        throw new Error("Simulated failure");
+        return { id }; // unreachable, satisfies type checker
+      },
+    });
+
+    const skill = {
+      name: "fail-skill",
+      description: "Fail test skill",
+      path: "/tmp/fail-skill",
+      tools: { failingAction: failingTool },
+    };
+
+    const tools = buildWaveTools(
+      [skill],
+      [],
+      createMockSandbox(),
+      clients,
+      "ou_sender",
+      "wave:dm:test_fail",
+      "oc_chat_fail",
+    );
+
+    const executePromise = (tools.executePlan as any).execute({
+      intent: "Run a failing action",
+      steps: [
+        {
+          functionId: "failingAction",
+          title: "This will fail",
+          arguments: { id: "abc" },
+        },
+      ],
+    });
+
+    await tick();
+    resolvePendingPlanApproval("wave_plan_fail_card", PLAN_APPROVAL_ACTION.APPROVE);
+    const result = await executePromise;
+
+    expect(result.totalSteps).toBe(1);
+    expect(result.completedSteps).toBe(1);
+    expect(result.results[0].status).toBe("failed");
+    expect(result.results[0].error).toContain("Simulated failure");
+
+    // Only one msg.send call: the approval card. No post-plan actions card.
+    expect(sendCalls).toHaveLength(1);
+    expect(sendCalls[0].content.header.title).toBe("待审批执行计划");
   });
 });
 

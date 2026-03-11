@@ -402,6 +402,31 @@ export async function sendInitialReplyCard(
 }
 
 /**
+ * Send the initial card as a new message (not a reply) for a streaming response.
+ *
+ * Used when the AI response should appear as a standalone message (e.g. when
+ * triggered by post-executePlan action buttons).
+ *
+ * @returns The message ID of the new card
+ */
+export async function sendInitialNewMessageCard(
+  clients: WaveClients,
+  chatId: string,
+  initialText: string,
+): Promise<string> {
+  const card = buildReplyCardContent(initialText, { streaming: true });
+  const t0 = Date.now();
+  try {
+    const result = await clients.msg.send(chatId, msgCard(card));
+    debugLog(`${TAG} msg.send (initial card): ${Date.now() - t0}ms`);
+    return result?.msg_id ?? "";
+  } catch (err) {
+    logger.error(`${TAG} msg.send (initial card) FAILED after ${Date.now() - t0}ms:`, err);
+    throw err;
+  }
+}
+
+/**
  * Enable streaming mode on a card.
  */
 export async function enableStreaming(
@@ -727,6 +752,21 @@ export async function sendSimpleReply(
   const t0 = Date.now();
   await clients.msg.reply(replyToMessageId, msgMarkdown(formatWaveReplyText(text)));
   debugLog(`${TAG} msg.reply (simple): ${Date.now() - t0}ms`);
+}
+
+/**
+ * Send a simple non-streaming markdown message (not a reply).
+ *
+ * Used when the AI response should appear as a standalone message.
+ */
+export async function sendSimpleNewMessage(
+  clients: WaveClients,
+  chatId: string,
+  text: string,
+): Promise<void> {
+  const t0 = Date.now();
+  await clients.msg.send(chatId, msgMarkdown(formatWaveReplyText(text)));
+  debugLog(`${TAG} msg.send (simple): ${Date.now() - t0}ms`);
 }
 
 // ── Interactive User-Select Card ─────────────────────────────────────────────
@@ -1131,6 +1171,97 @@ export async function updateCardAsExpired(
   } catch (err) {
     logger.error(
       `${TAG} msg.updateCardActively (selection expired) FAILED after ${Date.now() - t0}ms:`,
+      err,
+    );
+    // Non-fatal
+  }
+}
+
+// ── Post-ExecutePlan Action Card ─────────────────────────────────────────────
+
+/**
+ * Send a card with a task summary and follow-up action buttons after a
+ * successful executePlan.
+ *
+ * Layout:
+ *   header    (success template, "执行完成")
+ *   markdown  task summary + prompt for next action
+ *   flow      [总结当前会话] [开启新回话]
+ *
+ * @param clients        - Wave SDK clients
+ * @param chatId         - The chat/receiver ID to send to
+ * @param intent         - The plan intent description (what was accomplished)
+ * @param completedSteps - Number of successfully completed steps
+ * @returns The message ID of the sent card
+ */
+export async function sendPostExecutePlanActionsCard(
+  clients: WaveClients,
+  chatId: string,
+  intent: string,
+  completedSteps: number,
+): Promise<string> {
+  const summaryText =
+    `**${intent}**\n` +
+    `已成功执行 ${completedSteps} 个步骤。你可以选择：\n` +
+    `- **总结当前会话** — 生成本次会话的内容摘要\n` +
+    `- **开启新回话** — 清除历史记录，开始全新对话`;
+
+  const content = {
+    header: cardHeader("执行完成", "success"),
+    card: cardColumn([
+      cardMarkdown(summaryText),
+      cardFlow([
+        cardButton(
+          "总结当前会话",
+          cardOptionValue("summarize_session", "总结当前会话"),
+          { style: "primary" },
+        ),
+        cardButton(
+          "开启新回话",
+          cardOptionValue("new_session", "开启新回话"),
+          { style: "default" },
+        ),
+      ]),
+    ]),
+  };
+
+  const t0 = Date.now();
+  try {
+    const result = await clients.msg.send(chatId, msgCard(content));
+    debugLog(`${TAG} msg.send (post-executePlan actions card): ${Date.now() - t0}ms`);
+    return result?.msg_id ?? "";
+  } catch (err) {
+    logger.error(
+      `${TAG} msg.send (post-executePlan actions card) FAILED after ${Date.now() - t0}ms:`,
+      err,
+    );
+    return "";
+  }
+}
+
+/**
+ * Update the post-executePlan actions card after the user clicks a button.
+ *
+ * Replaces the buttons with a confirmation message.
+ */
+export async function updatePostExecutePlanActionsCard(
+  clients: WaveClients,
+  cardMessageId: string,
+  selectedLabel: string,
+): Promise<void> {
+  const content = {
+    header: cardHeader("执行完成", "success"),
+    card: cardColumn([
+      cardMarkdown(`已选择: **${selectedLabel}**`),
+    ]),
+  };
+  const t0 = Date.now();
+  try {
+    await clients.msg.updateCardActively(cardMessageId, content);
+    debugLog(`${TAG} msg.updateCardActively (post-executePlan action confirmed): ${Date.now() - t0}ms`);
+  } catch (err) {
+    logger.error(
+      `${TAG} msg.updateCardActively (post-executePlan action confirmed) FAILED after ${Date.now() - t0}ms:`,
       err,
     );
     // Non-fatal

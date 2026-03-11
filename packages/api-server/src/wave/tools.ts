@@ -489,6 +489,7 @@ export function buildWaveTools(
     clients,
     chatId,
     sessionKey,
+    senderId,
   );
 
   return tools;

@@ -33,9 +33,12 @@ const __dirname = dirname(__filename);
 
 // ─── Configuration ───────────────────────────────────────────────────────────
 
-const LOG_PREFIX = process.env.LOG_PREFIX || "ocean-mcp";
-const IS_PRODUCTION = process.env.NODE_ENV === "production";
-const LOG_LEVEL = process.env.DEBUG === "true" ? "debug" : "info";
+const getRuntimeEnv = (key: string) => process.env[key];
+
+const NODE_ENV = getRuntimeEnv("NODE_ENV");
+const LOG_PREFIX = getRuntimeEnv("LOG_PREFIX") || "ocean-mcp";
+const IS_PRODUCTION = NODE_ENV === "production";
+const LOG_LEVEL = getRuntimeEnv("DEBUG") === "true" ? "debug" : "info";
 
 // Dev mode: project-local logs/  |  Production: /srv-logs/
 const LOG_DIR = IS_PRODUCTION
@@ -45,7 +48,7 @@ const LOG_DIR = IS_PRODUCTION
 // Ensure the log directory exists
 try {
   mkdirSync(LOG_DIR, { recursive: true });
-} catch {
+} catch (error) {
   // If we can't create the directory (e.g. permission denied on /srv-logs),
   // file transports will fail gracefully — console transport still works.
 }
@@ -89,6 +92,17 @@ const consoleFormat = combine(
 
 // ─── Transports ──────────────────────────────────────────────────────────────
 
+const combinedFileTransport = new winston.transports.File({
+  filename: join(LOG_DIR, `${LOG_PREFIX}-combined.log`),
+  format: fileFormat,
+});
+
+const errorFileTransport = new winston.transports.File({
+  filename: join(LOG_DIR, `${LOG_PREFIX}-error.log`),
+  level: "error",
+  format: fileFormat,
+});
+
 const transports: winston.transport[] = [
   // Console — colorized in dev, plain in production
   new winston.transports.Console({
@@ -96,17 +110,10 @@ const transports: winston.transport[] = [
   }),
 
   // Combined log file — all levels
-  new winston.transports.File({
-    filename: join(LOG_DIR, `${LOG_PREFIX}-combined.log`),
-    format: fileFormat,
-  }),
+  combinedFileTransport,
 
   // Error-only log file
-  new winston.transports.File({
-    filename: join(LOG_DIR, `${LOG_PREFIX}-error.log`),
-    level: "error",
-    format: fileFormat,
-  }),
+  errorFileTransport,
 ];
 
 // ─── Logger Instance ─────────────────────────────────────────────────────────

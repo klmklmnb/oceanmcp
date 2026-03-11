@@ -41,6 +41,12 @@ export interface WaveMessageContext {
   contentType: string;
   /** Collected image_key values that need public URL resolution */
   imageKeys: string[];
+  /**
+   * When true, the AI response is sent as a new message (msg.send)
+   * instead of a reply (msg.reply). Used for synthetic contexts
+   * triggered by post-executePlan action buttons.
+   */
+  sendAsNewMessage?: boolean;
 }
 
 // ── Content Parsing ──────────────────────────────────────────────────────────

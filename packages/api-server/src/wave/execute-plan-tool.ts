@@ -10,7 +10,9 @@ import {
 import {
   sendExecutePlanCard,
   updateExecutePlanResultCard,
+  sendPostExecutePlanActionsCard,
 } from "./message-sender";
+import { addPendingPostPlanAction } from "./pending-post-plan-actions";
 import {
   containsVariableRef,
   resolveVariableRefs,
@@ -84,6 +86,7 @@ export function createWaveExecutePlanTool(
   clients: WaveClients,
   chatId: string,
   sessionKey: string,
+  senderId: string,
 ) {
   return tool({
     description:
@@ -244,6 +247,26 @@ export function createWaveExecutePlanTool(
         steps,
         finalResult,
       );
+
+      // Send follow-up action buttons on success (all steps completed without failure)
+      const allSucceeded = !finalResult.results.some(
+        (r) => r.status === FLOW_STEP_STATUS.FAILED,
+      );
+      if (allSucceeded && finalResult.completedSteps > 0) {
+        const actionCardMsgId = await sendPostExecutePlanActionsCard(
+          clients,
+          chatId,
+          intent,
+          finalResult.completedSteps,
+        );
+        if (actionCardMsgId) {
+          addPendingPostPlanAction(actionCardMsgId, {
+            sessionKey,
+            chatId,
+            senderId,
+          });
+        }
+      }
 
       return finalResult;
     },

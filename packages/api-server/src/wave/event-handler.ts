@@ -29,10 +29,12 @@ import { waveSessionManager } from "./session-manager";
 import { buildWaveTools } from "./tools";
 import { removeAllPlanApprovalsForSession } from "./pending-approvals";
 import { removeAllForSession } from "./pending-selections";
+import { removeAllPostPlanActionsForSession } from "./pending-post-plan-actions";
 import { buildAssistantStoredMessage } from "./message-history";
 import { msgCard } from "@mihoyo/wave-opensdk";
 import {
   sendInitialReplyCard,
+  sendInitialNewMessageCard,
   enableStreaming,
   updateStreamingText,
   updateCardFromSegments,
@@ -40,6 +42,7 @@ import {
   finalizeReplyCardFromSegments,
   buildReplyCardFromSegments,
   sendSimpleReply,
+  sendSimpleNewMessage,
   summariseToolArgs,
   isDisplayableTool,
   hasDisplayableTools,
@@ -146,6 +149,7 @@ export async function tryHandleWaveKeywordCommand(
     sessionKey,
     "User started a new session",
   );
+  removeAllPostPlanActionsForSession(sessionKey);
   await waveSessionManager.clear(sessionKey);
 
   debugLog(
@@ -153,7 +157,11 @@ export async function tryHandleWaveKeywordCommand(
       `selections=${removedSelections}, approvals=${removedApprovals}`,
   );
 
-  await sendSimpleReply(clients, ctx.messageId, NEW_SESSION_CONFIRMATION);
+  if (ctx.sendAsNewMessage) {
+    await sendSimpleNewMessage(clients, ctx.chatId, NEW_SESSION_CONFIRMATION);
+  } else {
+    await sendSimpleReply(clients, ctx.messageId, NEW_SESSION_CONFIRMATION);
+  }
   return true;
 }
 
@@ -168,7 +176,6 @@ export async function handleWaveMessage(
   config: WaveConfig,
   skillsZipUrl?: string,
 ): Promise<void> {
-  const t0 = Date.now();
   const clients = getWaveClients();
 
   // 1. Parse message
@@ -218,6 +225,26 @@ export async function handleWaveMessage(
     }
   }
 
+  await handleWaveMessageFromContext(ctx, config, skillsZipUrl);
+}
+
+/**
+ * Core AI pipeline for a parsed Wave message context.
+ *
+ * Runs the pipeline from skills loading through LLM response and saving.
+ * Extracted from handleWaveMessage so it can also be called directly
+ * (e.g. from post-executePlan action buttons) without re-parsing the
+ * event or re-running policy/image checks.
+ */
+export async function handleWaveMessageFromContext(
+  ctx: WaveMessageContext,
+  config: WaveConfig,
+  skillsZipUrl?: string,
+): Promise<void> {
+  const t0 = Date.now();
+  const clients = getWaveClients();
+  const reqId = ctx.messageId.slice(-8);
+
   // 3. Load skills from zip URL (if provided)
   const t2 = Date.now();
   const { sandbox, discoveredSkills: fileSkills } = getBasePromptContext();
@@ -244,6 +271,7 @@ export async function handleWaveMessage(
       sessionKey,
       "User sent a new message",
     );
+    removeAllPostPlanActionsForSession(sessionKey);
     if (removedSelections > 0 || removedApprovals > 0) {
       debugLog(
         `${TAG} [${reqId}] Rejected pending interactions for session ${sessionKey} ` +
@@ -310,11 +338,12 @@ export async function handleWaveMessage(
 
     logger.error(`${TAG} [${reqId}] ── Error after ${elapsed(t0)} ──`, err);
     try {
-      await sendSimpleReply(
-        clients,
-        ctx.messageId,
-        `An error occurred while processing your message. Please try again.`,
-      );
+      const errorText = `An error occurred while processing your message. Please try again.`;
+      if (ctx.sendAsNewMessage) {
+        await sendSimpleNewMessage(clients, ctx.chatId, errorText);
+      } else {
+        await sendSimpleReply(clients, ctx.messageId, errorText);
+      }
     } catch {
       // best effort
     }
@@ -342,11 +371,9 @@ async function handleStreamingResponse(
 ): Promise<void> {
   // Send initial placeholder card
   const tCard = Date.now();
-  const cardMessageId = await sendInitialReplyCard(
-    clients,
-    ctx.messageId,
-    "...",
-  );
+  const cardMessageId = ctx.sendAsNewMessage
+    ? await sendInitialNewMessageCard(clients, ctx.chatId, "...")
+    : await sendInitialReplyCard(clients, ctx.messageId, "...");
   debugLog(`${TAG} [${reqId}] Send initial card: ${elapsed(tCard)} (cardId=${cardMessageId ? cardMessageId.slice(-8) : 'NONE'})`);
 
   if (!cardMessageId) {
@@ -665,9 +692,17 @@ async function handleSimpleResponse(
     if (hasDisplayableTools(segments)) {
       // Send as a card with ordered tool status + markdown segments
       const content = buildReplyCardFromSegments(segments);
-      await clients.msg.reply(ctx.messageId, msgCard(content));
+      if (ctx.sendAsNewMessage) {
+        await clients.msg.send(ctx.chatId, msgCard(content));
+      } else {
+        await clients.msg.reply(ctx.messageId, msgCard(content));
+      }
     } else {
-      await sendSimpleReply(clients, ctx.messageId, fullText);
+      if (ctx.sendAsNewMessage) {
+        await sendSimpleNewMessage(clients, ctx.chatId, fullText);
+      } else {
+        await sendSimpleReply(clients, ctx.messageId, fullText);
+      }
     }
     debugLog(`${TAG} [${reqId}] Send reply: ${elapsed(tSend)}`);
 
