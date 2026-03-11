@@ -51,7 +51,9 @@ OceanMCPSDK.mount({
     { label: "米饭上今天的晚餐是什么？" },
     { label: "你能做什么？" }
   ],
-  enableSessions: true,
+  session: {
+    enable: true,
+  },
 });
 
 // ─── Mount the test panel ───────────────────────────────────────────────────

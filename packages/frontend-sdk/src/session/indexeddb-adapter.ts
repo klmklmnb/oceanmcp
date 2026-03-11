@@ -10,7 +10,7 @@ import type {
   SessionUpdateInput,
 } from "./session-adapter";
 
-const DB_NAME = "ocean-mcp-sessions";
+const DB_NAME_PREFIX = "ocean-mcp-sessions";
 const DB_VERSION = 1;
 const STORE_NAME = "sessions";
 const DEFAULT_SESSION_TITLE = "New Session";
@@ -72,6 +72,14 @@ function withTransaction(tx: IDBTransaction): Promise<void> {
 
 export class IndexedDBSessionAdapter implements SessionAdapter {
   private dbPromise: Promise<IDBDatabase> | null = null;
+  private dbName: string;
+
+  constructor(namespace?: string) {
+    const normalized = namespace?.trim();
+    this.dbName = normalized
+      ? `${DB_NAME_PREFIX}:${normalized}`
+      : DB_NAME_PREFIX;
+  }
 
   private openDB(): Promise<IDBDatabase> {
     if (this.dbPromise) return this.dbPromise;
@@ -82,7 +90,7 @@ export class IndexedDBSessionAdapter implements SessionAdapter {
         return;
       }
 
-      const request = indexedDB.open(DB_NAME, DB_VERSION);
+      const request = indexedDB.open(this.dbName, DB_VERSION);
 
       request.onupgradeneeded = () => {
         const db = request.result;
@@ -161,10 +169,16 @@ export class IndexedDBSessionAdapter implements SessionAdapter {
       const nextMessages = data.messages ?? existing.messages;
       const titleFromMessages = deriveTitleFromMessages(nextMessages);
       const explicitTitle = data.title != null ? normalizeTitle(data.title) : undefined;
+      const shouldKeepExistingTitle =
+        existing.title != null && existing.title !== DEFAULT_SESSION_TITLE;
 
       const next: StoredSessionRecord = {
         ...existing,
-        title: explicitTitle ?? titleFromMessages ?? existing.title,
+        title:
+          explicitTitle ??
+          (shouldKeepExistingTitle
+            ? existing.title
+            : titleFromMessages ?? existing.title),
         messages: nextMessages,
         updatedAt: Date.now(),
       };

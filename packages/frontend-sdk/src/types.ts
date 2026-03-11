@@ -54,6 +54,14 @@ export type { SlashCommand } from "./command/command-registry";
 /** Mount target: a CSS selector string or an HTMLElement. */
 export type MountTarget = string | HTMLElement;
 
+/** Session behavior options for frontend persistence. */
+export interface SessionOptions {
+  /** Enable session persistence and session UI/commands. */
+  enable: boolean;
+  /** Optional namespace to isolate storage across apps on same origin. */
+  namespace?: string;
+}
+
 /** Options accepted by `OceanMCPSDK.mount()`. */
 export interface MountOptions {
   /** CSS selector or element to mount into. */
@@ -125,16 +133,14 @@ export interface MountOptions {
    */
   toolRetries?: number;
   /**
-   * Enable local session persistence and session switching UI.
+   * Session options for persistence and isolation.
    *
-   * When enabled, the SDK stores conversations in IndexedDB and activates
-   * built-in slash commands:
+   * When `enable` is true, the SDK stores conversations in IndexedDB and
+   * activates built-in slash commands:
    * - `/new`: create and switch to a new session
    * - `/sessions`: open session history list
-   *
-   * @default false
    */
-  enableSessions?: boolean;
+  session?: SessionOptions;
 }
 
 // ─── SDK Interface ───────────────────────────────────────────────────────────

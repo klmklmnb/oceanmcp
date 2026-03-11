@@ -28,6 +28,7 @@ import {
   unregisterSessionBuiltinCommands,
 } from "./command/builtin-commands";
 import { sessionManager } from "./session/session-manager";
+import { IndexedDBSessionAdapter } from "./session/indexeddb-adapter";
 
 // ─── Public types (single source of truth) ───────────────────────────────────
 import type {
@@ -63,7 +64,10 @@ wsClient.connect();
 let _cleanupMonacoObserver: (() => void) | null = null;
 
 function syncSessionFeatures(): void {
-  const enabled = sdkConfig.sessionEnabled === true;
+  const sessionOptions = sdkConfig.session;
+  const enabled = sessionOptions?.enable === true;
+  const namespace = sessionOptions?.namespace?.trim();
+  sessionManager.setAdapter(new IndexedDBSessionAdapter(namespace));
   sessionManager.setEnabled(enabled);
   if (enabled) {
     registerSessionBuiltinCommands();
@@ -121,15 +125,16 @@ function mountOceanMCP(target?: MountTarget | MountOptions) {
     if (options.toolRetries != null) {
       sdkConfig.toolRetries = options.toolRetries;
     }
-    if (options.enableSessions != null) {
-      sdkConfig.sessionEnabled = options.enableSessions;
+    if (options.session !== undefined) {
+      sdkConfig.session = options.session;
     }
     if (options.shadowDOM === false) {
       useShadowDOM = false;
     }
-    syncSessionFeatures();
     target = options.root;
   }
+
+  syncSessionFeatures();
 
   setSdkTags({
     shadow_dom: useShadowDOM,
@@ -599,6 +604,7 @@ export type {
   OceanMCPSDKType,
   MountTarget,
   MountOptions,
+  SessionOptions,
   ModelConfig,
   FunctionDefinition,
   CodeFunctionDefinition,

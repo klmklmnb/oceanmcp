@@ -16,6 +16,7 @@ export class SessionManager {
 
   setAdapter(adapter: SessionAdapter): void {
     this.adapter = adapter;
+    this.currentSessionId = null;
   }
 
   setEnabled(enabled: boolean): void {
@@ -45,8 +46,8 @@ export class SessionManager {
     }
   }
 
-  private isSessionEmpty(session: SessionData): boolean {
-    return !Array.isArray(session.messages) || session.messages.length === 0;
+  private hasPersistableMessages(messages: any[]): boolean {
+    return Array.isArray(messages) && messages.length > 0;
   }
 
   private async getBridgeMessages(): Promise<any[]> {
@@ -76,27 +77,14 @@ export class SessionManager {
         await this.setBridgeMessages(existing.messages);
         return existing;
       }
+      this.currentSessionId = null;
     }
 
-    // On first entry, reuse the latest session only when it is still empty.
-    // This avoids creating multiple empty sessions on page refresh.
-    const sessions = await this.adapter.list();
-    if (sessions.length > 0) {
-      const latest = await this.adapter.get(sessions[0].id);
-      if (latest && this.isSessionEmpty(latest)) {
-        this.currentSessionId = latest.id;
-        await this.setBridgeMessages(latest.messages);
-        this.notify();
-        return latest;
-      }
-    }
-
-    // Otherwise, start with a brand-new session.
-    const created = await this.adapter.create();
-    this.currentSessionId = created.id;
-    await this.setBridgeMessages(created.messages);
+    // Lazy mode: do not persist an empty session on init.
+    this.currentSessionId = null;
+    await this.setBridgeMessages([]);
     this.notify();
-    return created;
+    return null;
   }
 
   async listSessions(): Promise<SessionMeta[]> {
@@ -104,10 +92,30 @@ export class SessionManager {
     return this.adapter.list();
   }
 
-  async saveCurrentSession(messages?: any[]): Promise<void> {
-    if (!this.enabled || !this.currentSessionId) return;
+  async saveCurrentSession(
+    messages?: any[],
+    sessionId?: string | null,
+  ): Promise<void> {
+    if (!this.enabled) return;
+    const hasExplicitSession = sessionId !== undefined;
+    if (hasExplicitSession && sessionId !== this.currentSessionId) {
+      // Stale timer callback after session switched.
+      return;
+    }
     const nextMessages = messages ?? (await this.getBridgeMessages());
-    await this.adapter.update(this.currentSessionId, {
+    if (!this.hasPersistableMessages(nextMessages)) {
+      return;
+    }
+
+    let targetId = hasExplicitSession ? sessionId : this.currentSessionId;
+    if (!targetId) {
+      const created = await this.adapter.create();
+      this.currentSessionId = created.id;
+      targetId = created.id;
+      this.notify();
+    }
+
+    await this.adapter.update(targetId, {
       messages: nextMessages,
     });
   }
@@ -135,16 +143,16 @@ export class SessionManager {
     return target;
   }
 
-  async createNewSession(title?: string): Promise<SessionData | null> {
+  async createNewSession(_title?: string): Promise<SessionData | null> {
     if (!this.enabled) return null;
 
     await this.saveCurrentSession();
 
-    const created = await this.adapter.create(title);
-    this.currentSessionId = created.id;
-    await this.setBridgeMessages(created.messages);
+    // Lazy mode: reset to draft state without persisting an empty session.
+    this.currentSessionId = null;
+    await this.setBridgeMessages([]);
     this.notify();
-    return created;
+    return null;
   }
 
   async deleteSession(id: string): Promise<void> {
@@ -157,9 +165,8 @@ export class SessionManager {
 
     const sessions = await this.adapter.list();
     if (sessions.length === 0) {
-      const created = await this.adapter.create();
-      this.currentSessionId = created.id;
-      await this.setBridgeMessages(created.messages);
+      this.currentSessionId = null;
+      await this.setBridgeMessages([]);
       this.notify();
       return;
     }

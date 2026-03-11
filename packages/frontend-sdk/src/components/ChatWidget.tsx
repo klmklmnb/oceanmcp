@@ -283,7 +283,7 @@ function SessionIcon() {
  * to the api-server's /api/chat endpoint.
  */
 export function ChatWidget({ avatar }: { avatar?: string }) {
-  const sessionsEnabled = sdkConfig.sessionEnabled === true;
+  const sessionsEnabled = sdkConfig.session?.enable === true;
   const currentLocale = useLocale();
   const scrollRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
@@ -636,10 +636,13 @@ export function ChatWidget({ avatar }: { avatar?: string }) {
 
   useEffect(() => {
     if (!sessionsEnabled) return;
-    if (!sessionManager.activeSessionId) return;
+    const sessionIdForEffect = currentSessionId;
 
     const timer = window.setTimeout(() => {
-      void sessionManager.saveCurrentSession(messages as any[]).catch((error) => {
+      sessionManager.saveCurrentSession(
+        messages as any[],
+        sessionIdForEffect,
+      ).catch((error) => {
         captureException(error, {
           tags: {
             stage: "session_autosave",
@@ -649,7 +652,7 @@ export function ChatWidget({ avatar }: { avatar?: string }) {
     }, 400);
 
     return () => window.clearTimeout(timer);
-  }, [messages, sessionsEnabled]);
+  }, [currentSessionId, messages, sessionsEnabled]);
 
   const handleCreateSession = useCallback(async () => {
     try {
