@@ -80,6 +80,56 @@ const darkColors: PanelColors = {
 const SAMPLE_OCR_IMAGE_URL =
   "https://patchwiki.biligame.com/images/ys/8/81/8393e6kjulrau058jy9qolyv30bfkiz.png";
 
+const SAMPLE_PDF_URL = "https://www.w3.org/WAI/ER/tests/xhtml/testfiles/resources/pdf/dummy.pdf";
+
+function PdfTester({ c, isDark }: { c: PanelColors; isDark: boolean }) {
+  const [url, setUrl] = useState(SAMPLE_PDF_URL);
+  const [loading, setLoading] = useState(false);
+
+  const handleSend = async () => {
+    if (!url.trim()) return;
+    setLoading(true);
+    try {
+      await OceanMCPSDK.chat(`请使用 readPdf 工具解析这个 PDF 文档并总结内容：${url.trim()}`);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+      <input
+        type="url"
+        value={url}
+        onChange={(e) => setUrl(e.target.value)}
+        placeholder="https://example.com/file.pdf"
+        style={{
+          width: "100%",
+          padding: "8px 10px",
+          borderRadius: 8,
+          border: `1px solid ${c.inputBorder}`,
+          fontSize: 12,
+          boxSizing: "border-box" as const,
+          fontFamily: "inherit",
+          background: c.inputBg,
+          color: c.inputText,
+        }}
+      />
+      <button
+        onClick={handleSend}
+        disabled={!url.trim() || loading}
+        style={{
+          ...btnBase,
+          background: !url.trim() || loading ? (isDark ? "#4b5563" : "#d1d5db") : "#f59e0b",
+          cursor: !url.trim() || loading ? "not-allowed" : "pointer",
+        }}
+      >
+        {loading ? "发送中..." : "让 AI 解析 PDF"}
+      </button>
+    </div>
+  );
+}
+
 function OcrTester({ c, isDark }: { c: PanelColors; isDark: boolean }) {
   const [imageUrl, setImageUrl] = useState(SAMPLE_OCR_IMAGE_URL);
   const [model, setModel] = useState("");
@@ -489,6 +539,16 @@ export function TestPanel() {
               })}
             </div>
           </div>
+
+          {/* PDF Reader test */}
+          <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+            <p style={{ margin: 0, fontSize: 11, color: c.label, fontWeight: 500 }}>
+              <code style={{ background: c.codeBg, padding: "1px 4px", borderRadius: 3, fontSize: 10, color: c.label }}>readPdf</code> 输入 PDF URL，触发文本提取
+            </p>
+            <PdfTester c={c} isDark={isDark} />
+          </div>
+
+          <hr style={{ border: "none", borderTop: `1px solid ${c.border}`, margin: "4px 0" }} />
 
           {/* OCR test */}
           <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>

@@ -32,6 +32,8 @@ const SERVER_SIDE_TOOL_IDS = new Set([
   `${SERVER_TOOL_PREFIX}executePlan`,
   `${SERVER_TOOL_PREFIX}getServerStatus`,
   `${SERVER_TOOL_PREFIX}echo`,
+  `${SERVER_TOOL_PREFIX}imageOcr`,
+  `${SERVER_TOOL_PREFIX}readPdf`,
 ]);
 
 /**

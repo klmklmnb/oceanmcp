@@ -34,6 +34,7 @@ import { waveSessionManager, type WaveUserInfo } from "./session-manager";
 import { sendUserSelectCard } from "./message-sender";
 import { addPendingSelection, type PendingSelectionOption } from "./pending-selections";
 import { imageOcr } from "../ai/tools/image-ocr-tool";
+import { readPdf } from "../ai/tools/read-pdf-tool";
 import { logger } from "../logger";
 
 const WAVE_BLOB_DOWNLOAD_BASE_URL = "https://oc.app.mihoyo.com/blob/v1/download/";
@@ -457,6 +458,7 @@ export function buildWaveTools(
     getCurrentUser: createGetCurrentUserTool(clients, senderId, sessionKey),
     getImageUrl: createGetImageUrlTool(clients),
     imageOcr,
+    readPdf,
   };
 
   const allSkills = [...fileSkills, ...zipSkills];

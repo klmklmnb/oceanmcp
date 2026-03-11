@@ -3,6 +3,7 @@ import { createBrowserExecuteTool } from "./browser-proxy-tool";
 import { createExecutePlanTool } from "./execute-plan-tool";
 import { userSelect } from "./user-select-tool";
 import { imageOcr } from "./image-ocr-tool";
+import { readPdf } from "./read-pdf-tool";
 import type { ToolRetryTracker } from "./retry-tracker";
 import {
   OPERATION_TYPE,
@@ -22,6 +23,7 @@ export const serverTools = {
   getServerStatus,
   echo,
   imageOcr,
+  readPdf,
 };
 
 function dedupeStrings(values: string[]): string[] {
@@ -234,6 +236,7 @@ export function getMergedTools(
   const tools: Record<string, Tool<any, any>> = {
     userSelect,
     imageOcr,
+    readPdf,
     // ...serverTools,
     ...getBrowserTools(connectionId, retryTracker),
   };
