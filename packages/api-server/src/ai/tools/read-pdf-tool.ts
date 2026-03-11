@@ -2,8 +2,9 @@ import { tool } from "ai";
 import { z } from "zod";
 import * as pdfjsLib from "pdfjs-dist/legacy/build/pdf.mjs";
 
-// 禁用 worker（服务端环境不需要）
-pdfjsLib.GlobalWorkerOptions.workerSrc = "";
+// Node.js 环境：直接 import worker，会在主线程作为 fallback 运行
+// @ts-ignore - worker 文件没有类型定义
+await import("pdfjs-dist/legacy/build/pdf.worker.mjs");
 
 export const readPdf = tool({
   description: "解析 PDF 文件并提取文本内容。支持公开 URL 和内部 CDN URL。",
@@ -20,8 +21,12 @@ export const readPdf = tool({
       
       const arrayBuffer = await response.arrayBuffer();
       
-      // 使用 pdfjs-dist 加载 PDF
-      const loadingTask = pdfjsLib.getDocument({ data: arrayBuffer });
+      // 使用 pdfjs-dist 加载 PDF（禁用 worker）
+      const loadingTask = pdfjsLib.getDocument({
+        data: arrayBuffer,
+        useWorkerFetch: false,
+        isEvalSupported: false,
+      });
       const pdf = await loadingTask.promise;
       
       // 提取所有页面的文本
