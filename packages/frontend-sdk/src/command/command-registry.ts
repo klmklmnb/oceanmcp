@@ -29,10 +29,17 @@ export function parseSlashCommand(input: string): ParsedSlashCommand | null {
     return { name: "", args: "" };
   }
 
-  const [name, ...rest] = raw.split(/\s+/);
+  const firstSpaceIndex = raw.indexOf(" ");
+  if (firstSpaceIndex === -1) {
+    return {
+      name: normalizeName(raw),
+      args: "",
+    };
+  }
+
   return {
-    name: normalizeName(name ?? ""),
-    args: rest.join(" ").trim(),
+    name: normalizeName(raw.slice(0, firstSpaceIndex)),
+    args: raw.slice(firstSpaceIndex + 1).trim(),
   };
 }
 

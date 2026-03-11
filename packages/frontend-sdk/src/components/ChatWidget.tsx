@@ -414,7 +414,9 @@ export function ChatWidget({ avatar }: { avatar?: string }) {
   } = useChat({ transport, sendAutomaticallyWhen });
 
   const messagesRef = useRef<any[]>(messages as any[]);
-  messagesRef.current = messages as any[];
+  useEffect(() => {
+    messagesRef.current = messages as any[];
+  }, [messages]);
 
   const refreshSessionMetas = useCallback(async () => {
     if (!sessionsEnabled) return;
@@ -649,7 +651,7 @@ export function ChatWidget({ avatar }: { avatar?: string }) {
           },
         });
       });
-    }, 400);
+    }, 2000);
 
     return () => window.clearTimeout(timer);
   }, [currentSessionId, messages, sessionsEnabled]);

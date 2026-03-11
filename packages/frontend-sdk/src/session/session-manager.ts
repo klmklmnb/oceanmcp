@@ -100,6 +100,12 @@ export class SessionManager {
     const hasExplicitSession = sessionId !== undefined;
     if (hasExplicitSession && sessionId !== this.currentSessionId) {
       // Stale timer callback after session switched.
+      if (import.meta.env.DEV) {
+        console.warn("[OceanMCP] Skipped saving stale session", {
+          requestedSessionId: sessionId,
+          activeSessionId: this.currentSessionId,
+        });
+      }
       return;
     }
     const nextMessages = messages ?? (await this.getBridgeMessages());
@@ -137,8 +143,8 @@ export class SessionManager {
     const target = await this.adapter.get(id);
     if (!target) return null;
 
-    this.currentSessionId = id;
     await this.setBridgeMessages(target.messages);
+    this.currentSessionId = id;
     this.notify();
     return target;
   }
