@@ -68,6 +68,15 @@ export function loadWaveConfig(): WaveConfig | null {
     return null;
   }
 
+  if (!aesKey || !token) {
+    logger.warn("[Wave] Webhook verification may fail because WAVE_AES_KEY or WAVE_TOKEN is missing.", {
+      hasAesKey: Boolean(aesKey),
+      aesKeyLength: aesKey.length,
+      hasToken: Boolean(token),
+      tokenLength: token.length,
+    });
+  }
+
   const envRaw = (process.env.WAVE_ENV ?? "Dev") as WaveEnv;
   const env: WaveEnv = envRaw === "Prod" ? "Prod" : "Dev";
 
