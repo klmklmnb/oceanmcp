@@ -37,6 +37,8 @@ const enUS = {
   "flow.collapse": "Collapse",
   "flow.itemCount": "{count} item(s)",
   "flow.rawData": "Raw Data",
+  "flow.showError": "Show more",
+  "flow.hideError": "Show less",
 
   // ApprovalButtons
   "approval.status": "Pending",

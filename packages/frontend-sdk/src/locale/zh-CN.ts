@@ -37,6 +37,8 @@ const zhCN = {
   "flow.collapse": "收起",
   "flow.itemCount": "{count} 项",
   "flow.rawData": "原始数据",
+  "flow.showError": "展开详情",
+  "flow.hideError": "收起",
 
   // ApprovalButtons
   "approval.status": "待确认",
