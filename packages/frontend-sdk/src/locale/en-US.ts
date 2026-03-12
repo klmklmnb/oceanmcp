@@ -13,6 +13,18 @@ const enUS = {
   "chat.dragdrop.description": "Release to upload",
   "chat.error.label": "Error:",
   "chat.stop.title": "Stop generating",
+  "chat.command.new": "Create and switch to a new session",
+  "chat.command.sessions": "Browse and switch session history",
+  "chat.session.open": "Session history",
+  "chat.session.title": "Chat Sessions",
+  "chat.session.description": "Switch, delete, or create a new session",
+  "chat.session.new": "New session",
+  "chat.session.close": "Close",
+  "chat.session.empty": "No sessions yet",
+  "chat.session.untitled": "Untitled session",
+  "chat.session.updatedAt": "Updated: {time}",
+  "chat.session.delete": "Delete",
+  "chat.session.deleteConfirm": "Delete this session?",
 
   // MessageRenderer
   "tool.status.complete": "Complete",

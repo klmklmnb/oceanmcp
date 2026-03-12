@@ -13,6 +13,18 @@ const zhCN = {
   "chat.dragdrop.description": "松开鼠标即可上传",
   "chat.error.label": "错误：",
   "chat.stop.title": "停止生成",
+  "chat.command.new": "创建并切换到新会话",
+  "chat.command.sessions": "查看并切换历史会话",
+  "chat.session.open": "会话历史",
+  "chat.session.title": "历史会话",
+  "chat.session.description": "切换、删除或创建新的会话",
+  "chat.session.new": "新建会话",
+  "chat.session.close": "关闭",
+  "chat.session.empty": "暂无历史会话",
+  "chat.session.untitled": "未命名会话",
+  "chat.session.updatedAt": "最近更新：{time}",
+  "chat.session.delete": "删除",
+  "chat.session.deleteConfirm": "确认删除这个会话吗？",
 
   // MessageRenderer
   "tool.status.complete": "已完成",

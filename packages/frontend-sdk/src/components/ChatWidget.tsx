@@ -22,6 +22,16 @@ import { getActiveShadowRoot } from "../shadow-dom";
 import { t } from "../locale";
 import { CHAT_STATUS } from "../constants/chat";
 import { API_URL } from "../config";
+import {
+  commandRegistry,
+  parseSlashCommand,
+  type SlashCommand,
+} from "../command/command-registry";
+import { OPEN_SESSIONS_EVENT } from "../command/builtin-commands";
+import { sessionManager } from "../session/session-manager";
+import type { SessionMeta } from "../session/session-adapter";
+import { CommandPalette } from "./CommandPalette";
+import { SessionList } from "./SessionList";
 
 const AUTO_DENY_REASON =
   "User sent a new message instead of responding to approval";
@@ -325,12 +335,33 @@ function AttachIcon() {
   );
 }
 
+/** Session/history icon */
+function SessionIcon() {
+  return (
+    <svg
+      width="16"
+      height="16"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <path d="M3 12a9 9 0 1 0 3-6.7" />
+      <polyline points="3 3 3 9 9 9" />
+      <path d="M12 7v5l3 3" />
+    </svg>
+  );
+}
+
 /**
  * Main Chat Widget component.
  * Uses Vercel AI SDK's `useChat` with `fetch`-based transport to connect
  * to the api-server's /api/chat endpoint.
  */
 export function ChatWidget({ avatar }: { avatar?: string }) {
+  const sessionsEnabled = sdkConfig.session?.enable === true;
   const currentLocale = useLocale();
   const scrollRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
@@ -338,6 +369,12 @@ export function ChatWidget({ avatar }: { avatar?: string }) {
   const [pendingFiles, setPendingFiles] = useState<PendingFile[]>([]);
   const [isDragging, setIsDragging] = useState(false);
   const [stopRequested, setStopRequested] = useState(false);
+  const [commandRegistryVersion, setCommandRegistryVersion] = useState(0);
+  const [commandSelectedIndex, setCommandSelectedIndex] = useState(0);
+  const [sessionMetas, setSessionMetas] = useState<SessionMeta[]>([]);
+  const [showSessionList, setShowSessionList] = useState(false);
+  const [currentSessionId, setCurrentSessionId] = useState<string | null>(null);
+  const [bridgeReady, setBridgeReady] = useState(false);
   const dragCounterRef = useRef(0);
   /** Track approval IDs that have already triggered an auto-submit to prevent re-sends. */
   const submittedApprovalIdsRef = useRef<Set<string>>(new Set());
@@ -352,6 +389,17 @@ export function ChatWidget({ avatar }: { avatar?: string }) {
     t("chat.welcome.suggestion2"),
     t("chat.welcome.suggestion3"),
   ];
+  const parsedSlashInput = useMemo(() => parseSlashCommand(input), [input]);
+  const slashCommands = useMemo(() => {
+    if (!parsedSlashInput) return [];
+    return commandRegistry.search(parsedSlashInput.name);
+  }, [parsedSlashInput, commandRegistryVersion]);
+  const showCommandPalette = Boolean(
+    parsedSlashInput &&
+      !parsedSlashInput.args &&
+      input.trim().startsWith("/") &&
+      slashCommands.length > 0,
+  );
 
   const transport = useMemo(
     () =>
@@ -404,8 +452,46 @@ export function ChatWidget({ avatar }: { avatar?: string }) {
     sendMessage,
   } = useChat({ transport, sendAutomaticallyWhen });
 
+  const messagesRef = useRef<any[]>(messages as any[]);
+  useEffect(() => {
+    messagesRef.current = messages as any[];
+  }, [messages]);
+
+  const refreshSessionMetas = useCallback(async () => {
+    if (!sessionsEnabled) return;
+    const metas = await sessionManager.listSessions();
+    setSessionMetas(metas);
+    setCurrentSessionId(sessionManager.activeSessionId);
+  }, [sessionsEnabled]);
+
+  const runSlashCommand = useCallback(
+    async (command: SlashCommand, args?: string) => {
+      setCommandSelectedIndex(0);
+      try {
+        await command.execute(args);
+        setInput("");
+        setPendingFiles([]);
+        await refreshSessionMetas();
+      } catch (error) {
+        captureException(error, {
+          tags: {
+            stage: "slash_command_execute",
+          },
+          extras: {
+            command: command.name,
+          },
+        });
+      }
+    },
+    [refreshSessionMetas],
+  );
+
   const handleInputChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
-    setInput(e.target.value);
+    const value = e.target.value;
+    setInput(value);
+    if (!value.trim().startsWith("/")) {
+      setCommandSelectedIndex(0);
+    }
   };
 
   const sendUserText = async (text: string) => {
@@ -437,11 +523,21 @@ export function ChatWidget({ avatar }: { avatar?: string }) {
 
   const handleSubmit = async (e?: React.FormEvent) => {
     e?.preventDefault();
-    
+
     const hasText = input.trim();
     const readyFiles = pendingFiles.filter((f) => f.status === "ready");
-    
+
     if (!hasText && readyFiles.length === 0) return;
+
+    const parsed = parseSlashCommand(input);
+    if (parsed && readyFiles.length === 0) {
+      const command = commandRegistry.get(parsed.name);
+      if (command) {
+        await runSlashCommand(command, parsed.args);
+        return;
+      }
+    }
+
     setStopRequested(false);
 
     const value = input;
@@ -519,6 +615,141 @@ export function ChatWidget({ avatar }: { avatar?: string }) {
       setStopRequested(false);
     }
   }, [status]);
+
+  useEffect(() => {
+    return commandRegistry.subscribe(() => {
+      setCommandRegistryVersion((prev) => prev + 1);
+    });
+  }, []);
+
+  useEffect(() => {
+    if (!showCommandPalette) {
+      setCommandSelectedIndex(0);
+      return;
+    }
+    if (commandSelectedIndex >= slashCommands.length) {
+      setCommandSelectedIndex(0);
+    }
+  }, [commandSelectedIndex, slashCommands.length, showCommandPalette]);
+
+  useEffect(() => {
+    if (!sessionsEnabled) return;
+    const unsubscribe = sessionManager.subscribe((id) => {
+      setCurrentSessionId(id);
+    });
+    return unsubscribe;
+  }, [sessionsEnabled]);
+
+  useEffect(() => {
+    if (!sessionsEnabled) return;
+    const handler = () => {
+      setShowSessionList(true);
+      void refreshSessionMetas();
+    };
+    window.addEventListener(OPEN_SESSIONS_EVENT, handler);
+    return () => window.removeEventListener(OPEN_SESSIONS_EVENT, handler);
+  }, [refreshSessionMetas, sessionsEnabled]);
+
+  useEffect(() => {
+    if (!sessionsEnabled || !bridgeReady) return;
+
+    let cancelled = false;
+    const bootstrap = async () => {
+      try {
+        await sessionManager.initialize();
+        if (!cancelled) {
+          await refreshSessionMetas();
+        }
+      } catch (error) {
+        captureException(error, {
+          tags: {
+            stage: "session_initialize",
+          },
+        });
+      }
+    };
+
+    void bootstrap();
+    return () => {
+      cancelled = true;
+    };
+  }, [bridgeReady, refreshSessionMetas, sessionsEnabled]);
+
+  useEffect(() => {
+    if (!sessionsEnabled) return;
+    const sessionIdForEffect = currentSessionId;
+
+    const timer = window.setTimeout(() => {
+      sessionManager.saveCurrentSession(
+        messages as any[],
+        sessionIdForEffect,
+      ).catch((error) => {
+        captureException(error, {
+          tags: {
+            stage: "session_autosave",
+          },
+        });
+      });
+    }, 2000);
+
+    return () => window.clearTimeout(timer);
+  }, [currentSessionId, messages, sessionsEnabled]);
+
+  const handleCreateSession = useCallback(async () => {
+    try {
+      await sessionManager.createNewSession();
+      await refreshSessionMetas();
+      setShowSessionList(false);
+    } catch (error) {
+      captureException(error, {
+        tags: {
+          stage: "session_create",
+        },
+      });
+    }
+  }, [refreshSessionMetas]);
+
+  const handleSwitchSession = useCallback(
+    async (sessionId: string) => {
+      try {
+        await sessionManager.switchSession(sessionId);
+        await refreshSessionMetas();
+        setShowSessionList(false);
+      } catch (error) {
+        captureException(error, {
+          tags: {
+            stage: "session_switch",
+          },
+          extras: {
+            sessionId,
+          },
+        });
+      }
+    },
+    [refreshSessionMetas],
+  );
+
+  const handleDeleteSession = useCallback(
+    async (sessionId: string) => {
+      if (!window.confirm(t("chat.session.deleteConfirm"))) {
+        return;
+      }
+      try {
+        await sessionManager.deleteSession(sessionId);
+        await refreshSessionMetas();
+      } catch (error) {
+        captureException(error, {
+          tags: {
+            stage: "session_delete",
+          },
+          extras: {
+            sessionId,
+          },
+        });
+      }
+    },
+    [refreshSessionMetas],
+  );
 
   // ─── Upload ──────────────────────────────────────────────────────────────
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -652,7 +883,11 @@ export function ChatWidget({ avatar }: { avatar?: string }) {
       setInput(text);
     });
 
-    chatBridge.register("getMessages", () => messages);
+    chatBridge.register("getMessages", () => messagesRef.current);
+
+    chatBridge.register("loadSession", (nextMessages: any[]) => {
+      setMessages(Array.isArray(nextMessages) ? nextMessages : []);
+    });
 
     chatBridge.register("clearMessages", () => {
       setMessages([]);
@@ -662,7 +897,11 @@ export function ChatWidget({ avatar }: { avatar?: string }) {
       handleStop();
     });
 
-    return () => chatBridge.unregisterAll();
+    setBridgeReady(true);
+    return () => {
+      setBridgeReady(false);
+      chatBridge.unregisterAll();
+    };
   }, [handleStop]);
 
   /**
@@ -747,6 +986,41 @@ export function ChatWidget({ avatar }: { avatar?: string }) {
   };
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (showCommandPalette) {
+      if (e.key === "ArrowDown") {
+        e.preventDefault();
+        setCommandSelectedIndex((prev) =>
+          prev + 1 >= slashCommands.length ? 0 : prev + 1,
+        );
+        return;
+      }
+      if (e.key === "ArrowUp") {
+        e.preventDefault();
+        setCommandSelectedIndex((prev) =>
+          prev - 1 < 0 ? slashCommands.length - 1 : prev - 1,
+        );
+        return;
+      }
+      if (e.key === "Escape") {
+        e.preventDefault();
+        setInput("");
+        setCommandSelectedIndex(0);
+        return;
+      }
+      if (
+        (e.key === "Enter" || e.key === "Tab") &&
+        !e.shiftKey &&
+        !e.nativeEvent.isComposing
+      ) {
+        e.preventDefault();
+        const selected = slashCommands[commandSelectedIndex] ?? slashCommands[0];
+        if (selected) {
+          void runSlashCommand(selected);
+        }
+        return;
+      }
+    }
+
     if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) {
       e.preventDefault();
       handleSubmit(e as any);
@@ -893,6 +1167,14 @@ export function ChatWidget({ avatar }: { avatar?: string }) {
             onSubmit={handleSubmit}
             className="relative bg-surface border border-border rounded-2xl shadow-float transition-shadow focus-within:shadow-glow focus-within:border-ocean-300"
           >
+            <CommandPalette
+              open={showCommandPalette}
+              commands={slashCommands}
+              selectedIndex={commandSelectedIndex}
+              onSelect={(command) => {
+                void runSlashCommand(command);
+              }}
+            />
             {/* File preview area */}
             {pendingFiles.length > 0 && (
               <div className="px-4 pt-4 pb-2 border-b border-border/30">
@@ -961,6 +1243,20 @@ export function ChatWidget({ avatar }: { avatar?: string }) {
             />
             <div className="absolute bottom-2 left-2 right-2 flex items-center justify-between px-2">
               <div className="flex items-center gap-2 text-text-tertiary">
+                {sessionsEnabled && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowSessionList(true);
+                      void refreshSessionMetas();
+                    }}
+                    disabled={isStreaming || isLoading}
+                    className="w-8 h-8 rounded-lg flex items-center justify-center transition-all cursor-pointer text-text-tertiary hover:text-text-secondary hover:bg-surface-tertiary"
+                    title={t("chat.session.open")}
+                  >
+                    <SessionIcon />
+                  </button>
+                )}
                 {uploadRegistry.isRegistered && (
                   <button
                     type="button"
@@ -1003,6 +1299,16 @@ export function ChatWidget({ avatar }: { avatar?: string }) {
           </form>
         </div>
       </div>
+
+      <SessionList
+        open={sessionsEnabled && showSessionList}
+        sessions={sessionMetas}
+        currentSessionId={currentSessionId}
+        onClose={() => setShowSessionList(false)}
+        onSwitch={handleSwitchSession}
+        onDelete={handleDeleteSession}
+        onCreate={handleCreateSession}
+      />
 
       {/* Drag and drop overlay */}
       {isDragging && uploadRegistry.isRegistered && (

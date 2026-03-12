@@ -47,11 +47,20 @@ export type {
 export type { SkillDefinition } from "./registry/skill-registry";
 export type { UploadHandler, UploadResult } from "./runtime/upload-registry";
 export type { SupportedLocale, SuggestionItem, Theme } from "./runtime/sdk-config";
+export type { SlashCommand } from "./command/command-registry";
 
 // ─── SDK-specific types ──────────────────────────────────────────────────────
 
 /** Mount target: a CSS selector string or an HTMLElement. */
 export type MountTarget = string | HTMLElement;
+
+/** Session behavior options for frontend persistence. */
+export interface SessionOptions {
+  /** Enable session persistence and session UI/commands. */
+  enable: boolean;
+  /** Optional namespace to isolate storage across apps on same origin. */
+  namespace?: string;
+}
 
 /** Options accepted by `OceanMCPSDK.mount()`. */
 export interface MountOptions {
@@ -123,6 +132,15 @@ export interface MountOptions {
    * @default 5
    */
   toolRetries?: number;
+  /**
+   * Session options for persistence and isolation.
+   *
+   * When `enable` is true, the SDK stores conversations in IndexedDB and
+   * activates built-in slash commands:
+   * - `/new`: create and switch to a new session
+   * - `/sessions`: open session history list
+   */
+  session?: SessionOptions;
 }
 
 // ─── SDK Interface ───────────────────────────────────────────────────────────
@@ -221,6 +239,12 @@ export interface OceanMCPSDKType {
 
   /** Remove the registered upload handler. */
   unregisterUploader(): void;
+
+  /** Register a slash command (without leading `/`). */
+  registerCommand(command: import("./command/command-registry").SlashCommand): void;
+
+  /** Unregister a slash command by name. */
+  unregisterCommand(name: string): void;
 
   /**
    * Mount the chat widget to a specific target.

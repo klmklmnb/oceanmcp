@@ -138,6 +138,10 @@ OceanMCPSDK.mount({
     { label: "帮我调试", text: "查看控制台错误并帮我修复它们" },
     { label: "你能做什么？" }, // 省略 text → 发送 "你能做什么？"
   ],
+  session: {
+    enable: true, // 可选：开启会话持久化与内置斜杠命令
+    namespace: "my-app", // 可选：同源多应用下的存储隔离命名空间
+  },
 });
 ```
 
@@ -150,6 +154,7 @@ OceanMCPSDK.mount({
 | `avatar`      | `string`                      | `undefined`      | AI 助手在聊天中显示的头像图片 URL。                                                                                                                                                 |
 | `theme`       | `"light" \| "dark" \| "auto"` | `undefined`      | UI 主题偏好。可设置为 `"light"`、`"dark"` 或 `"auto"`（跟随系统偏好）。未设置（`undefined`）时默认使用浅色主题。**响应式** —— 可通过 `sdkConfig.theme` 运行时动态修改。              |
 | `model`       | `ModelConfig`                 | `undefined`      | LLM 模型配置。控制聊天请求使用的模型和参数。详见下方[模型配置](#模型配置)。                                                                                                         |
+| `session`     | `SessionOptions`              | `undefined`      | 会话持久化选项。`enable: true` 时开启本地会话存储，并启用内置斜杠命令（`/new`、`/sessions`）。`namespace` 用于同源多应用的数据隔离。                                                 |
 | `shadowDOM`   | `boolean`                     | `true`           | 为 `true` 时，组件在 Shadow DOM 内渲染，实现完全的 CSS 隔离——你的应用样式不会影响组件，组件样式也不会影响你的应用。设为 `false` 可用于调试，但要注意样式可能会互相影响。            |
 | `suggestions` | `SuggestionItem[]`            | `undefined`      | 自定义欢迎页建议问题。每个条目包含 `label`（按钮显示文本）和可选的 `text`（点击时实际发送的消息）。设置后会完全替换默认的建议问题。如果省略 `text`，则 `label` 同时用于显示和发送。 |
 
@@ -220,6 +225,31 @@ OceanMCPSDK.mount({
 ```
 
 这在你希望建议按钮显示简短、用户友好的标签，同时在幕后向 AI 发送更详细或结构化的提示时非常有用。
+
+### Session 配置
+
+Session 能力通过 `session` 选项开启：
+
+```ts
+OceanMCPSDK.mount({
+  session: {
+    enable: true,
+    namespace: "my-app",
+  },
+});
+```
+
+`SessionOptions` 字段：
+
+- `enable`（`boolean`）：开启或关闭会话持久化
+- `namespace?`（`string`）：可选命名空间，用于同源下多应用数据隔离
+
+开启后的行为：
+
+- 会话保存在 IndexedDB（`ocean-mcp-sessions` + 可选 `:${namespace}`）
+- 内置斜杠命令 `/new` 和 `/sessions` 可用
+- 会话采用懒创建：空草稿态不落库
+- 只有有消息需要保存时才会创建持久化会话
 
 ### 运行时动态变更配置
 
@@ -657,6 +687,27 @@ await OceanMCPSDK.clearMessages();
 - 根据用户上下文预填充聊天输入
 - 构建包装 SDK 的自定义聊天 UI
 
+### 斜杠命令
+
+当 `session.enable` 为 `true` 时，内置斜杠命令可用：
+
+- `/new`：开始一个新的草稿会话
+- `/sessions`：打开历史会话面板并切换会话
+
+你也可以注册自定义斜杠命令：
+
+```ts
+OceanMCPSDK.registerCommand({
+  name: "helpdesk",
+  description: "打开工单处理流程",
+  execute: async (args) => {
+    await OceanMCPSDK.chat(`Helpdesk workflow: ${args ?? "default"}`);
+  },
+});
+
+OceanMCPSDK.unregisterCommand("helpdesk");
+```
+
 ---
 
 ## 注销与清理
@@ -712,6 +763,8 @@ const connectionId = OceanMCPSDK.wsClient.currentConnectionId;
 | `setInput(text)`            | `Promise<void>`            | 设置输入框文本，不发送。                                |
 | `getMessages()`             | `Promise<any[]>`           | 获取当前所有聊天消息。                                  |
 | `clearMessages()`           | `Promise<void>`            | 清空所有聊天消息。                                      |
+| `registerCommand(command)`  | `void`                     | 注册自定义斜杠命令。                                    |
+| `unregisterCommand(name)`   | `void`                     | 按名称注销斜杠命令。                                    |
 
 ---
 
@@ -808,6 +861,25 @@ interface SuggestionItem {
 }
 ```
 
+### SessionOptions
+
+```ts
+interface SessionOptions {
+  enable: boolean;
+  namespace?: string;
+}
+```
+
+### SlashCommand
+
+```ts
+interface SlashCommand {
+  name: string; // 不带 "/" 前缀的命令名
+  description: string;
+  execute: (args?: string) => void | Promise<void>;
+}
+```
+
 ---
 
 ## TypeScript 支持
@@ -841,6 +913,8 @@ import type {
   MountOptions,
   FunctionDefinition,
   SkillDefinition,
+  SessionOptions,
+  SlashCommand,
   ParameterDefinition,
   UploadResult,
   ModelConfig,

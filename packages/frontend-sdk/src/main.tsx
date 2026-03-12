@@ -22,6 +22,13 @@ import {
   patchCssForShadowDom,
   hoistPropertyRulesToDocument
 } from "./shadow-dom";
+import { commandRegistry } from "./command/command-registry";
+import {
+  registerSessionBuiltinCommands,
+  unregisterSessionBuiltinCommands,
+} from "./command/builtin-commands";
+import { sessionManager } from "./session/session-manager";
+import { IndexedDBSessionAdapter } from "./session/indexeddb-adapter";
 
 // ─── Public types (single source of truth) ───────────────────────────────────
 import type {
@@ -55,6 +62,19 @@ wsClient.connect();
 
 /** Cleanup function returned by the Monaco style observer. */
 let _cleanupMonacoObserver: (() => void) | null = null;
+
+function syncSessionFeatures(): void {
+  const sessionOptions = sdkConfig.session;
+  const enabled = sessionOptions?.enable === true;
+  const namespace = sessionOptions?.namespace?.trim();
+  sessionManager.setAdapter(new IndexedDBSessionAdapter(namespace));
+  sessionManager.setEnabled(enabled);
+  if (enabled) {
+    registerSessionBuiltinCommands();
+  } else {
+    unregisterSessionBuiltinCommands();
+  }
+}
 
 function captureRootError(
   kind: "uncaught" | "recoverable",
@@ -105,11 +125,16 @@ function mountOceanMCP(target?: MountTarget | MountOptions) {
     if (options.toolRetries != null) {
       sdkConfig.toolRetries = options.toolRetries;
     }
+    if (options.session !== undefined) {
+      sdkConfig.session = options.session;
+    }
     if (options.shadowDOM === false) {
       useShadowDOM = false;
     }
     target = options.root;
   }
+
+  syncSessionFeatures();
 
   setSdkTags({
     shadow_dom: useShadowDOM,
@@ -502,6 +527,16 @@ const sdk: OceanMCPSDKType = {
     console.log("[OceanMCP] Upload handler unregistered");
   },
 
+  registerCommand(command) {
+    commandRegistry.register(command);
+    console.log(`[OceanMCP] Command registered: /${command.name}`);
+  },
+
+  unregisterCommand(name: string) {
+    commandRegistry.unregister(name);
+    console.log(`[OceanMCP] Command unregistered: /${name}`);
+  },
+
   /**
    * Mount the chat widget to a specific target.
    *
@@ -569,6 +604,7 @@ export type {
   OceanMCPSDKType,
   MountTarget,
   MountOptions,
+  SessionOptions,
   ModelConfig,
   FunctionDefinition,
   CodeFunctionDefinition,
@@ -586,6 +622,7 @@ export type {
   SkillDefinition,
   UploadHandler,
   UploadResult,
+  SlashCommand,
   SupportedLocale,
   SuggestionItem,
   Theme,

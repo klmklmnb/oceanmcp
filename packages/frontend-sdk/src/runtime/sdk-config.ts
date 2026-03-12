@@ -26,6 +26,11 @@ export type SuggestionItem = {
   text?: string;
 };
 
+export type SessionConfig = {
+  enable: boolean;
+  namespace?: string;
+};
+
 export type SDKConfig = {
   locale?: SupportedLocale;
   avatar?: string;
@@ -39,6 +44,8 @@ export type SDKConfig = {
   theme?: Theme;
   /** Maximum LLM retry attempts per tool per chat turn. Default: 5. */
   toolRetries?: number;
+  /** Session options for persistence and namespace isolation. */
+  session?: SessionConfig;
 };
 
 export const LOCALE_CHANGE_EVENT = "ocean-mcp:locale-change";
@@ -142,5 +149,13 @@ export const sdkConfig = {
 
   set toolRetries(value: number | undefined) {
     config.toolRetries = value;
+  },
+
+  get session(): SessionConfig | undefined {
+    return config.session;
+  },
+
+  set session(value: SessionConfig | undefined) {
+    config.session = value;
   },
 };
