@@ -117,6 +117,12 @@ function createWaveUserSelectTool(
           .string()
           .optional()
           .describe("Optional prompt text shown to the user."),
+        defaultValue: z
+          .any()
+          .optional()
+          .describe(
+            "Optional default value to pre-select. The option whose value matches will be highlighted/pre-selected in the card.",
+          ),
         options: z
           .array(
             z.object({
@@ -147,6 +153,7 @@ function createWaveUserSelectTool(
       ),
     execute: async (input) => {
       const promptMessage = input.message || "请选择一个选项";
+      const defaultValue = input.defaultValue != null ? String(input.defaultValue) : undefined;
       const opts: PendingSelectionOption[] = (input.options ?? []).map(
         (o: { value?: any; label?: string; description?: string }) => ({
           value: String(o.value ?? ""),
@@ -168,6 +175,7 @@ function createWaveUserSelectTool(
           chatId,
           promptMessage,
           opts,
+          defaultValue,
         );
 
         if (!cardMsgId) {

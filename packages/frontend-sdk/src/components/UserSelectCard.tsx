@@ -13,6 +13,7 @@ type UserSelectInput = {
   functionId?: string;
   parameterName?: string;
   message?: string;
+  defaultValue?: unknown;
   options?: UserSelectOptionInput[];
 };
 
@@ -177,11 +178,19 @@ export function UserSelectCard({
   const [selectedOptionId, setSelectedOptionId] = React.useState("");
   const [manualValue, setManualValue] = React.useState("");
 
-  const firstOptionId = finalOptions[0]?.id ?? "";
+  // Determine the initial option: prefer the option matching input.defaultValue, else first.
+  const defaultOptionId = React.useMemo(() => {
+    if (input?.defaultValue != null) {
+      const match = finalOptions.find((opt) => isSameValue(opt.value, input.defaultValue));
+      if (match) return match.id;
+    }
+    return finalOptions[0]?.id ?? "";
+  }, [finalOptions, input?.defaultValue]);
+
   React.useEffect(() => {
-    setSelectedOptionId(firstOptionId);
+    setSelectedOptionId(defaultOptionId);
     setManualValue("");
-  }, [firstOptionId, toolCallId]);
+  }, [defaultOptionId, toolCallId]);
 
   const selectedOption = finalOptions.find(
     (option) => option.id === selectedOptionId,

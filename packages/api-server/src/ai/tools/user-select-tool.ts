@@ -28,6 +28,12 @@ export const userSelect = tool({
         .string()
         .optional()
         .describe("Optional prompt text shown to the user."),
+      defaultValue: z
+        .any()
+        .optional()
+        .describe(
+          "Optional default value to pre-select. The option whose value matches will be highlighted/pre-selected in the card.",
+        ),
       options: z
         .array(
           z.object({

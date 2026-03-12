@@ -850,6 +850,170 @@ describe("button vs dropdown threshold", () => {
 });
 
 // ═════════════════════════════════════════════════════════════════════════════
+// 6b. defaultValue support in button/dropdown cards
+// ═════════════════════════════════════════════════════════════════════════════
+
+describe("defaultValue support", () => {
+  test("buttons: matching defaultValue option gets primary style", async () => {
+    let sentContent: any = null;
+    const mockSend = mock(async (_chatId: string, msg: any) => {
+      sentContent = msg.content;
+      return { msg_id: "card_default_btn" };
+    });
+    const clients = createMockWaveClients({ msgSend: mockSend });
+
+    const { sendUserSelectCard } = await import("../src/wave/message-sender");
+    await sendUserSelectCard(
+      clients,
+      "oc_chat",
+      "Choose env",
+      [
+        { value: "dev", label: "Dev" },
+        { value: "staging", label: "Staging" },
+        { value: "prod", label: "Prod" },
+      ],
+      "staging",
+    );
+
+    expect(sentContent.card.tag).toBe(CardTag.Flow);
+    const buttons = sentContent.card.elements;
+    expect(buttons).toHaveLength(3);
+    // "staging" (index 1) should be primary
+    expect(buttons[0].style).toBe("default");
+    expect(buttons[1].style).toBe("primary");
+    expect(buttons[2].style).toBe("default");
+  });
+
+  test("buttons: no defaultValue → first option gets primary (backward compat)", async () => {
+    let sentContent: any = null;
+    const mockSend = mock(async (_chatId: string, msg: any) => {
+      sentContent = msg.content;
+      return { msg_id: "card_no_default_btn" };
+    });
+    const clients = createMockWaveClients({ msgSend: mockSend });
+
+    const { sendUserSelectCard } = await import("../src/wave/message-sender");
+    await sendUserSelectCard(clients, "oc_chat", "Choose env", [
+      { value: "dev", label: "Dev" },
+      { value: "staging", label: "Staging" },
+    ]);
+
+    const buttons = sentContent.card.elements;
+    expect(buttons[0].style).toBe("primary");
+    expect(buttons[1].style).toBe("default");
+  });
+
+  test("buttons: unmatched defaultValue → falls back to first option as primary", async () => {
+    let sentContent: any = null;
+    const mockSend = mock(async (_chatId: string, msg: any) => {
+      sentContent = msg.content;
+      return { msg_id: "card_bad_default_btn" };
+    });
+    const clients = createMockWaveClients({ msgSend: mockSend });
+
+    const { sendUserSelectCard } = await import("../src/wave/message-sender");
+    await sendUserSelectCard(
+      clients,
+      "oc_chat",
+      "Choose",
+      [
+        { value: "a", label: "A" },
+        { value: "b", label: "B" },
+      ],
+      "nonexistent",
+    );
+
+    const buttons = sentContent.card.elements;
+    expect(buttons[0].style).toBe("primary");
+    expect(buttons[1].style).toBe("default");
+  });
+
+  test("dropdown: matching defaultValue option is moved to front", async () => {
+    let sentContent: any = null;
+    const mockSend = mock(async (_chatId: string, msg: any) => {
+      sentContent = msg.content;
+      return { msg_id: "card_default_dd" };
+    });
+    const clients = createMockWaveClients({ msgSend: mockSend });
+
+    const { sendUserSelectCard } = await import("../src/wave/message-sender");
+    await sendUserSelectCard(
+      clients,
+      "oc_chat",
+      "Choose version",
+      [
+        { value: "v1", label: "V1" },
+        { value: "v2", label: "V2" },
+        { value: "v3", label: "V3" },
+        { value: "v4", label: "V4" },
+      ],
+      "v3",
+    );
+
+    expect(sentContent.card.tag).toBe(CardTag.Dropdown);
+    const opts = sentContent.card.options;
+    expect(opts).toHaveLength(4);
+    // v3 should be first
+    expect(opts[0].value).toBe("v3");
+    expect(opts[1].value).toBe("v1");
+    expect(opts[2].value).toBe("v2");
+    expect(opts[3].value).toBe("v4");
+  });
+
+  test("dropdown: no defaultValue → original order preserved", async () => {
+    let sentContent: any = null;
+    const mockSend = mock(async (_chatId: string, msg: any) => {
+      sentContent = msg.content;
+      return { msg_id: "card_no_default_dd" };
+    });
+    const clients = createMockWaveClients({ msgSend: mockSend });
+
+    const { sendUserSelectCard } = await import("../src/wave/message-sender");
+    await sendUserSelectCard(clients, "oc_chat", "Choose version", [
+      { value: "v1" },
+      { value: "v2" },
+      { value: "v3" },
+      { value: "v4" },
+    ]);
+
+    const opts = sentContent.card.options;
+    expect(opts[0].value).toBe("v1");
+    expect(opts[1].value).toBe("v2");
+    expect(opts[2].value).toBe("v3");
+    expect(opts[3].value).toBe("v4");
+  });
+
+  test("dropdown: unmatched defaultValue → original order preserved", async () => {
+    let sentContent: any = null;
+    const mockSend = mock(async (_chatId: string, msg: any) => {
+      sentContent = msg.content;
+      return { msg_id: "card_bad_default_dd" };
+    });
+    const clients = createMockWaveClients({ msgSend: mockSend });
+
+    const { sendUserSelectCard } = await import("../src/wave/message-sender");
+    await sendUserSelectCard(
+      clients,
+      "oc_chat",
+      "Choose",
+      [
+        { value: "a" },
+        { value: "b" },
+        { value: "c" },
+        { value: "d" },
+      ],
+      "nonexistent",
+    );
+
+    const opts = sentContent.card.options;
+    expect(opts[0].value).toBe("a");
+    expect(opts[1].value).toBe("b");
+    expect(opts[2].value).toBe("c");
+    expect(opts[3].value).toBe("d");
+  });
+});
+
+// ═════════════════════════════════════════════════════════════════════════════
 // 7. updateCardAfterSelection
 // ═════════════════════════════════════════════════════════════════════════════
 

@@ -905,13 +905,19 @@ function buildExecutePlanMarkdown(
 function buildButtonSelectCard(
   message: string,
   options: PendingSelectionOption[],
+  defaultValue?: string,
 ): MsgCard["content"] {
+  // Find the index of the option matching defaultValue; fall back to 0 (first option).
+  const defaultIndex = defaultValue != null
+    ? Math.max(options.findIndex((opt) => String(opt.value) === defaultValue), 0)
+    : 0;
+
   const buttons: Card[] = options.map((opt, i) =>
     cardButton(
       opt.label || String(opt.value),
       cardOptionValue(String(opt.value), opt.label || String(opt.value)),
-      // First option gets primary style to hint the "default" choice
-      { style: i === 0 ? "primary" : "default" },
+      // Default option gets primary style to hint the "default" choice
+      { style: i === defaultIndex ? "primary" : "default" },
     ),
   );
 
@@ -927,12 +933,30 @@ function buildButtonSelectCard(
  * Uses the dropdown component structure matching the Wave card spec:
  *   header   (info template, shows the prompt message)
  *   dropdown with value options
+ *
+ * When `defaultValue` is provided and matches an option, that option is moved
+ * to the front of the list so it appears as the initial selection (Wave
+ * CardDropdown does not support a native initial-value field).
  */
 function buildDropdownSelectCard(
   message: string,
   options: PendingSelectionOption[],
+  defaultValue?: string,
 ): MsgCard["content"] {
-  const dropdownOptions: CardOption[] = options.map((opt) =>
+  // Reorder: if a default matches, move it to the front so it shows first.
+  let orderedOptions = options;
+  if (defaultValue != null) {
+    const defaultIdx = options.findIndex((opt) => String(opt.value) === defaultValue);
+    if (defaultIdx > 0) {
+      orderedOptions = [
+        options[defaultIdx],
+        ...options.slice(0, defaultIdx),
+        ...options.slice(defaultIdx + 1),
+      ];
+    }
+  }
+
+  const dropdownOptions: CardOption[] = orderedOptions.map((opt) =>
     cardOptionValue(String(opt.value), opt.label || String(opt.value)),
   );
 
@@ -1037,9 +1061,10 @@ function buildExecutePlanResultContent(
  * Send an interactive user-select card (buttons or dropdown).
  *
  * @param clients   - Wave SDK clients
- * @param chatId    - The chat/receiver ID to send to
- * @param message   - Prompt text shown to the user
- * @param options   - Selection options
+ * @param chatId       - The chat/receiver ID to send to
+ * @param message      - Prompt text shown to the user
+ * @param options      - Selection options
+ * @param defaultValue - Optional default value to pre-select/highlight
  * @returns The message ID of the sent card (used to correlate with the callback)
  */
 export async function sendUserSelectCard(
@@ -1047,11 +1072,12 @@ export async function sendUserSelectCard(
   chatId: string,
   message: string,
   options: PendingSelectionOption[],
+  defaultValue?: string,
 ): Promise<string> {
   const content =
     options.length <= BUTTON_THRESHOLD
-      ? buildButtonSelectCard(message, options)
-      : buildDropdownSelectCard(message, options);
+      ? buildButtonSelectCard(message, options, defaultValue)
+      : buildDropdownSelectCard(message, options, defaultValue);
 
   const t0 = Date.now();
   try {
