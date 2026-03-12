@@ -46,7 +46,7 @@ import {
   type CodeFunctionDefinition,
   type ParameterDefinition,
 } from "@ocean-mcp/shared";
-import { createZodSchema } from "../tools/index";
+import { createInputSchema } from "../tools/index";
 import { logger, createCodeToolConsoleMock } from "../../logger";
 
 // ─── Type Detection ──────────────────────────────────────────────────────────
@@ -59,7 +59,8 @@ import { logger, createCodeToolConsoleMock } from "../../logger";
  *   - `type === "code"`
  *   - `code` is a non-empty string
  *   - `id` and `description` are strings
- *   - `parameters` is an array
+ *   - `parameters` is an array (legacy) OR an object with `type: "object"`
+ *     and `properties` (JSON Schema)
  *
  * Vercel AI SDK `Tool` objects have a very different shape (they have
  * `inputSchema` and optionally `execute`), so there's no ambiguity.
@@ -71,14 +72,29 @@ export function isCodeFunctionDefinition(
 
   const candidate = obj as Record<string, unknown>;
 
-  return (
-    candidate.type === FUNCTION_TYPE.CODE &&
-    typeof candidate.code === "string" &&
-    candidate.code.length > 0 &&
-    typeof candidate.id === "string" &&
-    typeof candidate.description === "string" &&
-    Array.isArray(candidate.parameters)
-  );
+  if (
+    candidate.type !== FUNCTION_TYPE.CODE ||
+    typeof candidate.code !== "string" ||
+    candidate.code.length === 0 ||
+    typeof candidate.id !== "string" ||
+    typeof candidate.description !== "string"
+  ) {
+    return false;
+  }
+
+  // Parameters can be either a legacy array or a JSON Schema object
+  const params = candidate.parameters;
+  if (Array.isArray(params)) return true;
+  if (
+    params &&
+    typeof params === "object" &&
+    (params as any).type === "object" &&
+    typeof (params as any).properties === "object"
+  ) {
+    return true;
+  }
+
+  return false;
 }
 
 // ─── Mocked Browser Globals ──────────────────────────────────────────────────
@@ -184,7 +200,7 @@ async function executeCodeFunction(
  * Wrap a single `CodeFunctionDefinition` into a Vercel AI SDK `Tool`.
  *
  * The resulting tool:
- *   - Has a Zod `inputSchema` derived from `def.parameters`
+ *   - Has an `inputSchema` derived from `def.parameters` (Zod for legacy, JSON Schema for new format)
  *   - Executes the `def.code` string via `new Function()` server-side
  *   - Sets `needsApproval: true` for write operations without `autoApprove`
  *
@@ -194,7 +210,7 @@ async function executeCodeFunction(
 export function wrapCodeFunctionAsTool(
   def: CodeFunctionDefinition,
 ): Tool<any, any> {
-  const inputSchema = createZodSchema(def.parameters);
+  const inputSchema = createInputSchema(def.parameters);
 
   const requiresApproval =
     def.operationType === OPERATION_TYPE.WRITE && !def.autoApprove;

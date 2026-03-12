@@ -4,7 +4,7 @@ import { ChatWidget } from "./components/ChatWidget";
 import { functionRegistry, skillRegistry } from "./registry";
 import { wsClient } from "./runtime/ws-client";
 import { FUNCTION_TYPE, OPERATION_TYPE } from "@ocean-mcp/shared";
-import { baseFunctions } from "./registry/base/baseFunctions";
+import { baseFunctions, jsonSchemaTestTools } from "./registry/base/baseFunctions";
 import { chatBridge } from "./runtime/chat-bridge";
 import { uploadRegistry } from "./runtime/upload-registry";
 import { sdkConfig } from "./runtime/sdk-config";
@@ -44,6 +44,10 @@ import sdkStyles from "./styles/index.css?inline";
 // ─── Register base functions ─────────────────────────────────────────────────
 // These are built-in tools that ship with the SDK and are always available.
 for (const fn of baseFunctions) {
+  functionRegistry.register(fn);
+}
+// Register JSON Schema test tools (demonstrates new parameter format)
+for (const fn of jsonSchemaTestTools) {
   functionRegistry.register(fn);
 }
 
@@ -613,6 +617,9 @@ export type {
   ParameterDefinition,
   ColumnConfig,
   FunctionSchema,
+  FunctionParameters,
+  JSONSchemaParameters,
+  JSONSchemaProperty,
   FileAttachment,
   FlowPlan,
   FlowStep,

@@ -1,6 +1,6 @@
 import { tool } from "ai";
 import { z } from "zod";
-import { FLOW_STEP_STATUS } from "@ocean-mcp/shared";
+import { FLOW_STEP_STATUS, isJSONSchemaParameters } from "@ocean-mcp/shared";
 import { connectionManager } from "../../ws/connection-manager";
 import { createZodSchema } from "./index";
 import { containsVariableRef, resolveVariableRefs } from "./variable-ref";
@@ -59,15 +59,24 @@ function validateSteps(steps: Step[], connectionId?: string): string | null {
 
     // Search both standalone and skill-bundled tool registries
     const schema = findToolSchema(step.functionId, connectionId);
-    if (schema && schema.parameters.length > 0) {
-      const zodSchema = createZodSchema(schema.parameters);
-      const parseResult = zodSchema.safeParse(step.arguments);
+    if (schema) {
+      // Determine if the tool has parameters worth validating
+      const hasParams = isJSONSchemaParameters(schema.parameters)
+        ? Object.keys(schema.parameters.properties).length > 0
+        : schema.parameters.length > 0;
 
-      if (!parseResult.success) {
-        const issues = parseResult.error.issues
-          .map((issue) => `${issue.path.join(".")}: ${issue.message}`)
-          .join("; ");
-        return `Step ${i} ("${step.functionId}"): ${issues}`;
+      if (hasParams && !isJSONSchemaParameters(schema.parameters)) {
+        // Only validate legacy ParameterDefinition[] with Zod.
+        // JSON Schema params are validated by the AI SDK's own validation.
+        const zodSchema = createZodSchema(schema.parameters);
+        const parseResult = zodSchema.safeParse(step.arguments);
+
+        if (!parseResult.success) {
+          const issues = parseResult.error.issues
+            .map((issue) => `${issue.path.join(".")}: ${issue.message}`)
+            .join("; ");
+          return `Step ${i} ("${step.functionId}"): ${issues}`;
+        }
       }
     }
   }

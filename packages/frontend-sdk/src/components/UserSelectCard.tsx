@@ -1,5 +1,5 @@
 import React from "react";
-import { TOOL_PART_STATE } from "@ocean-mcp/shared";
+import { TOOL_PART_STATE, isJSONSchemaParameters } from "@ocean-mcp/shared";
 import { functionRegistry } from "../registry";
 import { t } from "../locale";
 
@@ -141,7 +141,9 @@ export function UserSelectCard({
   const paramDef = React.useMemo(() => {
     if (!input?.functionId || !input?.parameterName) return undefined;
     const fnDef = functionRegistry.get(input.functionId);
-    return fnDef?.parameters.find((p) => p.name === input.parameterName);
+    return fnDef?.parameters && !isJSONSchemaParameters(fnDef.parameters)
+      ? fnDef.parameters.find((p) => p.name === input.parameterName)
+      : undefined;
   }, [input?.functionId, input?.parameterName]);
 
   const options = React.useMemo<SelectOption[]>(() => {

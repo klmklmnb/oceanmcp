@@ -101,6 +101,123 @@ export interface ParameterDefinition {
   columns?: Record<string, ColumnConfig>;
 }
 
+// ─── JSON Schema Parameters ─────────────────────────────────────────────────
+
+/**
+ * A single property definition within a JSON Schema object.
+ *
+ * Supports the subset of JSON Schema Draft 7 commonly used for
+ * LLM tool parameter definitions. Recursive for nested objects.
+ */
+export interface JSONSchemaProperty {
+  type?: string | string[];
+  description?: string;
+  enum?: (string | number | boolean | null)[];
+  const?: unknown;
+  default?: unknown;
+
+  // ── String constraints ──
+  minLength?: number;
+  maxLength?: number;
+  pattern?: string;
+  format?: string;
+
+  // ── Number constraints ──
+  minimum?: number;
+  maximum?: number;
+  exclusiveMinimum?: number;
+  exclusiveMaximum?: number;
+  multipleOf?: number;
+
+  // ── Array constraints ──
+  items?: JSONSchemaProperty;
+  minItems?: number;
+  maxItems?: number;
+  uniqueItems?: boolean;
+
+  // ── Object constraints (nested) ──
+  properties?: Record<string, JSONSchemaProperty>;
+  required?: string[];
+  additionalProperties?: boolean | JSONSchemaProperty;
+
+  // ── Composition ──
+  oneOf?: JSONSchemaProperty[];
+  anyOf?: JSONSchemaProperty[];
+  allOf?: JSONSchemaProperty[];
+  not?: JSONSchemaProperty;
+
+  // ── References ──
+  $ref?: string;
+
+  /** Allow additional JSON Schema keywords not explicitly listed */
+  [key: string]: unknown;
+}
+
+/**
+ * JSON Schema parameter definition for function tools.
+ *
+ * An alternative to `ParameterDefinition[]` that allows describing tool
+ * parameters using standard JSON Schema (Draft 7) format. This provides
+ * richer type information including nested objects, constraints, union
+ * types, and more.
+ *
+ * @example
+ * ```ts
+ * const params: JSONSchemaParameters = {
+ *   type: "object",
+ *   required: ["weight", "destination"],
+ *   properties: {
+ *     weight: { type: "number", description: "包裹重量（千克）" },
+ *     destination: { type: "string", description: "目的地国家/城市" },
+ *     express: { type: "boolean", description: "是否使用加急物流" },
+ *   },
+ *   additionalProperties: false,
+ * };
+ * ```
+ */
+export interface JSONSchemaParameters {
+  type: "object";
+  properties: Record<string, JSONSchemaProperty>;
+  required?: string[];
+  additionalProperties?: boolean | JSONSchemaProperty;
+  description?: string;
+  /** Allow additional JSON Schema keywords (e.g. $schema, definitions) */
+  [key: string]: unknown;
+}
+
+/**
+ * Parameters for a function tool — either the legacy array format
+ * or a JSON Schema object.
+ *
+ * - `ParameterDefinition[]` — the original flat array format
+ * - `JSONSchemaParameters` — a JSON Schema Draft 7 object with
+ *   `type: "object"` and `properties`
+ *
+ * Use {@link isJSONSchemaParameters} to distinguish between the two
+ * formats at runtime.
+ */
+export type FunctionParameters = ParameterDefinition[] | JSONSchemaParameters;
+
+/**
+ * Runtime type guard to distinguish JSON Schema parameters from the
+ * legacy `ParameterDefinition[]` format.
+ *
+ * @returns `true` if `params` is a JSON Schema object (has `type: "object"`
+ *          and `properties`), `false` if it's a legacy array.
+ */
+export function isJSONSchemaParameters(
+  params: FunctionParameters,
+): params is JSONSchemaParameters {
+  return (
+    !Array.isArray(params) &&
+    typeof params === "object" &&
+    params !== null &&
+    (params as JSONSchemaParameters).type === "object" &&
+    typeof (params as JSONSchemaParameters).properties === "object" &&
+    (params as JSONSchemaParameters).properties !== null
+  );
+}
+
 // ─── DOM Render Descriptor ───────────────────────────────────────────────────
 
 /**
@@ -141,7 +258,17 @@ export interface BaseFunctionDefinition {
    * @default false
    */
   autoApprove?: boolean;
-  parameters: ParameterDefinition[];
+  /**
+   * Parameter definitions for this tool.
+   *
+   * Accepts either:
+   * - `ParameterDefinition[]` — the legacy flat array format
+   * - `JSONSchemaParameters` — a JSON Schema object with `type: "object"`
+   *   and `properties` for richer type definitions
+   *
+   * Use {@link isJSONSchemaParameters} to distinguish the two formats.
+   */
+  parameters: FunctionParameters;
   /**
    * Custom render for the tool card UI.
    *
@@ -177,7 +304,11 @@ export interface FunctionSchema {
   operationType: OperationType;
   /** @see BaseFunctionDefinition["autoApprove"] */
   autoApprove?: boolean;
-  parameters: ParameterDefinition[];
+  /**
+   * Parameter definitions — legacy `ParameterDefinition[]` or JSON Schema.
+   * @see BaseFunctionDefinition["parameters"]
+   */
+  parameters: FunctionParameters;
 }
 
 // ─── WebSocket: Tool Execution ───────────────────────────────────────────────

@@ -8,10 +8,12 @@ import type { ToolRetryTracker } from "./retry-tracker";
 import {
   OPERATION_TYPE,
   PARAMETER_TYPE,
+  isJSONSchemaParameters,
   type FunctionSchema,
+  type FunctionParameters,
   type ParameterDefinition,
 } from "@ocean-mcp/shared";
-import { tool, type Tool } from "ai";
+import { tool, jsonSchema, type Tool, type FlexibleSchema } from "ai";
 import { z } from "zod";
 import { connectionManager } from "../../ws/connection-manager";
 import { createLoadSkillTool } from "../skills/loader";
@@ -81,7 +83,7 @@ function getBrowserTools(
   };
 }
 
-// Helper to convert parameter definitions to Zod schema
+// Helper to convert legacy ParameterDefinition[] to Zod schema
 export function createZodSchema(parameters: ParameterDefinition[]) {
   const shape: Record<string, z.ZodTypeAny> = {};
 
@@ -159,6 +161,27 @@ export function createZodSchema(parameters: ParameterDefinition[]) {
 }
 
 /**
+ * Create an input schema for the Vercel AI SDK `tool()` function.
+ *
+ * Supports two parameter formats:
+ * - `ParameterDefinition[]` (legacy) → builds a Zod schema via `createZodSchema()`
+ * - `JSONSchemaParameters` (JSON Schema object) → wraps with the AI SDK's
+ *   `jsonSchema()` function for native JSON Schema support
+ *
+ * @param parameters - Either a legacy ParameterDefinition array or a JSON Schema object
+ * @returns A schema suitable for passing to `tool({ inputSchema: ... })`
+ */
+export function createInputSchema(parameters: FunctionParameters): FlexibleSchema<Record<string, any>> {
+  if (isJSONSchemaParameters(parameters)) {
+    // Use the AI SDK's native JSON Schema support.
+    // Cast to Record<string, any> to satisfy the FlexibleSchema generic.
+    return jsonSchema<Record<string, any>>(parameters as any);
+  }
+  // Legacy format — build Zod schema
+  return createZodSchema(parameters);
+}
+
+/**
  * Create a browser-proxy tool wrapper for a given tool schema.
  * The tool's `execute` sends the call to the browser via WebSocket.
  *
@@ -178,9 +201,9 @@ export function createBrowserProxyToolFromSchema(
 
   return tool({
     description: schema.description,
-    inputSchema: createZodSchema(schema.parameters),
+    inputSchema: createInputSchema(schema.parameters),
     ...(requiresApproval && { needsApproval: true }),
-    execute: async (args) => {
+    execute: async (args: Record<string, any>) => {
       try {
         return await connectionManager.executeBrowserTool(
           schema.id,

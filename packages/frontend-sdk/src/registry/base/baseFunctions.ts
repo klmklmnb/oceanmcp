@@ -3,6 +3,7 @@ import {
   OPERATION_TYPE,
   PARAMETER_TYPE,
   type CodeFunctionDefinition,
+  type JSONSchemaParameters,
 } from "@ocean-mcp/shared";
 
 // ---------------------------------------------------------------------------
@@ -172,5 +173,156 @@ export const baseFunctions: CodeFunctionDefinition[] = [
         required: true,
       },
     ],
+  },
+];
+
+// ---------------------------------------------------------------------------
+// JSON Schema test tools — demonstrate the new JSON Schema parameter format
+// ---------------------------------------------------------------------------
+
+/**
+ * Test tools using JSON Schema parameters instead of ParameterDefinition[].
+ *
+ * These demonstrate the richer type definitions possible with JSON Schema:
+ * - Nested object properties
+ * - Number constraints (min/max)
+ * - String patterns and enums
+ * - Array item schemas
+ * - Default values
+ */
+export const jsonSchemaTestTools: CodeFunctionDefinition[] = [
+  {
+    id: "calculateShipping",
+    name: "Calculate Shipping Cost",
+    cnName: "计算运费",
+    description:
+      "Calculate shipping cost for a package based on weight, destination, and shipping options.",
+    type: FUNCTION_TYPE.CODE,
+    operationType: OPERATION_TYPE.READ,
+    code: `
+      const { weight, destination, express, insurance } = args;
+      const baseRate = 10;
+      const perKg = express ? 8 : 5;
+      const insuranceFee = insurance?.enabled ? (insurance.value || 0) * 0.02 : 0;
+      const cost = baseRate + weight * perKg + insuranceFee;
+      return {
+        weight,
+        destination,
+        express: express || false,
+        insurance: insurance || { enabled: false },
+        cost: Math.round(cost * 100) / 100,
+        currency: "CNY",
+        estimatedDays: express ? "1-2" : "3-5",
+      };
+    `,
+    parameters: {
+      type: "object",
+      required: ["weight", "destination"],
+      properties: {
+        weight: {
+          type: "number",
+          description: "包裹重量（千克）",
+          minimum: 0.1,
+          maximum: 50,
+        },
+        destination: {
+          type: "string",
+          description: "目的地国家/城市",
+        },
+        express: {
+          type: "boolean",
+          description: "是否使用加急物流",
+          default: false,
+        },
+        insurance: {
+          type: "object",
+          description: "保险选项",
+          properties: {
+            enabled: {
+              type: "boolean",
+              description: "是否购买保险",
+              default: false,
+            },
+            value: {
+              type: "number",
+              description: "物品申报价值（元）",
+              minimum: 0,
+            },
+          },
+          additionalProperties: false,
+        },
+      },
+      additionalProperties: false,
+    } satisfies JSONSchemaParameters,
+  },
+  {
+    id: "createUser",
+    name: "Create User Profile",
+    cnName: "创建用户资料",
+    description:
+      "Create a new user profile with detailed information. Demonstrates nested objects and array types in JSON Schema.",
+    type: FUNCTION_TYPE.CODE,
+    operationType: OPERATION_TYPE.WRITE,
+    code: `
+      return {
+        id: "usr_" + Math.random().toString(36).substr(2, 9),
+        ...args,
+        createdAt: new Date().toISOString(),
+      };
+    `,
+    parameters: {
+      type: "object",
+      required: ["name", "email", "role"],
+      properties: {
+        name: {
+          type: "string",
+          description: "用户姓名",
+          minLength: 1,
+          maxLength: 100,
+        },
+        email: {
+          type: "string",
+          description: "电子邮箱",
+          format: "email",
+        },
+        role: {
+          type: "string",
+          description: "用户角色",
+          enum: ["admin", "editor", "viewer"],
+        },
+        age: {
+          type: "number",
+          description: "年龄",
+          minimum: 0,
+          maximum: 150,
+        },
+        tags: {
+          type: "array",
+          description: "用户标签",
+          items: {
+            type: "string",
+          },
+          minItems: 0,
+          maxItems: 10,
+          uniqueItems: true,
+        },
+        address: {
+          type: "object",
+          description: "地址信息",
+          properties: {
+            street: { type: "string", description: "街道地址" },
+            city: { type: "string", description: "城市" },
+            country: { type: "string", description: "国家", default: "CN" },
+            zipCode: {
+              type: "string",
+              description: "邮编",
+              pattern: "^[0-9]{6}$",
+            },
+          },
+          required: ["city", "country"],
+        },
+      },
+      additionalProperties: false,
+    } satisfies JSONSchemaParameters,
   },
 ];

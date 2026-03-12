@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from "react";
-import { FLOW_STEP_STATUS, TOOL_PART_STATE } from "@ocean-mcp/shared";
-import type { ColumnConfig } from "@ocean-mcp/shared";
+import { FLOW_STEP_STATUS, TOOL_PART_STATE, isJSONSchemaParameters } from "@ocean-mcp/shared";
+import type { ColumnConfig, JSONSchemaParameters } from "@ocean-mcp/shared";
 import { functionRegistry } from "../registry";
 import { isDOMRenderDescriptor, DOMContainer } from "./DOMContainer";
 import { sdkConfig } from "../runtime/sdk-config";
@@ -258,12 +258,31 @@ export function FlowNodeCard({
                     const enumMaps = new Map<string, Record<string, any>>();
                     const columnsMap = new Map<string, Record<string, ColumnConfig>>();
                     if (fnDef?.parameters) {
-                      for (const p of fnDef.parameters) {
-                        if (sdkConfig.locale === "zh-CN" && p.showName) {
-                          showNameMap.set(p.name, p.showName);
+                      if (isJSONSchemaParameters(fnDef.parameters)) {
+                        // JSON Schema format — extract display info from properties
+                        for (const [name, prop] of Object.entries(fnDef.parameters.properties)) {
+                          // Use description as showName for zh-CN if it looks like Chinese
+                          if (sdkConfig.locale === "zh-CN" && prop.description && /[\u4e00-\u9fa5]/.test(prop.description)) {
+                            showNameMap.set(name, prop.description);
+                          }
+                          // Build enumMap from JSON Schema enum values
+                          if (prop.enum && prop.enum.length > 0) {
+                            const em: Record<string, any> = {};
+                            for (const v of prop.enum) {
+                              em[String(v)] = String(v);
+                            }
+                            enumMaps.set(name, em);
+                          }
                         }
-                        if (p.enumMap) enumMaps.set(p.name, p.enumMap);
-                        if (p.columns) columnsMap.set(p.name, p.columns);
+                      } else {
+                        // Legacy ParameterDefinition[] format
+                        for (const p of fnDef.parameters) {
+                          if (sdkConfig.locale === "zh-CN" && p.showName) {
+                            showNameMap.set(p.name, p.showName);
+                          }
+                          if (p.enumMap) enumMaps.set(p.name, p.enumMap);
+                          if (p.columns) columnsMap.set(p.name, p.columns);
+                        }
                       }
                     }
 
