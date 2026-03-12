@@ -11,6 +11,7 @@
 
 import { streamText, convertToModelMessages, stepCountIs } from "ai";
 import type { Sandbox } from "@ocean-mcp/shared";
+import { FLOW_STEP_STATUS } from "@ocean-mcp/shared";
 import { getLanguageModel, resolveThinkingConfig, resolveMaxTokens, withThinkingConfig } from "../ai/providers";
 import { getBasePromptContext } from "../ai/prompts";
 import { buildSkillsPrompt } from "../ai/skills/loader";
@@ -29,7 +30,7 @@ import { waveSessionManager } from "./session-manager";
 import { buildWaveTools } from "./tools";
 import { removeAllPlanApprovalsForSession } from "./pending-approvals";
 import { removeAllForSession } from "./pending-selections";
-import { removeAllPostPlanActionsForSession } from "./pending-post-plan-actions";
+import { removeAllPostPlanActionsForSession, addPendingPostPlanAction } from "./pending-post-plan-actions";
 import { buildAssistantStoredMessage, flattenMessagesToTextOnly } from "./message-history";
 import { msgCard } from "@mihoyo/wave-opensdk";
 import {
@@ -40,9 +41,12 @@ import {
   updateCardFromSegments,
   finalizeReplyCard,
   finalizeReplyCardFromSegments,
+  buildReplyCardContent,
   buildReplyCardFromSegments,
   sendSimpleReply,
   sendSimpleNewMessage,
+  sendPostExecutePlanActionsCard,
+  buildPostPlanActionFlow,
   summariseToolArgs,
   isDisplayableTool,
   hasDisplayableTools,
@@ -424,6 +428,21 @@ async function handleStreamingResponse(
   const MIN_UPDATE_INTERVAL_MS = 300; // Throttle updates to avoid rate limits
   const segments: CardSegment[] = [];
   let hasToolCalls = false;
+  /** Whether the current step had a tool that sends its own separate card
+   *  (userSelect, executePlan). When true, the next step's text should go
+   *  to a new card so it doesn't land above the interactive card. */
+  let hadSeparateCardTool = false;
+
+  // ── Post-executePlan action tracking ──────────────────────────────
+  // When a successful executePlan finishes, we want to append "总结当前会话 /
+  // 开启新会话" buttons to the final LLM response card instead of sending
+  // them as a separate message. We track the executePlan tool call's intent
+  // so we can build the action info for `addPendingPostPlanAction`.
+  const executePlanInputs = new Map<string, { intent: string }>();
+  let postPlanActionInfo: {
+    intent: string;
+    completedSteps: number;
+  } | null = null;
 
   /**
    * Get or create the trailing text segment. When text-delta events
@@ -477,13 +496,22 @@ async function handleStreamingResponse(
 
       case "tool-call": {
         hasToolCalls = true;
+        const toolName = (part as any).toolName ?? "unknown";
+        const toolCallId = (part as any).toolCallId ?? "";
+        if (!isDisplayableTool(toolName)) {
+          hadSeparateCardTool = true;
+        }
+        // Capture executePlan input so we can use the intent later
+        if (toolName === "executePlan") {
+          const input = (part as any).input;
+          if (input && typeof input === "object" && typeof input.intent === "string") {
+            executePlanInputs.set(toolCallId, { intent: input.intent });
+          }
+        }
         const activity: ToolActivity = {
-          toolCallId: (part as any).toolCallId ?? "",
-          toolName: (part as any).toolName ?? "unknown",
-          argsSummary: summariseToolArgs(
-            (part as any).toolName ?? "unknown",
-            (part as any).input,
-          ),
+          toolCallId,
+          toolName,
+          argsSummary: summariseToolArgs(toolName, (part as any).input),
           status: "running",
         };
         segments.push({ kind: "tool", activity });
@@ -505,6 +533,27 @@ async function handleStreamingResponse(
           existing.activity.status = "complete";
           debugLog(`${TAG} [${reqId}] Tool result: ${existing.activity.toolName} — complete`);
         }
+
+        // Check if this is a successful executePlan result
+        if (existing?.activity.toolName === "executePlan") {
+          const output = (part as any).output;
+          if (output && typeof output === "object") {
+            const allSucceeded =
+              output.completedSteps > 0 &&
+              !output.results?.some?.(
+                (r: any) => r.status === FLOW_STEP_STATUS.FAILED,
+              );
+            if (allSucceeded) {
+              const planInput = executePlanInputs.get(callId);
+              postPlanActionInfo = {
+                intent: planInput?.intent ?? "",
+                completedSteps: output.completedSteps,
+              };
+              debugLog(`${TAG} [${reqId}] executePlan succeeded — will append action buttons to final card`);
+            }
+          }
+        }
+
         // Update card to show completion
         await updateCardFromSegments(clients, state, segments);
         lastUpdateTime = Date.now();
@@ -534,7 +583,45 @@ async function handleStreamingResponse(
         break;
       }
 
-      // Skip other event types (reasoning, step boundaries, sources, etc.)
+      // ── Step boundary: split into a new card after interactive tools ─
+      //
+      // The AI SDK emits `start-step` at the beginning of each LLM step.
+      // When the previous step invoked a tool that sends its own separate
+      // card (userSelect, executePlan), finalize the current streaming card
+      // and open a fresh one so the LLM's next text appears *below* the
+      // interactive card rather than being appended to the old card above it.
+      //
+      // Regular tool calls (loadSkill, etc.) keep their status lines in
+      // the same card — only tools with their own card UI trigger a split.
+      case "start-step": {
+        if (hadSeparateCardTool) {
+          debugLog(`${TAG} [${reqId}] Step boundary after interactive tool — splitting to new card`);
+
+          // Finalize the current card with tool segments
+          await finalizeReplyCardFromSegments(clients, state, ctx.chatId, segments);
+
+          // Create a new streaming card for the next step
+          const newCardId = await sendInitialNewMessageCard(clients, ctx.chatId, "...");
+          debugLog(`${TAG} [${reqId}] New card for next step: ${newCardId ? newCardId.slice(-8) : "NONE"}`);
+
+          // Reset streaming state for the new card
+          state.cardMessageId = newCardId;
+          state.streamingId = "";
+          state.accumulatedText = "";
+          state.sequence = 1;
+          state.streamingEnabled = false;
+          state.fallbackToCardUpdate = false;
+
+          // Reset segment tracking
+          segments.length = 0;
+          hasToolCalls = false;
+          hadSeparateCardTool = false;
+          updateCount = 0;
+        }
+        break;
+      }
+
+      // Skip other event types (reasoning, sources, etc.)
       default:
         break;
     }
@@ -554,13 +641,71 @@ async function handleStreamingResponse(
     debugLog(`${TAG} [${reqId}] Final stream update: ${elapsed(tFinalUpd)}`);
   }
 
-  // Finalize
+  // Finalize — append post-executePlan action buttons to the last card
+  // if applicable, so they appear at the bottom of the conversation.
   const tFinalize = Date.now();
+  const postPlanActions = postPlanActionInfo
+    ? [buildPostPlanActionFlow()]
+    : undefined;
+
+  // Check whether the final card has any displayable content
+  const finalCardHasText = state.accumulatedText.trim().length > 0;
+  const finalCardHasDisplayableTools = segments.some(
+    (s) => s.kind === "tool" && isDisplayableTool(s.activity.toolName),
+  );
+  const finalCardHasContent = finalCardHasText || finalCardHasDisplayableTools;
+
   if (hasToolCalls) {
-    await finalizeReplyCardFromSegments(clients, state, ctx.chatId, segments);
+    await finalizeReplyCardFromSegments(
+      clients, state, ctx.chatId, segments,
+      finalCardHasContent ? postPlanActions : undefined,
+    );
   } else {
-    await finalizeReplyCard(clients, state, ctx.chatId);
+    await finalizeReplyCard(
+      clients, state, ctx.chatId,
+      finalCardHasContent ? postPlanActions : undefined,
+    );
   }
+
+  // If the final card had content and we appended buttons, register the
+  // card for pending post-plan action so the webhook callback can handle
+  // button clicks. If the card was empty (recalled), send a standalone
+  // post-plan actions card instead.
+  if (postPlanActionInfo) {
+    if (finalCardHasContent && state.cardMessageId) {
+      // Compute the finalized card content so we can rebuild the card
+      // after button click (replacing buttons with a confirmation line
+      // while preserving the LLM text).
+      const finalCardContent = hasToolCalls
+        ? buildReplyCardFromSegments(segments, { appendElements: postPlanActions })
+        : buildReplyCardContent(state.accumulatedText, { appendElements: postPlanActions });
+      addPendingPostPlanAction(state.cardMessageId, {
+        sessionKey,
+        chatId: ctx.chatId,
+        senderId: ctx.senderId,
+        isEmbedded: true,
+        cardContent: finalCardContent,
+      });
+      debugLog(`${TAG} [${reqId}] Registered post-plan actions on final card ${state.cardMessageId.slice(-8)}`);
+    } else {
+      // No LLM text after executePlan — send standalone actions card
+      const actionCardMsgId = await sendPostExecutePlanActionsCard(
+        clients,
+        ctx.chatId,
+        postPlanActionInfo.intent,
+        postPlanActionInfo.completedSteps,
+      );
+      if (actionCardMsgId) {
+        addPendingPostPlanAction(actionCardMsgId, {
+          sessionKey,
+          chatId: ctx.chatId,
+          senderId: ctx.senderId,
+        });
+        debugLog(`${TAG} [${reqId}] Sent standalone post-plan actions card ${actionCardMsgId.slice(-8)}`);
+      }
+    }
+  }
+
   debugLog(`${TAG} [${reqId}] Finalize card: ${elapsed(tFinalize)}`);
 
   const toolSegs = segments.filter((s): s is Extract<CardSegment, { kind: "tool" }> => s.kind === "tool");

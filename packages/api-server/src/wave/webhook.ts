@@ -39,6 +39,7 @@ import {
   updateCardAsExpired,
   updateExecutePlanDecisionCard,
   updatePostExecutePlanActionsCard,
+  updateEmbeddedPostPlanCard,
 } from "./message-sender";
 import { logger } from "../logger";
 
@@ -381,15 +382,34 @@ export function registerEventHandlers(config: WaveConfig): void {
       const pendingAction = resolvePendingPostPlanAction(open_msg_id);
       if (!pendingAction) return;
 
+      // Helper: update the card to show the selected action.
+      // For embedded cards (buttons inside an LLM response card), use
+      // the stored card content to replace only the buttons with a
+      // confirmation line while preserving the LLM text. For standalone
+      // cards, replace the whole card with a simple confirmation.
+      const updateCard = (label: string) => {
+        if (pendingAction.isEmbedded && pendingAction.cardContent) {
+          void updateEmbeddedPostPlanCard(
+            clients,
+            open_msg_id,
+            label,
+            pendingAction.cardContent,
+          ).catch((err) =>
+            logger.error("[Wave] Failed to update embedded post-plan card:", err),
+          );
+        } else if (!pendingAction.isEmbedded) {
+          void updatePostExecutePlanActionsCard(
+            clients,
+            open_msg_id,
+            label,
+          ).catch((err) =>
+            logger.error("[Wave] Failed to update post-plan action card:", err),
+          );
+        }
+      };
+
       if (selectedValue === POST_PLAN_ACTION.SUMMARIZE) {
-        // Update card to show confirmation
-        void updatePostExecutePlanActionsCard(
-          clients,
-          open_msg_id,
-          "总结当前会话",
-        ).catch((err) =>
-          logger.error("[Wave] Failed to update post-plan action card:", err),
-        );
+        updateCard("总结当前会话");
 
         // Construct a synthetic context and trigger the AI summary pipeline
         const syntheticCtx: WaveMessageContext = {
@@ -408,14 +428,7 @@ export function registerEventHandlers(config: WaveConfig): void {
           logger.error("[Wave] Failed to handle post-plan summary:", err),
         );
       } else if (selectedValue === POST_PLAN_ACTION.NEW_SESSION) {
-        // Update card to show confirmation
-        void updatePostExecutePlanActionsCard(
-          clients,
-          open_msg_id,
-          "开启新会话",
-        ).catch((err) =>
-          logger.error("[Wave] Failed to update post-plan action card:", err),
-        );
+        updateCard("开启新会话");
 
         // Perform the same action as the /new command
         const syntheticCtx: WaveMessageContext = {

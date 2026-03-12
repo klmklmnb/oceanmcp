@@ -375,24 +375,11 @@ describe("Wave executePlan tool", () => {
       '```json\n{\n  "published": true,\n  "draftId": "draft-release-note",\n  "channel": "wave"\n}\n```',
     );
 
-    // Verify post-plan actions card was sent (second msg.send call)
-    expect(sendCalls).toHaveLength(2);
-    const actionsCard = sendCalls[1].content;
-    expect(actionsCard.header.title).toBe("执行完成");
-    expect(actionsCard.card.tag).toBe("column");
-    // First element: markdown with task summary
-    const markdownEl = actionsCard.card.elements[0];
-    expect(markdownEl.tag).toBe("markdown");
-    expect(markdownEl.text).toContain("Create and publish a draft");
-    expect(markdownEl.text).toContain("已成功执行 2 个步骤");
-    expect(markdownEl.text).toContain("总结当前会话");
-    expect(markdownEl.text).toContain("开启新会话");
-    // Second element: flow with the two buttons
-    const flowEl = actionsCard.card.elements[1];
-    expect(flowEl.tag).toBe("flow");
-    expect(flowEl.elements).toHaveLength(2);
-    expect(flowEl.elements[0].text).toBe("总结当前会话");
-    expect(flowEl.elements[1].text).toBe("开启新会话");
+    // Post-plan actions card is no longer sent eagerly by executePlan.
+    // It is now appended to the final LLM response card by the streaming
+    // event handler, so msg.send should only have been called once
+    // (the approval card).
+    expect(sendCalls).toHaveLength(1);
   });
 
   test("failed plan does not send post-plan actions card", async () => {

@@ -10,6 +10,8 @@
  * message IDs to the context needed to handle the button click.
  */
 
+import type { MsgCard } from "@mihoyo/wave-opensdk";
+
 export const POST_PLAN_ACTION = {
   SUMMARIZE: "summarize_session",
   NEW_SESSION: "new_session",
@@ -23,6 +25,14 @@ export interface PendingPostPlanAction {
   chatId: string;
   senderId: string;
   createdAt: number;
+  /** When true, the action buttons are embedded in an LLM response card.
+   *  The webhook handler should use `updateEmbeddedPostPlanCard` to
+   *  replace the buttons with a confirmation line while preserving the
+   *  LLM text. */
+  isEmbedded?: boolean;
+  /** The card content at finalization time (for embedded cards).
+   *  Used to rebuild the card with a confirmation line instead of buttons. */
+  cardContent?: MsgCard["content"];
 }
 
 const pendingMap = new Map<string, PendingPostPlanAction>();

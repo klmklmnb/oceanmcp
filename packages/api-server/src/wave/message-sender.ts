@@ -107,21 +107,25 @@ function formatWaveReplyText(text: string): string {
   return formatted;
 }
 
-function buildReplyCardContent(
+export function buildReplyCardContent(
   text: string,
-  opts?: { streaming?: boolean; streamingMode?: boolean },
+  opts?: { streaming?: boolean; streamingMode?: boolean; appendElements?: Card[] },
 ): MsgCard["content"] {
   const formattedText = formatWaveReplyText(text);
+  const elements: Card[] = [
+    {
+      tag: CardTag.Markdown,
+      text: formattedText,
+      name: STREAMING_COMPONENT_NAME,
+    } as Card,
+  ];
+  if (opts?.appendElements) {
+    elements.push(...opts.appendElements);
+  }
   return {
     card: {
       tag: CardTag.Column,
-      elements: [
-        {
-          tag: CardTag.Markdown,
-          text: formattedText,
-          name: STREAMING_COMPONENT_NAME,
-        },
-      ],
+      elements,
     },
     ...(opts?.streaming && {
       config: {
@@ -292,7 +296,7 @@ export function hasDisplayableTools(segments: CardSegment[]): boolean {
  */
 export function buildReplyCardFromSegments(
   segments: CardSegment[],
-  opts?: { streaming?: boolean; streamingMode?: boolean },
+  opts?: { streaming?: boolean; streamingMode?: boolean; appendElements?: Card[] },
 ): MsgCard["content"] {
   // Filter out hidden tools but keep text segments as-is
   const visible = segments.filter(
@@ -344,6 +348,10 @@ export function buildReplyCardFromSegments(
       text: "...",
       name: STREAMING_COMPONENT_NAME,
     } as Card);
+  }
+
+  if (opts?.appendElements) {
+    elements.push(...opts.appendElements);
   }
 
   return {
@@ -597,12 +605,16 @@ export async function updateCardFromSegments(
  * Similar to `finalizeReplyCard` but preserves the tool status
  * plain_text elements in the final card layout. Handles content
  * splitting the same way.
+ *
+ * @param appendElements - Optional extra Card elements to append at the bottom
+ *                         of the LAST card (e.g. post-executePlan action buttons).
  */
 export async function finalizeReplyCardFromSegments(
   clients: WaveClients,
   state: StreamingCardState,
   chatId: string,
   segments: CardSegment[],
+  appendElements?: Card[],
 ): Promise<void> {
   if (!state.cardMessageId) return;
 
@@ -649,12 +661,15 @@ export async function finalizeReplyCardFromSegments(
     .join("");
   const chunks = splitTextForCards(fullText);
 
-  // First chunk: render the full segments card
+  // First chunk: render the full segments card (append buttons only if single chunk)
+  const isOnlyChunk = chunks.length === 1;
   const t1 = Date.now();
   try {
     await clients.msg.updateCardActively(
       state.cardMessageId,
-      buildReplyCardFromSegments(segments),
+      buildReplyCardFromSegments(segments, {
+        appendElements: isOnlyChunk ? appendElements : undefined,
+      }),
     );
     debugLog(`${TAG} msg.updateCardActively (final with tools): ${Date.now() - t1}ms (chunks=${chunks.length})`);
   } catch (err) {
@@ -663,9 +678,18 @@ export async function finalizeReplyCardFromSegments(
 
   // Remaining chunks as new messages (markdown only, no tool status)
   for (let i = 1; i < chunks.length; i++) {
+    const isLast = i === chunks.length - 1;
     const t2 = Date.now();
     try {
-      await clients.msg.send(chatId, msgMarkdown(chunks[i]));
+      if (isLast && appendElements?.length) {
+        // Last continuation chunk: send as card with appended elements
+        await clients.msg.send(
+          chatId,
+          msgCard(buildReplyCardContent(chunks[i], { appendElements })),
+        );
+      } else {
+        await clients.msg.send(chatId, msgMarkdown(chunks[i]));
+      }
       debugLog(`${TAG} msg.send (continuation ${i + 1}/${chunks.length}): ${Date.now() - t2}ms`);
     } catch (err) {
       logger.error(`${TAG} msg.send (continuation ${i + 1}/${chunks.length}) FAILED after ${Date.now() - t2}ms:`, err);
@@ -676,11 +700,15 @@ export async function finalizeReplyCardFromSegments(
 /**
  * Finalize the reply card: disable streaming mode and ensure final content.
  * Splits into multiple messages if content exceeds card size limit.
+ *
+ * @param appendElements - Optional extra Card elements to append at the bottom
+ *                         of the LAST card (e.g. post-executePlan action buttons).
  */
 export async function finalizeReplyCard(
   clients: WaveClients,
   state: StreamingCardState,
   chatId: string,
+  appendElements?: Card[],
 ): Promise<void> {
   if (!state.cardMessageId) return;
 
@@ -717,12 +745,15 @@ export async function finalizeReplyCard(
   // Split content and update
   const chunks = splitTextForCards(state.accumulatedText);
 
-  // First chunk goes into the existing card
+  // First chunk goes into the existing card (append buttons only to last chunk)
+  const isOnlyChunk = chunks.length === 1;
   const t1 = Date.now();
   try {
     await clients.msg.updateCardActively(
       state.cardMessageId,
-      buildReplyCardContent(chunks[0]),
+      buildReplyCardContent(chunks[0], {
+        appendElements: isOnlyChunk ? appendElements : undefined,
+      }),
     );
     debugLog(`${TAG} msg.updateCardActively (final): ${Date.now() - t1}ms (chunks=${chunks.length})`);
   } catch (err) {
@@ -731,9 +762,18 @@ export async function finalizeReplyCard(
 
   // Remaining chunks as new messages
   for (let i = 1; i < chunks.length; i++) {
+    const isLast = i === chunks.length - 1;
     const t2 = Date.now();
     try {
-      await clients.msg.send(chatId, msgMarkdown(chunks[i]));
+      if (isLast && appendElements?.length) {
+        // Last continuation chunk: send as card with appended elements
+        await clients.msg.send(
+          chatId,
+          msgCard(buildReplyCardContent(chunks[i], { appendElements })),
+        );
+      } else {
+        await clients.msg.send(chatId, msgMarkdown(chunks[i]));
+      }
       debugLog(`${TAG} msg.send (continuation ${i + 1}/${chunks.length}): ${Date.now() - t2}ms`);
     } catch (err) {
       logger.error(`${TAG} msg.send (continuation ${i + 1}/${chunks.length}) FAILED after ${Date.now() - t2}ms:`, err);
@@ -1180,6 +1220,29 @@ export async function updateCardAsExpired(
 // ── Post-ExecutePlan Action Card ─────────────────────────────────────────────
 
 /**
+ * Build the post-executePlan action button flow element.
+ *
+ * Returns a `cardFlow` element containing "总结当前会话" and "开启新会话"
+ * buttons. This can be appended to an existing card's elements array
+ * (e.g. the final LLM response card) so the buttons appear at the bottom
+ * of the same message instead of as a separate card.
+ */
+export function buildPostPlanActionFlow(): Card {
+  return cardFlow([
+    cardButton(
+      "开启新会话",
+      cardOptionValue("new_session", "开启新会话"),
+      { style: "primary" },
+    ),
+    cardButton(
+      "总结当前会话",
+      cardOptionValue("summarize_session", "总结当前会话"),
+      { style: "default" },
+    ),
+  ]);
+}
+
+/**
  * Send a card with a task summary and follow-up action buttons after a
  * successful executePlan.
  *
@@ -1262,6 +1325,52 @@ export async function updatePostExecutePlanActionsCard(
   } catch (err) {
     logger.error(
       `${TAG} msg.updateCardActively (post-executePlan action confirmed) FAILED after ${Date.now() - t0}ms:`,
+      err,
+    );
+    // Non-fatal
+  }
+}
+
+/**
+ * Update an embedded post-plan actions card after the user clicks a button.
+ *
+ * When action buttons are embedded in an LLM response card, we must
+ * preserve the LLM text while replacing the button flow with a
+ * confirmation line. This function takes the original card content
+ * (stored when the card was finalized), replaces the last `flow`
+ * element (the action buttons) with a confirmation markdown, and
+ * updates the card.
+ *
+ * @param clients         - Wave SDK clients
+ * @param cardMessageId   - The card's message ID
+ * @param selectedLabel   - The label of the selected action
+ * @param originalContent - The card content at finalization time
+ */
+export async function updateEmbeddedPostPlanCard(
+  clients: WaveClients,
+  cardMessageId: string,
+  selectedLabel: string,
+  originalContent: MsgCard["content"],
+): Promise<void> {
+  // Deep clone to avoid mutating the stored content
+  const content = JSON.parse(JSON.stringify(originalContent)) as MsgCard["content"];
+
+  // Replace the last flow element (action buttons) with a confirmation line
+  const elements = (content as any)?.card?.elements;
+  if (Array.isArray(elements) && elements.length > 0) {
+    const lastIdx = elements.length - 1;
+    if (elements[lastIdx]?.tag === "flow") {
+      elements[lastIdx] = cardMarkdown(`已选择: **${selectedLabel}**`);
+    }
+  }
+
+  const t0 = Date.now();
+  try {
+    await clients.msg.updateCardActively(cardMessageId, content);
+    debugLog(`${TAG} msg.updateCardActively (embedded post-plan action confirmed): ${Date.now() - t0}ms`);
+  } catch (err) {
+    logger.error(
+      `${TAG} msg.updateCardActively (embedded post-plan action confirmed) FAILED after ${Date.now() - t0}ms:`,
       err,
     );
     // Non-fatal

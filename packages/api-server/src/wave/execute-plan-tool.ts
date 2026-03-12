@@ -10,9 +10,7 @@ import {
 import {
   sendExecutePlanCard,
   updateExecutePlanResultCard,
-  sendPostExecutePlanActionsCard,
 } from "./message-sender";
-import { addPendingPostPlanAction } from "./pending-post-plan-actions";
 import {
   containsVariableRef,
   resolveVariableRefs,
@@ -248,25 +246,10 @@ export function createWaveExecutePlanTool(
         finalResult,
       );
 
-      // Send follow-up action buttons on success (all steps completed without failure)
-      const allSucceeded = !finalResult.results.some(
-        (r) => r.status === FLOW_STEP_STATUS.FAILED,
-      );
-      if (allSucceeded && finalResult.completedSteps > 0) {
-        const actionCardMsgId = await sendPostExecutePlanActionsCard(
-          clients,
-          chatId,
-          intent,
-          finalResult.completedSteps,
-        );
-        if (actionCardMsgId) {
-          addPendingPostPlanAction(actionCardMsgId, {
-            sessionKey,
-            chatId,
-            senderId,
-          });
-        }
-      }
+      // Post-plan action buttons (总结当前会话 / 开启新会话) are no longer
+      // sent eagerly here. Instead, the streaming event handler appends
+      // them to the final LLM response card so they appear at the bottom
+      // of the conversation rather than above the LLM's follow-up text.
 
       return finalResult;
     },
