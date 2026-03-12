@@ -31,6 +31,10 @@ const enUS = {
   "tool.status.error": "Error",
   "tool.status.running": "Running",
   "tool.status.denied": "Denied",
+  "tool.inline.running": "Calling {name}...",
+  "tool.inline.complete": "Called {name}",
+  "tool.inline.error": "Failed to call {name}",
+  "tool.inline.denied": "Call {name} denied",
   "tool.label.result": "Result",
   "tool.label.parameters": "Parameters",
   "tool.renderError": "Render error:",
@@ -39,6 +43,12 @@ const enUS = {
   // MessageReasoning
   "reasoning.loading": "Thinking...",
   "reasoning.title": "Thought Content",
+  "thinking.running": "Thinking...",
+  "thinking.done": "Thought process complete",
+  "thinking.stopped": "Thinking stopped",
+  "thinking.error": "Completed with errors",
+  "thinking.callingTool": "Calling Tool {name}...",
+  "thinking.loadingSkill": "Loading Skill {name}...",
 
   // FlowNodeCard
   "flow.title": "Execution Plan",

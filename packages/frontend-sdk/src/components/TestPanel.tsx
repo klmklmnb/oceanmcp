@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback, useId } from "react";
 import OceanMCPSDK from "../main";
 import { sdkConfig, THEME, resolveTheme, type SupportedLocale, type Theme } from "../runtime/sdk-config";
+import { chatBridge } from "../runtime/chat-bridge";
 
 const btnBase: React.CSSProperties = {
   padding: "8px 0",
@@ -234,9 +235,11 @@ export function TestPanel() {
   const [result, setResult] = useState<string | null>(null);
   const [locale, setLocale] = useState<SupportedLocale | "">(sdkConfig.locale ?? "zh-CN");
   const [theme, setTheme] = useState<Theme | undefined>(sdkConfig.theme);
+  const [debug, setDebug] = useState<boolean>(sdkConfig.debug);
   const [systemDark, setSystemDark] = useState(
     () => window.matchMedia?.("(prefers-color-scheme: dark)").matches ?? false,
   );
+  const toolMockTimeoutRef = useRef<number | null>(null);
 
   // ---- Drag-and-drop state for the toggle button ----
   const BUTTON_SIZE = 36;
@@ -418,6 +421,144 @@ export function TestPanel() {
     }
   };
 
+  const clearToolMockTimer = useCallback(() => {
+    if (toolMockTimeoutRef.current != null) {
+      window.clearTimeout(toolMockTimeoutRef.current);
+      toolMockTimeoutRef.current = null;
+    }
+  }, []);
+
+  useEffect(() => () => clearToolMockTimer(), [clearToolMockTimer]);
+
+  const injectMockMessages = useCallback(async (messages: any[]) => {
+    await chatBridge.call("loadSession", messages);
+  }, []);
+
+  const injectToolStateSnapshot = useCallback(async () => {
+    clearToolMockTimer();
+    const messages = [
+      {
+        id: `mock-user-${Date.now()}`,
+        role: "user",
+        parts: [{ type: "text", text: "请帮我处理一个复杂任务" }],
+      },
+      {
+        id: `mock-assistant-${Date.now()}`,
+        role: "assistant",
+        parts: [
+          { type: "text", text: "以下是 tool 状态模拟：" },
+          {
+            type: "tool-browserExecute",
+            toolCallId: "mock-running",
+            state: "input-available",
+            input: {
+              functionId: "mock_lookup",
+              arguments: { query: "ocean mcp" },
+            },
+          },
+          {
+            type: "tool-browserExecute",
+            toolCallId: "mock-complete",
+            state: "output-available",
+            input: {
+              functionId: "mock_fetch",
+              arguments: { id: "42" },
+            },
+            output: { ok: true, rows: 3 },
+          },
+          {
+            type: "tool-browserExecute",
+            toolCallId: "mock-error",
+            state: "output-error",
+            input: {
+              functionId: "mock_error_tool",
+              arguments: { path: "/tmp/demo" },
+            },
+            errorText: "Network timeout while calling tool",
+          },
+          {
+            type: "tool-browserExecute",
+            toolCallId: "mock-denied",
+            state: "output-denied",
+            input: {
+              functionId: "mock_write",
+              arguments: { dryRun: false },
+            },
+          },
+          {
+            type: "tool-loadSkill",
+            toolCallId: "mock-load-skill-1",
+            state: "output-available",
+            input: { name: "devops" },
+            output: { loaded: true },
+          },
+          {
+            type: "tool-loadSkill",
+            toolCallId: "mock-load-skill-2",
+            state: "input-available",
+            input: { name: "mi-coffee" },
+          },
+        ],
+      },
+    ];
+    await injectMockMessages(messages);
+  }, [clearToolMockTimer, injectMockMessages]);
+
+  const injectSlowRunningDemo = useCallback(async () => {
+    clearToolMockTimer();
+    const baseId = Date.now();
+    const runningMessages = [
+      {
+        id: `mock-user-${baseId}`,
+        role: "user",
+        parts: [{ type: "text", text: "测试慢速 tool 调用" }],
+      },
+      {
+        id: `mock-assistant-${baseId}`,
+        role: "assistant",
+        parts: [
+          { type: "text", text: "正在模拟慢速调用（6 秒）..." },
+          {
+            type: "tool-browserExecute",
+            toolCallId: "mock-slow-call",
+            state: "input-available",
+            input: {
+              functionId: "mock_slow_tool",
+              arguments: { waitSeconds: 6 },
+            },
+          },
+        ],
+      },
+    ];
+
+    await injectMockMessages(runningMessages);
+
+    toolMockTimeoutRef.current = window.setTimeout(() => {
+      const finishedMessages = [
+        runningMessages[0],
+        {
+          id: `mock-assistant-done-${baseId}`,
+          role: "assistant",
+          parts: [
+            { type: "text", text: "慢速调用完成。" },
+            {
+              type: "tool-browserExecute",
+              toolCallId: "mock-slow-call",
+              state: "output-available",
+              input: {
+                functionId: "mock_slow_tool",
+                arguments: { waitSeconds: 6 },
+              },
+              output: { ok: true, elapsedMs: 6000 },
+            },
+          ],
+        },
+      ];
+      void injectMockMessages(finishedMessages);
+      toolMockTimeoutRef.current = null;
+    }, 6000);
+  }, [clearToolMockTimer, injectMockMessages]);
+
   return (
     <>
       {/* Toggle button – draggable, snaps to nearest edge */}
@@ -537,6 +678,86 @@ export function TestPanel() {
                   </button>
                 );
               })}
+            </div>
+          </div>
+
+          {/* Debug mode selector */}
+          <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+            <p style={{ margin: 0, fontSize: 11, color: c.label, fontWeight: 500 }}>
+              <code style={{ background: c.codeBg, padding: "1px 4px", borderRadius: 3, fontSize: 10, color: c.label }}>debug</code> tool 展示模式
+            </p>
+            <div style={{ display: "flex", gap: 6 }}>
+              <button
+                onClick={() => {
+                  setDebug(false);
+                  sdkConfig.debug = false;
+                }}
+                style={{
+                  flex: 1,
+                  padding: "6px 0",
+                  borderRadius: 8,
+                  border: !debug ? `2px solid ${c.selectedBorder}` : `1px solid ${c.unselectedBorder}`,
+                  background: !debug ? c.selectedBg : c.unselectedBg,
+                  color: !debug ? c.selectedText : c.unselectedText,
+                  fontSize: 11,
+                  fontWeight: !debug ? 600 : 400,
+                  cursor: "pointer",
+                }}
+              >
+                false (默认)
+              </button>
+              <button
+                onClick={() => {
+                  setDebug(true);
+                  sdkConfig.debug = true;
+                }}
+                style={{
+                  flex: 1,
+                  padding: "6px 0",
+                  borderRadius: 8,
+                  border: debug ? `2px solid ${c.selectedBorder}` : `1px solid ${c.unselectedBorder}`,
+                  background: debug ? c.selectedBg : c.unselectedBg,
+                  color: debug ? c.selectedText : c.unselectedText,
+                  fontSize: 11,
+                  fontWeight: debug ? 600 : 400,
+                  cursor: "pointer",
+                }}
+              >
+                true (卡片)
+              </button>
+            </div>
+          </div>
+
+          {/* Tool state simulator */}
+          <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+            <p style={{ margin: 0, fontSize: 11, color: c.label, fontWeight: 500 }}>
+              <code style={{ background: c.codeBg, padding: "1px 4px", borderRadius: 3, fontSize: 10, color: c.label }}>tool state simulator</code> 页面内注入 tool 状态
+            </p>
+            <div style={{ display: "flex", gap: 6 }}>
+              <button
+                onClick={() => run("tool-snapshot", injectToolStateSnapshot)}
+                disabled={loading !== null}
+                style={{
+                  ...btnBase,
+                  background: loading !== null ? (isDark ? "#4b5563" : "#d1d5db") : "#2563eb",
+                  cursor: loading !== null ? "not-allowed" : "pointer",
+                  padding: "8px 10px",
+                }}
+              >
+                全状态快照
+              </button>
+              <button
+                onClick={() => run("tool-slow", injectSlowRunningDemo)}
+                disabled={loading !== null}
+                style={{
+                  ...btnBase,
+                  background: loading !== null ? (isDark ? "#4b5563" : "#d1d5db") : "#0ea5e9",
+                  cursor: loading !== null ? "not-allowed" : "pointer",
+                  padding: "8px 10px",
+                }}
+              >
+                6秒慢速演示
+              </button>
             </div>
           </div>
 

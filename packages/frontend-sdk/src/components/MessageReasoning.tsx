@@ -4,15 +4,34 @@ import { t } from "../locale";
 interface MessageReasoningProps {
   reasoning: string;
   isLoading?: boolean;
+  debug?: boolean;
 }
 
 export function MessageReasoning({
   reasoning,
   isLoading,
+  debug = false,
 }: MessageReasoningProps) {
   // Don't render empty reasoning blocks
   if (!reasoning.trim() && !isLoading) {
     return null;
+  }
+
+  if (!debug) {
+    const compactText = reasoning.trim();
+    if (!compactText) {
+      return null;
+    }
+
+    return (
+      <div className="my-1.5 px-0.5">
+        <p
+          className="text-[13px] leading-5 text-text-secondary whitespace-pre-wrap break-words [overflow-wrap:anywhere]"
+        >
+          {compactText}
+        </p>
+      </div>
+    );
   }
 
   const [isOpen, setIsOpen] = useState(false);

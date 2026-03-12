@@ -141,6 +141,8 @@ export interface MountOptions {
    * - `/sessions`: open session history list
    */
   session?: SessionOptions;
+  /** Whether to show verbose tool debug cards. Default is false. */
+  debug?: boolean;
 }
 
 // ─── SDK Interface ───────────────────────────────────────────────────────────
@@ -157,6 +159,9 @@ export interface OceanMCPSDKType {
 
   /** Reactive theme — setting this dispatches a change event. */
   theme: import("./runtime/sdk-config").Theme | undefined;
+
+  /** Reactive debug mode for tool-call rendering. */
+  debug: boolean;
 
   /**
    * Register a skill with bundled tools from the host application.

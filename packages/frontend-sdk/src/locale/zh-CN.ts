@@ -31,6 +31,10 @@ const zhCN = {
   "tool.status.error": "错误",
   "tool.status.running": "执行中",
   "tool.status.denied": "已拒绝",
+  "tool.inline.running": "调用 {name}...",
+  "tool.inline.complete": "已调用 {name}",
+  "tool.inline.error": "调用 {name} 失败",
+  "tool.inline.denied": "调用 {name} 已拒绝",
   "tool.label.result": "执行结果",
   "tool.label.parameters": "参数",
   "tool.renderError": "渲染异常：",
@@ -39,6 +43,12 @@ const zhCN = {
   // MessageReasoning
   "reasoning.loading": "思考中...",
   "reasoning.title": "思考过程",
+  "thinking.running": "思考中...",
+  "thinking.done": "思考完成",
+  "thinking.stopped": "思考已停止",
+  "thinking.error": "思考完成（含错误）",
+  "thinking.callingTool": "调用工具 {name}...",
+  "thinking.loadingSkill": "加载技能 {name}...",
 
   // FlowNodeCard
   "flow.title": "执行计划",
