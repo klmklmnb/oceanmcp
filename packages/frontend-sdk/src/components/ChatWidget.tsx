@@ -1055,6 +1055,21 @@ export function ChatWidget({ avatar }: { avatar?: string }) {
         <div className="max-w-3xl mx-auto space-y-6">
           {messages.length === 0 && (
             <div className="flex flex-col items-center justify-center py-20 ocean-fade-in">
+              {avatar ? (
+                <img src={avatar} alt="AI" className="w-16 h-16 object-cover mb-6" />
+              ) : (
+                <div className="w-16 h-16 rounded-2xl bg-linear-to-br from-ocean-400 to-ocean-600 flex items-center justify-center shadow-lg mb-6">
+                  <svg width="32" height="32" viewBox="0 0 24 24" fill="none">
+                    <path
+                      d="M12 2L14.09 8.26L20 9.27L15.5 13.14L16.82 19.02L12 16.09L7.18 19.02L8.5 13.14L4 9.27L9.91 8.26L12 2Z"
+                      fill="white"
+                      stroke="white"
+                      strokeWidth="1"
+                      strokeLinejoin="round"
+                    />
+                  </svg>
+                </div>
+              )}
               <h2 className="text-xl font-semibold text-text-primary mb-2">
                 {welcomeTitle}
               </h2>
