@@ -15,6 +15,7 @@ const DB_VERSION = 1;
 const STORE_NAME = "sessions";
 const DEFAULT_SESSION_TITLE = "New Session";
 const TITLE_MAX_LENGTH = 50;
+const DEFAULT_MAX_SESSIONS = 1000;
 
 type StoredSessionRecord = SessionData;
 
@@ -53,6 +54,15 @@ function deriveTitleFromMessages(messages?: SessionMessage[]): string | undefine
   return undefined;
 }
 
+function normalizeMaxSessions(value?: number): number {
+  if (typeof value !== "number" || Number.isNaN(value)) {
+    return DEFAULT_MAX_SESSIONS;
+  }
+  const normalized = Math.floor(value);
+  if (normalized < 0) return DEFAULT_MAX_SESSIONS;
+  return normalized;
+}
+
 function withRequest<T>(request: IDBRequest<T>): Promise<T> {
   return new Promise<T>((resolve, reject) => {
     request.onsuccess = () => resolve(request.result);
@@ -73,12 +83,14 @@ function withTransaction(tx: IDBTransaction): Promise<void> {
 export class IndexedDBSessionAdapter implements SessionAdapter {
   private dbPromise: Promise<IDBDatabase> | null = null;
   private dbName: string;
+  private maxSessions: number;
 
-  constructor(namespace?: string) {
+  constructor(namespace?: string, maxSessions?: number) {
     const normalized = namespace?.trim();
     this.dbName = normalized
       ? `${DB_NAME_PREFIX}:${normalized}`
       : DB_NAME_PREFIX;
+    this.maxSessions = normalizeMaxSessions(maxSessions);
   }
 
   private openDB(): Promise<IDBDatabase> {
@@ -119,6 +131,40 @@ export class IndexedDBSessionAdapter implements SessionAdapter {
     return result;
   }
 
+  private async enforceMaxSessions(
+    store: IDBObjectStore,
+    records: StoredSessionRecord[],
+    protectedId?: string | null,
+  ): Promise<StoredSessionRecord[]> {
+    if (this.maxSessions <= 0 || records.length <= this.maxSessions) return records;
+    const guardedId = protectedId ?? null;
+    let keep: StoredSessionRecord[];
+    if (guardedId) {
+      const protectedRecord = records.find((record) => record.id === guardedId) ?? null;
+      if (protectedRecord) {
+        const others = records
+          .filter((record) => record.id !== guardedId)
+          .sort((a, b) => b.updatedAt - a.updatedAt);
+        keep = [protectedRecord, ...others.slice(0, Math.max(0, this.maxSessions - 1))];
+      } else {
+        keep = [...records]
+          .sort((a, b) => b.updatedAt - a.updatedAt)
+          .slice(0, this.maxSessions);
+      }
+    } else {
+      keep = [...records]
+        .sort((a, b) => b.updatedAt - a.updatedAt)
+        .slice(0, this.maxSessions);
+    }
+    const keepIds = new Set(keep.map((record) => record.id));
+    for (const record of records) {
+      if (!keepIds.has(record.id)) {
+        await withRequest(store.delete(record.id));
+      }
+    }
+    return keep;
+  }
+
   async create(title?: string): Promise<SessionData> {
     const now = Date.now();
     const session: SessionData = {
@@ -157,6 +203,13 @@ export class IndexedDBSessionAdapter implements SessionAdapter {
         createdAt,
         updatedAt,
       }));
+  }
+
+  async prune(protectedId?: string | null): Promise<void> {
+    await this.withStore("readwrite", async (store) => {
+      const records = (await withRequest(store.getAll())) as StoredSessionRecord[] | undefined;
+      await this.enforceMaxSessions(store, records ?? [], protectedId);
+    });
   }
 
   async update(id: string, data: SessionUpdateInput): Promise<void> {

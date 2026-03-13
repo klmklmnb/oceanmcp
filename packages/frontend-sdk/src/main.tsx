@@ -71,7 +71,7 @@ function syncSessionFeatures(): void {
   const sessionOptions = sdkConfig.session;
   const enabled = sessionOptions?.enable === true;
   const namespace = sessionOptions?.namespace?.trim();
-  sessionManager.setAdapter(new IndexedDBSessionAdapter(namespace));
+  sessionManager.setAdapter(new IndexedDBSessionAdapter(namespace, sessionOptions?.maxSessions));
   sessionManager.setEnabled(enabled);
   if (enabled) {
     registerSessionBuiltinCommands();

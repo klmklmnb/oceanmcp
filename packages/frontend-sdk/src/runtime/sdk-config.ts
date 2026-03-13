@@ -29,6 +29,7 @@ export type SuggestionItem = {
 export type SessionConfig = {
   enable: boolean;
   namespace?: string;
+  maxSessions?: number;
 };
 
 export type SDKConfig = {
@@ -65,7 +66,7 @@ export function resolveTheme(theme: Theme | undefined): "light" | "dark" {
 }
 
 const config: SDKConfig = {
-  session: { enable: true },
+  session: { enable: true, maxSessions: 1000 },
 };
 
 export const sdkConfig = {

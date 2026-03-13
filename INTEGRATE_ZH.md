@@ -141,6 +141,7 @@ OceanMCPSDK.mount({
   session: {
     enable: true, // 可选：开启会话持久化与内置斜杠命令
     namespace: "my-app", // 可选：同源多应用下的存储隔离命名空间
+    maxSessions: 1000, // 可选：每个命名空间最多保留的会话数量，0 表示无限制
   },
 });
 ```
@@ -154,7 +155,7 @@ OceanMCPSDK.mount({
 | `avatar`      | `string`                      | `undefined`      | AI 助手在聊天中显示的头像图片 URL。                                                                                                                                                 |
 | `theme`       | `"light" \| "dark" \| "auto"` | `undefined`      | UI 主题偏好。可设置为 `"light"`、`"dark"` 或 `"auto"`（跟随系统偏好）。未设置（`undefined`）时默认使用浅色主题。**响应式** —— 可通过 `sdkConfig.theme` 运行时动态修改。              |
 | `model`       | `ModelConfig`                 | `undefined`      | LLM 模型配置。控制聊天请求使用的模型和参数。详见下方[模型配置](#模型配置)。                                                                                                         |
-| `session`     | `SessionOptions`              | `{ enable: true }` | 会话持久化选项。默认开启；如需关闭请设置 `session: { enable: false }`。`enable: true` 时开启本地会话存储，并启用内置斜杠命令（`/new`、`/sessions`）。`namespace` 用于同源多应用的数据隔离。                                            |
+| `session`     | `SessionOptions`              | `{ enable: true }` | 会话持久化选项。默认开启；如需关闭请设置 `session: { enable: false }`。`enable: true` 时开启本地会话存储，并启用内置斜杠命令（`/new`、`/sessions`）。`namespace` 用于同源多应用的数据隔离。`maxSessions` 为软限制（默认 1000，0 表示无限制），仅在新建会话时裁剪历史记录。 |
 | `shadowDOM`   | `boolean`                     | `true`           | 为 `true` 时，组件在 Shadow DOM 内渲染，实现完全的 CSS 隔离——你的应用样式不会影响组件，组件样式也不会影响你的应用。设为 `false` 可用于调试，但要注意样式可能会互相影响。            |
 | `suggestions` | `SuggestionItem[]`            | `undefined`      | 自定义欢迎页建议问题。每个条目包含 `label`（按钮显示文本）和可选的 `text`（点击时实际发送的消息）。设置后会完全替换默认的建议问题。如果省略 `text`，则 `label` 同时用于显示和发送。 |
 
@@ -235,6 +236,7 @@ OceanMCPSDK.mount({
   session: {
     enable: true,
     namespace: "my-app",
+    maxSessions: 1000,
   },
 });
 ```
@@ -243,6 +245,7 @@ OceanMCPSDK.mount({
 
 - `enable`（`boolean`）：开启或关闭会话持久化
 - `namespace?`（`string`）：可选命名空间，用于同源下多应用数据隔离
+- `maxSessions?`（`number`）：每个命名空间最多保留的会话数量。默认 1000；`0` 表示无限制。为软限制，仅在新建会话时进行裁剪。
 
 开启后的行为：
 
@@ -250,6 +253,7 @@ OceanMCPSDK.mount({
 - 内置斜杠命令 `/new` 和 `/sessions` 可用
 - 会话采用懒创建：空草稿态不落库
 - 只有有消息需要保存时才会创建持久化会话
+- 会话数量限制为软限制，仅在新建会话时裁剪历史记录
 
 ### 运行时动态变更配置
 

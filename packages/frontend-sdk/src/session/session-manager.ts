@@ -119,6 +119,7 @@ export class SessionManager {
       this.currentSessionId = created.id;
       targetId = created.id;
       this.notify();
+      await this.adapter.prune?.(this.currentSessionId);
     }
 
     await this.adapter.update(targetId, {

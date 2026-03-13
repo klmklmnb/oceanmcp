@@ -63,6 +63,8 @@ export interface SessionOptions {
   enable: boolean;
   /** Optional namespace to isolate storage across apps on same origin. */
   namespace?: string;
+  /** Max number of sessions stored per namespace. 0 means unlimited. Default: 1000. */
+  maxSessions?: number;
 }
 
 /** Options accepted by `OceanMCPSDK.mount()`. */

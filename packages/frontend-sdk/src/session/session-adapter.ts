@@ -23,4 +23,5 @@ export interface SessionAdapter {
   update(id: string, data: SessionUpdateInput): Promise<void>;
   delete(id: string): Promise<void>;
   clear(): Promise<void>;
+  prune?(protectedId?: string | null): Promise<void>;
 }
