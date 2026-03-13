@@ -45,6 +45,7 @@
     "@ocean-mcp/shared": "workspace:*",
     "ai": "6.0.37",
     "axios": "^1.13.6",
+    "crypto-js": "^4.2.0",
     "react": "19.0.1",
     "react-dom": "19.0.1",
     "react-markdown": "^10.1.0",
@@ -52,6 +53,7 @@
   },
   "devDependencies": {
     "@tailwindcss/vite": "^4.0.0",
+    "@types/crypto-js": "^4.2.2",
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0",
     "@vitejs/plugin-react": "^4.3.0",
