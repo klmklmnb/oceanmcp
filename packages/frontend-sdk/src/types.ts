@@ -138,11 +138,12 @@ export interface MountOptions {
   /**
    * Session options for persistence and isolation.
    *
-   * When `enable` is true, the SDK stores conversations in IndexedDB and
-   * activates built-in slash commands:
-   * - `/new`: create and switch to a new session
-   * - `/sessions`: open session history list
-   */
+    * Enabled by default; set `session: { enable: false }` to disable.
+    * When `enable` is true, the SDK stores conversations in IndexedDB and
+    * activates built-in slash commands:
+    * - `/new`: create and switch to a new session
+    * - `/sessions`: open session history list
+    */
   session?: SessionOptions;
   /** Whether to show verbose tool debug cards. Default is false. */
   debug?: boolean;
