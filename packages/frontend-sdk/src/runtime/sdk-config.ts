@@ -46,6 +46,8 @@ export type SDKConfig = {
   toolRetries?: number;
   /** Session options for persistence and namespace isolation. */
   session?: SessionConfig;
+  /** Whether to show verbose tool debug cards. Default: false. */
+  debug?: boolean;
 };
 
 export const LOCALE_CHANGE_EVENT = "ocean-mcp:locale-change";
@@ -157,5 +159,13 @@ export const sdkConfig = {
 
   set session(value: SessionConfig | undefined) {
     config.session = value;
+  },
+
+  get debug(): boolean {
+    return config.debug === true;
+  },
+
+  set debug(value: boolean | undefined) {
+    config.debug = value === true;
   },
 };

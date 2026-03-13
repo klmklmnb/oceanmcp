@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import type { UIMessage } from "ai";
 import {
   MESSAGE_PART_STATE,
@@ -118,6 +118,104 @@ type ToolCallCardProps = {
   onApprove?: (toolCallId: string, toolName: string, approvalId?: string) => void;
   onDeny?: (toolCallId: string, toolName: string, approvalId?: string) => void;
 };
+
+type ToolInlineStatus = "running" | "complete" | "error" | "denied";
+
+function resolveInlineStatus(
+  state: string,
+  isOutputError: boolean,
+  approval?: { approved?: boolean; reason?: string },
+): ToolInlineStatus {
+  if (state === TOOL_PART_STATE.OUTPUT_ERROR || isOutputError) {
+    return "error";
+  }
+
+  if (
+    state === TOOL_PART_STATE.OUTPUT_DENIED ||
+    (state === TOOL_PART_STATE.APPROVAL_RESPONDED && approval?.approved === false)
+  ) {
+    return "denied";
+  }
+
+  if (state === TOOL_PART_STATE.OUTPUT_AVAILABLE) {
+    return "complete";
+  }
+
+  return "running";
+}
+
+function getInlineStatusText(status: ToolInlineStatus, displayName: string): string {
+  return t(`tool.inline.${status}`, { name: displayName });
+}
+
+function getInlineErrorDetail(state: string, errorText: unknown, output: unknown): string | null {
+  const rawError =
+    state === TOOL_PART_STATE.OUTPUT_ERROR
+      ? errorText
+      : output != null && typeof output === "object" && typeof (output as any).error === "string"
+        ? (output as any).error
+        : null;
+
+  if (rawError == null) return null;
+
+  const text = typeof rawError === "string" ? rawError : JSON.stringify(rawError);
+  if (!text) return null;
+  return text;
+}
+
+function ToolCallInlineStatus({
+  displayName,
+  state,
+  output,
+  errorText,
+  approval,
+  streamingActive,
+}: {
+  displayName: string;
+  state: string;
+  output?: any;
+  errorText?: any;
+  approval?: { approved?: boolean; reason?: string };
+  streamingActive?: boolean;
+}) {
+  const isOutputError =
+    state === TOOL_PART_STATE.OUTPUT_AVAILABLE &&
+    output != null &&
+    typeof output === "object" &&
+    typeof output.error === "string";
+  const status = resolveInlineStatus(state, isOutputError, approval);
+  const statusClassName =
+    status === "error"
+      ? "text-red-500"
+      : status === "denied"
+        ? "text-text-secondary"
+        : status === "complete"
+          ? "text-text-secondary"
+          : "text-text-secondary";
+  const inlineErrorDetail =
+    status === "error" ? getInlineErrorDetail(state, errorText, output) : null;
+  const shouldAnimateRunning = status === "running" && streamingActive;
+
+  return (
+    <div className="my-1.5 px-0.5">
+      <p
+        className={`text-[13px] leading-5 font-semibold ${statusClassName} ${
+          shouldAnimateRunning ? "ocean-tool-inline-text-shimmer" : ""
+        }`}
+      >
+        {getInlineStatusText(status, displayName)}
+      </p>
+      {inlineErrorDetail && (
+        <p
+          className="mt-0.5 block max-w-full truncate text-xs leading-5 text-red-500/90"
+          title={inlineErrorDetail}
+        >
+          {inlineErrorDetail}
+        </p>
+      )}
+    </div>
+  );
+}
 
 function ToolCallCard({
   toolCallId,
@@ -459,27 +557,6 @@ type MessageRendererProps = {
   streamingActive?: boolean;
 };
 
-/** Avatar icon for AI messages */
-function AvatarIcon({ avatar }: { avatar?: string }) {
-  if (avatar) {
-    return <img src={avatar} alt="AI" className="shrink-0 w-8 h-8 object-cover" />;
-  }
-  
-  return (
-    <div className="shrink-0 w-8 h-8 rounded-full bg-linear-to-br from-ocean-400 to-ocean-600 flex items-center justify-center shadow-sm">
-      <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
-        <path
-          d="M12 2L14.09 8.26L20 9.27L15.5 13.14L16.82 19.02L12 16.09L7.18 19.02L8.5 13.14L4 9.27L9.91 8.26L12 2Z"
-          fill="white"
-          stroke="white"
-          strokeWidth="1.5"
-          strokeLinejoin="round"
-        />
-      </svg>
-    </div>
-  );
-}
-
 /** Typing indicator */
 function TypingIndicator() {
   return (
@@ -641,6 +718,142 @@ function getToolName(part: any): string {
   return part.toolName || "unknown";
 }
 
+function isToolMetaPart(part: any): boolean {
+  if (!isToolPart(part)) return false;
+  const toolName = getToolName(part);
+  if (toolName === "executePlan" || toolName === "userSelect") return false;
+  if (part.state === TOOL_PART_STATE.APPROVAL_REQUESTED) return false;
+  return true;
+}
+
+function isToolMetaSettled(part: any): boolean {
+  const state = part?.state;
+  if (
+    state === TOOL_PART_STATE.OUTPUT_AVAILABLE ||
+    state === TOOL_PART_STATE.OUTPUT_ERROR ||
+    state === TOOL_PART_STATE.OUTPUT_DENIED
+  ) {
+    return true;
+  }
+
+  if (state === TOOL_PART_STATE.APPROVAL_RESPONDED && part?.approval?.approved === false) {
+    return true;
+  }
+
+  return false;
+}
+
+function isToolMetaError(part: any): boolean {
+  const state = part?.state;
+  if (state === TOOL_PART_STATE.OUTPUT_ERROR) {
+    return true;
+  }
+
+  if (
+    state === TOOL_PART_STATE.OUTPUT_AVAILABLE &&
+    part?.output != null &&
+    typeof part.output === "object" &&
+    typeof part.output.error === "string"
+  ) {
+    return true;
+  }
+
+  return false;
+}
+
+function getToolDisplayNameFromPart(part: any): string {
+  const toolName = getToolName(part);
+  const input = part?.input;
+
+  if (toolName === "browserExecute" && input?.functionId) {
+    const fnDef = functionRegistry.get(input.functionId);
+    return fnDef
+      ? sdkConfig.resolveDisplayName(fnDef.name, fnDef.cnName)
+      : input.functionId;
+  }
+
+  if (toolName === "loadSkill") {
+    return getSkillLabel(input?.name);
+  }
+
+  const fnDef = functionRegistry.get(toolName);
+  if (fnDef) {
+    return sdkConfig.resolveDisplayName(fnDef.name, fnDef.cnName) || toolName;
+  }
+
+  return toolName;
+}
+
+function getToolRenderContext(part: any): {
+  toolName: string;
+  displayName: string;
+  fnDef?: ReturnType<typeof functionRegistry.get>;
+  fnArgs: Record<string, any>;
+} {
+  const toolName = getToolName(part);
+  const input = part?.input;
+  let displayName = toolName;
+  let fnDef: ReturnType<typeof functionRegistry.get> | undefined;
+  let fnArgs: Record<string, any> = {};
+
+  if (toolName === "browserExecute" && input?.functionId) {
+    fnDef = functionRegistry.get(input.functionId);
+    displayName = fnDef
+      ? sdkConfig.resolveDisplayName(fnDef.name, fnDef.cnName)
+      : input.functionId;
+    fnArgs = input.arguments || {};
+  } else if (toolName === "loadSkill" && input?.name) {
+    displayName = getLoadSkillDisplayName(input.name);
+  } else {
+    fnDef = functionRegistry.get(toolName);
+    if (fnDef) {
+      displayName = sdkConfig.resolveDisplayName(fnDef.name, fnDef.cnName) || toolName;
+      fnArgs = input || {};
+    }
+  }
+
+  return { toolName, displayName, fnDef, fnArgs };
+}
+
+function ToolCustomRender({
+  fnDef,
+  displayName,
+  fnArgs,
+  state,
+  output,
+}: {
+  fnDef?: ReturnType<typeof functionRegistry.get>;
+  displayName: string;
+  fnArgs: Record<string, any>;
+  state: string;
+  output?: any;
+}) {
+  if (!fnDef?.showRender) return null;
+  const isOutputError =
+    state === TOOL_PART_STATE.OUTPUT_AVAILABLE &&
+    output != null &&
+    typeof output === "object" &&
+    typeof output.error === "string";
+  const status =
+    state === TOOL_PART_STATE.OUTPUT_AVAILABLE && !isOutputError
+      ? ("success" as any)
+      : state === TOOL_PART_STATE.OUTPUT_ERROR || isOutputError
+        ? ("failed" as any)
+        : ("running" as any);
+  const rendered = fnDef.showRender({
+    id: fnDef.id,
+    functionId: fnDef.id,
+    title: displayName,
+    arguments: fnArgs,
+    status,
+    result: output,
+  });
+  if (isDOMRenderDescriptor(rendered)) {
+    return <DOMContainer descriptor={rendered} />;
+  }
+  return rendered ?? null;
+}
+
 /**
  * Message renderer — renders a single message with inline tool-call parts.
  *
@@ -669,7 +882,7 @@ export function MessageRenderer({
 }: MessageRendererProps) {
   const isUser = message.role === MESSAGE_ROLE.USER;
   const suppressInlineTypingIndicator = showTrailingIndicator;
-
+  const showToolDebugCards = sdkConfig.debug;
   const renderPart = (part: any, index: number) => {
     try {
     // 1. Tool Parts (AI SDK v6: type is "tool-${toolName}")
@@ -677,7 +890,6 @@ export function MessageRenderer({
       const toolName = getToolName(part);
       const { toolCallId, input, output, state, errorText, approval } = part;
       const approvalId = approval?.id;
-
       // executePlan tool — render as flow node card
       if (toolName === "executePlan") {
         // Skip silently-retried validation failures — user should never see these
@@ -745,31 +957,11 @@ export function MessageRenderer({
       //   1. browserExecute — wraps a function call (input.functionId identifies the function)
       //   2. Direct proxy tool — skill-bundled tools registered as native tools on the server
       //      (toolName IS the function ID, input contains the function's own arguments)
-      let displayName = toolName;
-      let fnDef: ReturnType<typeof functionRegistry.get> | undefined;
-      let fnArgs: Record<string, any> = {};
-      if (toolName === "browserExecute" && input?.functionId) {
-        fnDef = functionRegistry.get(input.functionId);
-        displayName = fnDef
-          ? sdkConfig.resolveDisplayName(fnDef.name, fnDef.cnName)
-          : input.functionId;
-        fnArgs = input.arguments || {};
-      } else if (toolName === "loadSkill" && input?.name) {
-        displayName = getLoadSkillDisplayName(input.name);
-      } else {
-        // Direct proxy tool — toolName is the function ID itself
-        fnDef = functionRegistry.get(toolName);
-        if (fnDef) {
-          displayName = sdkConfig.resolveDisplayName(fnDef.name, fnDef.cnName) || toolName;
-          fnArgs = input || {};
-        }
-      }
+      const { displayName, fnDef, fnArgs } = getToolRenderContext(part);
 
       return (
         <div key={toolCallId || index}>
-          {state === TOOL_PART_STATE.INPUT_STREAMING ? (
-            streamingActive && !suppressInlineTypingIndicator ? <TypingIndicator /> : null
-          ) : state === TOOL_PART_STATE.APPROVAL_REQUESTED ? (
+          {state === TOOL_PART_STATE.APPROVAL_REQUESTED ? (
             <ApprovalButtons
               toolCallId={toolCallId}
               toolName={toolName}
@@ -778,6 +970,17 @@ export function MessageRenderer({
               onApprove={onApprove}
               onDeny={onDeny}
             />
+          ) : !showToolDebugCards && !fnDef?.showRender ? (
+            <ToolCallInlineStatus
+              displayName={displayName}
+              state={state}
+              output={output}
+              errorText={errorText}
+              approval={approval}
+              streamingActive={streamingActive}
+            />
+          ) : state === TOOL_PART_STATE.INPUT_STREAMING ? (
+            streamingActive && !suppressInlineTypingIndicator ? <TypingIndicator /> : null
           ) : (
             <ToolCallCard
               toolCallId={toolCallId}
@@ -822,6 +1025,7 @@ export function MessageRenderer({
           key={`reasoning-${index}`}
           reasoning={reasoningText}
           isLoading={isReasoningLoading}
+          debug={showToolDebugCards}
         />
       );
     }
@@ -891,6 +1095,7 @@ export function MessageRenderer({
               isUnfinished &&
               index === (message.parts?.length || 0) - 1
             }
+            debug={showToolDebugCards}
           />,
         );
 
@@ -946,13 +1151,260 @@ export function MessageRenderer({
     }
   };
 
+  const buildAssistantSegments = (parts: any[], keyPrefix: string) => {
+    type SegmentEntry = {
+      kind: "thinking" | "content";
+      node: React.ReactNode;
+      metaIsActive?: boolean;
+      metaHasError?: boolean;
+      metaToolName?: string;
+      metaSkillName?: string;
+    };
+
+    type AssistantSegment = {
+      kind: "thinking" | "content";
+      nodes: React.ReactNode[];
+      hasActiveMeta: boolean;
+      metaToolCount: number;
+      metaHasError: boolean;
+      activeToolNames: string[];
+      activeSkillNames: string[];
+    };
+
+    const entries: SegmentEntry[] = [];
+
+    const pushWrappedNode = (
+      kind: "thinking" | "content",
+      node: React.ReactNode,
+      key: string,
+      partIndex: number,
+      partData: any,
+      metadata?: Omit<SegmentEntry, "kind" | "node">,
+    ) => {
+      const wrappedNode = (
+        <PartErrorBoundary
+          key={key}
+          partIndex={partIndex}
+          partData={partData}
+          messageRole={message.role}
+        >
+          {node}
+        </PartErrorBoundary>
+      );
+
+      entries.push({ kind, node: wrappedNode, ...metadata });
+    };
+
+    for (let index = 0; index < parts.length; index ++) {
+      const part = parts[index];
+
+      if (part.type === MESSAGE_PART_TYPE.TEXT) {
+        const text = typeof part.text === "string" ? part.text : "";
+        const thinkRegex = /<think>([\s\S]*?)(?:<\/think>|$)/g;
+        let lastIndex = 0;
+        let match: RegExpExecArray | null;
+        let textSegment = 0;
+
+        while ((match = thinkRegex.exec(text)) !== null) {
+          if (match.index > lastIndex) {
+            const content = text.substring(lastIndex, match.index);
+            if (content.trim()) {
+              pushWrappedNode(
+                "content",
+                <MarkdownRenderer key={`text-${index}-${textSegment}`} content={content} />,
+                `${keyPrefix}-content-text-${index}-${textSegment}`,
+                index,
+                part,
+              );
+              textSegment += 1;
+            }
+          }
+
+          const thinkContent = match[1];
+          const isUnfinished = !match[0].endsWith("</think>");
+          if (thinkContent.trim() || isUnfinished) {
+            const isLoading =
+              streamingActive && isUnfinished && index === (message.parts?.length || 0) - 1;
+            pushWrappedNode(
+              "thinking",
+              <MessageReasoning
+                key={`think-${index}-${textSegment}`}
+                reasoning={thinkContent}
+                isLoading={isLoading}
+                debug={false}
+              />,
+              `${keyPrefix}-meta-think-${index}-${textSegment}`,
+              index,
+              part,
+              { metaIsActive: isUnfinished },
+            );
+            textSegment += 1;
+          }
+
+          lastIndex = thinkRegex.lastIndex;
+        }
+
+        if (lastIndex < text.length) {
+          const content = text.substring(lastIndex);
+          if (content.trim()) {
+            pushWrappedNode(
+              "content",
+              <MarkdownRenderer key={`text-tail-${index}`} content={content} />,
+              `${keyPrefix}-content-text-tail-${index}`,
+              index,
+              part,
+            );
+          }
+        }
+        continue;
+      }
+
+      if (part.type === MESSAGE_PART_TYPE.REASONING) {
+        const reasoningText =
+          typeof part.text === "string"
+            ? part.text
+            : typeof part.details?.text === "string"
+              ? part.details.text
+              : "";
+        const isReasoningLoading =
+          streamingActive && part.state === MESSAGE_PART_STATE.STREAMING;
+        const isReasoningUnfinished = part.state === MESSAGE_PART_STATE.STREAMING;
+        if (!reasoningText.trim() && !isReasoningLoading) {
+          continue;
+        }
+        pushWrappedNode(
+          "thinking",
+          <MessageReasoning
+            key={`reasoning-${index}`}
+            reasoning={reasoningText}
+            isLoading={isReasoningLoading}
+            debug={false}
+          />,
+          `${keyPrefix}-meta-reasoning-${index}`,
+          index,
+          part,
+          { metaIsActive: isReasoningUnfinished },
+        );
+        continue;
+      }
+
+      if (isToolMetaPart(part)) {
+        const { displayName, fnDef, fnArgs } = getToolRenderContext(part);
+        const node = fnDef?.showRender ? (
+          <ToolCallInlineStatus
+            displayName={displayName}
+            state={part.state}
+            output={part.output}
+            errorText={part.errorText}
+            approval={part.approval}
+            streamingActive={streamingActive}
+          />
+        ) : renderPart(part, index);
+        if (node !== null) {
+          const isActiveTool = !isToolMetaSettled(part);
+          pushWrappedNode(
+            "thinking",
+            node,
+            `${keyPrefix}-meta-tool-${index}`,
+            index,
+            part,
+            {
+              metaIsActive: isActiveTool,
+              metaHasError: isToolMetaError(part),
+              metaToolName: isActiveTool && !isLoadSkillPart(part)
+                ? getToolDisplayNameFromPart(part)
+                : undefined,
+              metaSkillName: isActiveTool && isLoadSkillPart(part)
+                ? getSkillLabel(part.input?.name)
+                : undefined,
+            },
+          );
+        }
+        const shouldRenderCustomOutput =
+          part.state === TOOL_PART_STATE.OUTPUT_AVAILABLE && Boolean(fnDef?.showRender);
+        if (shouldRenderCustomOutput) {
+          pushWrappedNode(
+            "content",
+            <div className="my-3 ocean-fade-in">
+              <ToolCustomRender
+                fnDef={fnDef}
+                displayName={displayName}
+                fnArgs={fnArgs}
+                state={part.state}
+                output={part.output}
+              />
+            </div>,
+            `${keyPrefix}-content-tool-custom-${index}`,
+            index,
+            part,
+          );
+        }
+        continue;
+      }
+
+      const node = renderPart(part, index);
+      if (node !== null) {
+        pushWrappedNode(
+          "content",
+          node,
+          `${keyPrefix}-content-${index}`,
+          index,
+          part,
+        );
+      }
+    }
+
+    const segments: AssistantSegment[] = [];
+
+    for (const entry of entries) {
+      const lastSegment = segments[segments.length - 1];
+      const shouldStartNew = !lastSegment || lastSegment.kind !== entry.kind;
+
+      if (shouldStartNew) {
+        segments.push({
+          kind: entry.kind,
+          nodes: [],
+          hasActiveMeta: false,
+          metaToolCount: 0,
+          metaHasError: false,
+          activeToolNames: [],
+          activeSkillNames: [],
+        });
+      }
+
+      const current = segments[segments.length - 1];
+      current.nodes.push(entry.node);
+
+      if (entry.kind === "thinking") {
+        current.hasActiveMeta = current.hasActiveMeta || Boolean(entry.metaIsActive);
+        current.metaHasError = current.metaHasError || Boolean(entry.metaHasError);
+
+        if (entry.metaToolName) {
+          current.metaToolCount += 1;
+          if (!current.activeToolNames.includes(entry.metaToolName)) {
+            current.activeToolNames.push(entry.metaToolName);
+          }
+        }
+
+        if (entry.metaSkillName) {
+          current.metaToolCount += 1;
+          if (!current.activeSkillNames.includes(entry.metaSkillName)) {
+            current.activeSkillNames.push(entry.metaSkillName);
+          }
+        }
+      }
+    }
+
+    return segments;
+  };
+
   const renderParts = (parts: any[], keyPrefix: string) => {
     const nodes: React.ReactNode[] = [];
 
     for (let index = 0; index < parts.length; index += 1) {
       const part = parts[index];
 
-      if (isLoadSkillPart(part)) {
+      if (showToolDebugCards && isLoadSkillPart(part)) {
         const groupedParts = [part];
         let nextIndex = index + 1;
 
@@ -999,6 +1451,42 @@ export function MessageRenderer({
     (p) => p.type === MESSAGE_PART_TYPE.TEXT && (p as any).text,
   );
 
+  const assistantSegments =
+    !isUser &&
+    !showToolDebugCards &&
+    Array.isArray(message.parts)
+      ? buildAssistantSegments(message.parts, "eb")
+      : null;
+  const [expandedThinkingSegments, setExpandedThinkingSegments] = useState<Record<number, boolean>>({});
+  const [processTicker, setProcessTicker] = useState(0);
+
+  useEffect(() => {
+    setExpandedThinkingSegments({});
+    setProcessTicker(0);
+  }, [message.id]);
+
+  const processHasRunningHeadline = Boolean(
+    assistantSegments &&
+      streamingActive &&
+      assistantSegments.some((segment) => segment.kind === "thinking" && segment.hasActiveMeta),
+  );
+
+  useEffect(() => {
+    if (!processHasRunningHeadline) {
+      setProcessTicker(0);
+      return;
+    }
+
+    const interval = window.setInterval(() => {
+      setProcessTicker((value) => value + 1);
+    }, 2100);
+
+    return () => window.clearInterval(interval);
+  }, [
+    processHasRunningHeadline,
+    assistantSegments?.length,
+  ]);
+
   // For user messages with both files and text, split into two separate bubbles
   if (isUser && message.parts && message.parts.length > 1) {
     const fileParts = message.parts.filter((p) => p.type === MESSAGE_PART_TYPE.FILE_ATTACHMENT);
@@ -1022,14 +1510,109 @@ export function MessageRenderer({
 
   return (
     <div
-      className={`ocean-fade-in ${isUser ? "flex justify-end" : "flex gap-3"}`}
+      className={`ocean-fade-in ${isUser ? "flex justify-end" : "flex"}`}
     >
-      {/* AI avatar icon */}
-      {!isUser && <AvatarIcon avatar={avatar} />}
-
       <div className={isUser ? "max-w-[80%]" : "min-w-0 flex-1 max-w-full"}>
         {/* Render all parts */}
-        {message.parts ? renderParts(message.parts, "eb") : null}
+        {assistantSegments ? (
+          <>
+            {(() => {
+              const activeThinkingIndexes = assistantSegments
+                .map((segment, index) => (segment.kind === "thinking" && segment.hasActiveMeta ? index : -1))
+                .filter((value) => value !== -1);
+              const lastActiveThinkingIndex =
+                activeThinkingIndexes.length > 0
+                  ? activeThinkingIndexes[activeThinkingIndexes.length - 1]
+                  : -1;
+
+              return assistantSegments.map((segment, segmentIndex) => {
+                if (segment.kind === "content") {
+                  return (
+                    <React.Fragment key={`segment-content-${segmentIndex}`}>
+                      {segment.nodes}
+                    </React.Fragment>
+                  );
+                }
+
+                const isRunning =
+                  streamingActive &&
+                  segment.hasActiveMeta &&
+                  segmentIndex === lastActiveThinkingIndex;
+                const isStopped = segment.hasActiveMeta && !streamingActive;
+                const runningStatusItems: string[] = [];
+
+                if (isRunning) {
+                  if (segment.activeToolNames.length > 0) {
+                    for (const toolName of segment.activeToolNames) {
+                      runningStatusItems.push(t("thinking.callingTool", { name: toolName }));
+                    }
+                  }
+
+                  if (segment.activeSkillNames.length > 0) {
+                    for (const skillName of segment.activeSkillNames) {
+                      runningStatusItems.push(t("thinking.loadingSkill", { name: skillName }));
+                    }
+                  }
+
+                  if (runningStatusItems.length === 0) {
+                    runningStatusItems.push(t("thinking.running"));
+                  }
+                }
+
+                const statusText =
+                  runningStatusItems.length > 0
+                    ? runningStatusItems[processTicker % runningStatusItems.length]
+                    : isStopped
+                      ? t("thinking.stopped")
+                      : t("thinking.done");
+                const isExpanded = expandedThinkingSegments[segmentIndex] === true;
+
+                return (
+                  <div className="mb-2" key={`segment-thinking-${segmentIndex}`}>
+                    <button
+                      onClick={() =>
+                        setExpandedThinkingSegments((prev) => ({
+                          ...prev,
+                          [segmentIndex]: !prev[segmentIndex],
+                        }))
+                      }
+                      className="mb-1 inline-flex max-w-full min-w-0 items-center justify-start gap-1.5 text-left text-xs text-text-tertiary hover:text-text-secondary transition-colors cursor-pointer"
+                    >
+                      <span
+                        className={`inline-block min-w-0 max-w-[min(70vw,28rem)] truncate text-[11px] text-text-tertiary ${
+                          isRunning ? "ocean-tool-inline-text-shimmer" : ""
+                        }`}
+                        title={statusText}
+                      >
+                        {statusText}
+                      </span>
+                      <span className="inline-flex shrink-0 items-center justify-center text-text-quaternary" aria-hidden="true">
+                        <svg
+                          className={`h-3 w-3 transition-transform ${isExpanded ? "rotate-180" : ""}`}
+                          viewBox="0 0 24 24"
+                          fill="none"
+                          stroke="currentColor"
+                          strokeWidth="2"
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                        >
+                          <polyline points="6 9 12 15 18 9" />
+                        </svg>
+                      </span>
+                    </button>
+                    {isExpanded && (
+                      <div className="pl-4 border-l border-border/50 space-y-0.5">
+                        {segment.nodes}
+                      </div>
+                    )}
+                  </div>
+                );
+              });
+            })()}
+          </>
+        ) : message.parts ? (
+          renderParts(message.parts, "eb")
+        ) : null}
 
         {!isUser && showTrailingIndicator && (
           <div className="mt-2">

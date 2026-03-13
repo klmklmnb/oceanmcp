@@ -51,6 +51,8 @@
   --ui-text-primary: #111827;
   --ui-text-secondary: #6b7280;
   --ui-text-tertiary: #9ca3af;
+  --ui-tool-inline-base: #707a89;
+  --ui-tool-inline-highlight: #bcc4cf;
 
   --ui-shadow-card: 0 1px 3px 0 rgba(0, 0, 0, 0.06), 0 1px 2px -1px rgba(0, 0, 0, 0.06);
   --ui-shadow-float: 0 4px 24px -4px rgba(0, 0, 0, 0.1), 0 2px 8px -2px rgba(0, 0, 0, 0.06);
@@ -76,6 +78,8 @@
   --ui-text-primary: #f9fafb;
   --ui-text-secondary: #9ca3af;
   --ui-text-tertiary: #6b7280;
+  --ui-tool-inline-base: #9ca6b5;
+  --ui-tool-inline-highlight: rgba(236, 241, 248, 0.92);
 
   --ui-shadow-card: 0 1px 3px 0 rgba(0, 0, 0, 0.3), 0 1px 2px -1px rgba(0, 0, 0, 0.2);
   --ui-shadow-float: 0 4px 24px -4px rgba(0, 0, 0, 0.5), 0 2px 8px -2px rgba(0, 0, 0, 0.4);
@@ -140,6 +144,15 @@
   }
 }
 
+@keyframes ocean-text-shimmer-sweep {
+  0% {
+    background-position: 0 0;
+  }
+  100% {
+    background-position: -220% 0;
+  }
+}
+
 .ocean-fade-in {
   animation: ocean-fade-in 0.3s ease-out;
 }
@@ -172,6 +185,33 @@
 }
 .ocean-typing-dot:nth-child(3) {
   animation-delay: 0.4s;
+}
+
+.ocean-tool-inline-text-shimmer {
+  color: var(--ui-tool-inline-base);
+  background-image: linear-gradient(
+    90deg,
+    var(--ui-tool-inline-base) 0%,
+    var(--ui-tool-inline-base) 42%,
+    var(--ui-tool-inline-highlight) 50%,
+    var(--ui-tool-inline-base) 58%,
+    var(--ui-tool-inline-base) 100%
+  );
+  background-size: 235% 100%;
+  background-repeat: repeat;
+  background-position: 0 0;
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  animation: ocean-text-shimmer-sweep 2.4s linear infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ocean-tool-inline-text-shimmer {
+    animation: none;
+    background-image: none;
+    color: var(--color-text-tertiary);
+  }
 }
 
 /* ─── Markdown ────────────────────────────────────────────────────────────── */

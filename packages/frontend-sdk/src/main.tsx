@@ -132,6 +132,9 @@ function mountOceanMCP(target?: MountTarget | MountOptions) {
     if (options.session !== undefined) {
       sdkConfig.session = options.session;
     }
+    if (options.debug !== undefined) {
+      sdkConfig.debug = options.debug;
+    }
     if (options.shadowDOM === false) {
       useShadowDOM = false;
     }
@@ -313,6 +316,14 @@ const sdk: OceanMCPSDKType = {
   },
   set theme(value) {
     sdkConfig.theme = value;
+  },
+
+  /** Reactive debug mode — toggles compact vs debug tool rendering. */
+  get debug() {
+    return sdkConfig.debug;
+  },
+  set debug(value) {
+    sdkConfig.debug = value;
   },
 
   /**
