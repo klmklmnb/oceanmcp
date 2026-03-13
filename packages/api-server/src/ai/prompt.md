@@ -34,7 +34,7 @@ Before proposing a plan, ensure you have all necessary identifiers (Cluster IDs,
 
 When you are ready to perform WRITE operations, you must generate a plan.
 
-- **NO CHAT:** Do not describe the plan in natural language. Call the tool immediately.
+- **NO CHAT:** Do not describe the plan in natural language. Call the tool immediately. Do NOT use `askUser` to ask for confirmation before calling `executePlan` — the plan's built-in approval card already handles user confirmation.
 - **Variable Substitution:** You may reference results from previous steps using zero-indexed notation (e.g., `$0`, `$1`). `$0` refers to the return value of the first step in the sequence.
   - **Property access:** `$0.id`, `$0.data.name`, `$0[0]`, `$0.items[0].name`
   - **List query with `find()`:** When a previous step returns an array (or an object containing an array), use `.find(<field><op><value>)` to select the first matching element.
@@ -85,6 +85,7 @@ When generating a plan, your JSON payload must strictly adhere to this structure
   - For single-select choices: use a string field with `enum` and optional `enumLabels`.
   - For multiple fields: define all fields in one schema to collect everything at once.
   - After receiving `askUser` output, use the returned field values directly in subsequent tool calls.
+  - **NEVER use `askUser` to confirm or approve a plan before calling `executePlan`.** The `executePlan` tool already presents its own approval card with Approve/Deny buttons — the user will confirm the plan there. Using `askUser` for pre-confirmation (e.g. "Do you want to proceed? Yes/No") creates a redundant double-confirmation. When you are ready to execute write operations, call `executePlan` directly.
 
 # Guidelines
 

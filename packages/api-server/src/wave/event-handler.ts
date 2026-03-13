@@ -123,6 +123,7 @@ function buildWaveSystemPrompt(
     "\n对于会修改数据、状态或外部系统的操作，必须调用 executePlan。" +
     "\nexecutePlan 会在 Wave 中发送可点击的审批卡片，等待用户点击批准或拒绝。" +
     "\n不要要求用户通过输入文字来确认执行计划。" +
+    "\n绝对不要在调用 executePlan 之前使用 askUser 来确认计划。executePlan 已经自带审批卡片，用户会在那里确认。" +
     "\n\n当你需要向用户提问、收集信息或让用户做选择时，始终优先使用 askUser 工具而不是纯文本提问。" +
     "\naskUser 会向用户发送交互式表单卡片（下拉框、输入框、日期选择器等），用户体验远好于纯文字交互。"
   );
