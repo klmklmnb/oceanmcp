@@ -68,21 +68,22 @@ const enUS = {
   "approval.allow": "Allow",
   "approval.deny": "Deny",
 
-  // UserSelectCard
-  "select.title": "User Selection",
-  "select.status.complete": "Complete",
-  "select.status.error": "Error",
-  "select.status.pending": "Pending",
-  "select.selected": "Selected:",
-  "select.value": "Value:",
-  "select.failed": "Selection failed.",
-  "select.prompt": "Please choose an option:",
-  "select.noOptions": "No predefined options were found. Enter a value manually.",
-  "select.inputPlaceholder": "Enter value",
-  "select.confirm": "Confirm",
-  "select.deny": "Deny",
-  "select.status.denied": "Denied",
-  "select.deniedMessage": "Selection was cancelled.",
+  // AskUserCard
+  "askUser.title": "User Input",
+  "askUser.status.complete": "Complete",
+  "askUser.status.error": "Error",
+  "askUser.status.pending": "Pending",
+  "askUser.status.denied": "Denied",
+  "askUser.submitted": "Submitted",
+  "askUser.value": "Value:",
+  "askUser.failed": "Input failed.",
+  "askUser.prompt": "Please provide the requested information:",
+  "askUser.confirm": "Submit",
+  "askUser.deny": "Cancel",
+  "askUser.deniedMessage": "Input was cancelled.",
+  "askUser.required": "Required",
+  "askUser.selectPlaceholder": "Select an option",
+  "askUser.inputPlaceholder": "Enter value",
 };
 
 export default enUS;

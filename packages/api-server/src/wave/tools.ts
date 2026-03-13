@@ -7,7 +7,7 @@
  * is no browser WebSocket connection in webhook flows.
  *
  * Tool sources:
- *   1. Server tools: userSelect (Wave-native interactive card), getCurrentUser
+ *   1. Server tools: askUser (Wave-native interactive card/form), getCurrentUser
  *   2. loadSkill tool (when any skills exist)
  *   3. Skill-bundled tools (from tools.ts exports — server-side execute)
  *   4. File-based skills discovered at startup (global)
@@ -31,8 +31,16 @@ import type { DiscoveredSkill } from "../ai/skills/discover";
 import type { WaveClients } from "./client";
 import { createWaveExecutePlanTool } from "./execute-plan-tool";
 import { waveSessionManager, type WaveUserInfo } from "./session-manager";
-import { sendUserSelectCard } from "./message-sender";
+import { sendAskUserCard } from "./message-sender";
 import { addPendingSelection, type PendingSelectionOption } from "./pending-selections";
+import {
+  isSimpleSelectSchema,
+  getSimpleSelectInfo,
+  buildAskUserFormCard,
+  parseFormValues,
+  type AskUserSchema,
+  type AskUserFieldSchema,
+} from "./ask-user-form-builder";
 import { imageOcr } from "../ai/tools/image-ocr-tool";
 import { readPdf } from "../ai/tools/read-pdf-tool";
 import { logger } from "../logger";
@@ -75,129 +83,129 @@ function normalizeWaveImageReference(value: string): {
 }
 
 /**
- * Create the Wave-native `userSelect` tool.
+ * Create the Wave-native `askUser` tool.
  *
- * Unlike the generic `userSelect` (which is client-side with no execute),
- * this version sends an interactive Wave card message (buttons for ≤3 options,
- * dropdown for >3 options) and awaits the user's click via the card reaction
- * callback (EventMsgCardReaction).
+ * Unlike the generic `askUser` (which is client-side with no execute),
+ * this version sends an interactive Wave card message and awaits the
+ * user's response via the card reaction callback (EventMsgCardReaction).
  *
- * The tool's `execute()` returns a Promise that resolves when the user clicks
- * an option. The AI SDK's multi-step mechanism pauses the stream while waiting.
+ * For simple single-field enum schemas, it sends buttons (≤3 options) or
+ * a dropdown (>3 options) — same UX as the old `userSelect`.
+ *
+ * For multi-field or complex schemas, it sends a Wave form card with
+ * the appropriate input elements (text, select, date picker, checkbox, etc.)
+ * and a submit button. The user's response comes back via `form_values`.
+ *
+ * The tool's `execute()` returns a Promise that resolves when the user
+ * responds. The AI SDK's multi-step mechanism pauses the stream while waiting.
  *
  * @param clients    - Wave SDK clients (for sending messages)
  * @param chatId     - The chat ID to send the interactive card to
  * @param sessionKey - Session key for correlation
  */
-function createWaveUserSelectTool(
+function createWaveAskUserTool(
   clients: WaveClients,
   chatId: string,
   sessionKey: string,
 ): Tool<any, any> {
   return tool({
     description:
-      "Ask the user to select one option before continuing. " +
-      "Use this whenever a value is uncertain and there are known or inferred candidate options. " +
-      "An interactive card (buttons or dropdown) will be sent to the user in Wave.",
-    inputSchema: z
-      .object({
-        functionId: z
-          .string()
-          .optional()
-          .describe(
-            "Optional target tool ID. Use with parameterName to resolve option metadata from the target tool.",
-          ),
-        parameterName: z
-          .string()
-          .optional()
-          .describe(
-            "Optional target parameter name on functionId. Used to resolve enumMap/display hints when explicit options are not provided.",
-          ),
-        message: z
-          .string()
-          .optional()
-          .describe("Optional prompt text shown to the user."),
-        defaultValue: z
-          .any()
-          .optional()
-          .describe(
-            "Optional default value to pre-select. The option whose value matches will be highlighted/pre-selected in the card.",
-          ),
-        options: z
-          .array(
-            z.object({
-              value: z.any().describe("The raw option value."),
-              label: z
-                .string()
-                .optional()
-                .describe("Optional user-facing option label."),
-              description: z
-                .string()
-                .optional()
-                .describe("Optional extra detail shown with the option."),
-            }),
-          )
-          .optional()
-          .describe(
-            "Explicit candidate options. For non-enum parameters, prefer providing this after reasoning candidates from context/descriptions.",
-          ),
-      })
-      .refine(
-        (input) =>
-          (Array.isArray(input.options) && input.options.length > 0) ||
-          Boolean(input.functionId && input.parameterName),
-        {
-          message:
-            "Provide either non-empty options, or both functionId and parameterName.",
-        },
-      ),
+      "Ask the user for input before continuing. ALWAYS prefer this tool over asking " +
+      "questions in plain text — it provides a much better interactive experience " +
+      "(form fields, dropdowns, date pickers, checkboxes, etc.). Use this whenever " +
+      "you need the user to provide values, make choices, confirm information, or " +
+      "answer questions. Provide a JSON Schema describing the fields you need. " +
+      "An interactive card will be sent to the user in Wave.",
+    inputSchema: z.object({
+      message: z
+        .string()
+        .describe("Prompt or title text shown to the user above the form."),
+      schema: z
+        .object({
+          type: z.literal("object"),
+          properties: z.record(z.string(), z.any()),
+          required: z.array(z.string()).optional(),
+        })
+        .describe(
+          'JSON Schema (type:"object") describing the form fields the user should fill in.',
+        ),
+    }),
     execute: async (input) => {
-      const promptMessage = input.message || "请选择一个选项";
-      const defaultValue = input.defaultValue != null ? String(input.defaultValue) : undefined;
-      const opts: PendingSelectionOption[] = (input.options ?? []).map(
-        (o: { value?: any; label?: string; description?: string }) => ({
-          value: String(o.value ?? ""),
-          label: o.label || (o.description ? `${o.value} — ${o.description}` : undefined),
-        }),
-      );
+      const promptMessage = input.message || "请提供以下信息";
+      const schema = input.schema as AskUserSchema;
 
-      if (opts.length === 0) {
+      if (!schema?.properties || Object.keys(schema.properties).length === 0) {
         return {
-          error:
-            "No options provided and functionId/parameterName resolution is not supported in Wave context. Please provide explicit options.",
+          error: "No fields provided in the schema. Please provide at least one field.",
         };
       }
 
       try {
-        // Send the interactive card
-        const cardMsgId = await sendUserSelectCard(
+        // Detect simple single-field enum → use button/dropdown card
+        if (isSimpleSelectSchema(schema)) {
+          const { fieldName, options, defaultValue } = getSimpleSelectInfo(schema);
+          const opts: PendingSelectionOption[] = options.map((o) => ({
+            value: o.value,
+            label: o.label,
+          }));
+
+          const cardMsgId = await sendAskUserCard(
+            clients,
+            chatId,
+            promptMessage,
+            { mode: "simple-select", options: opts, defaultValue },
+          );
+
+          if (!cardMsgId) {
+            return { error: "Failed to send interactive selection card." };
+          }
+
+          // Wait for the user to click an option
+          const responseData = await addPendingSelection(
+            cardMsgId,
+            opts,
+            sessionKey,
+          );
+
+          // Unwrap the simple-select response into the proper field name
+          const selectedValue = responseData._selectedValue ?? Object.values(responseData)[0];
+          const selectedOption = opts.find((o) => o.value === selectedValue);
+          const selectedLabel = selectedOption?.label || selectedValue;
+          return { [fieldName]: selectedValue, selectedLabel };
+        }
+
+        // Multi-field or complex schema → use form card
+        const formContent = buildAskUserFormCard({
+          message: promptMessage,
+          schema,
+        });
+
+        const cardMsgId = await sendAskUserCard(
           clients,
           chatId,
           promptMessage,
-          opts,
-          defaultValue,
+          { mode: "form", formContent },
         );
 
         if (!cardMsgId) {
-          return { error: "Failed to send interactive selection card." };
+          return { error: "Failed to send interactive form card." };
         }
 
-        // Wait for the user to click an option (resolved by onMsgCardReaction)
-        const selectedValue = await addPendingSelection(
+        // Wait for the user to submit the form
+        const rawFormValues = await addPendingSelection(
           cardMsgId,
-          opts,
+          [], // No simple options for form mode
           sessionKey,
         );
 
-        // Find the label for the selected value
-        const selectedOption = opts.find((o) => o.value === selectedValue);
-        const selectedLabel = selectedOption?.label || selectedValue;
+        // Parse and coerce form values back to the declared types
+        const parsedValues = parseFormValues(rawFormValues, schema);
 
-        return { selectedValue, selectedLabel };
+        return parsedValues;
       } catch (err) {
         const message = err instanceof Error ? err.message : String(err);
-        logger.error(`[Wave] userSelect failed:`, message);
-        return { error: `Selection failed: ${message}` };
+        logger.error(`[Wave] askUser failed:`, message);
+        return { error: `User input failed: ${message}` };
       }
     },
   });
@@ -447,10 +455,10 @@ function wrapWriteToolWithGuard(
  * @param fileSkills - File-based skills discovered at startup
  * @param zipSkills - Skills loaded from the webhook's ?skills= URL
  * @param sandbox - Filesystem sandbox for skill resource loading
- * @param clients - Wave SDK clients (for getCurrentUser + userSelect tools)
+ * @param clients - Wave SDK clients (for getCurrentUser + askUser tools)
  * @param senderId - The sender's union_id (for getCurrentUser tool)
  * @param sessionKey - Session key (for getCurrentUser caching)
- * @param chatId - The chat ID for sending interactive cards (userSelect)
+ * @param chatId - The chat ID for sending interactive cards (askUser)
  */
 export function buildWaveTools(
   fileSkills: DiscoveredSkill[],
@@ -462,7 +470,7 @@ export function buildWaveTools(
   chatId: string,
 ): Record<string, Tool<any, any>> {
   const tools: Record<string, Tool<any, any>> = {
-    userSelect: createWaveUserSelectTool(clients, chatId, sessionKey),
+    askUser: createWaveAskUserTool(clients, chatId, sessionKey),
     getCurrentUser: createGetCurrentUserTool(clients, senderId, sessionKey),
     getImageUrl: createGetImageUrlTool(clients),
     imageOcr,

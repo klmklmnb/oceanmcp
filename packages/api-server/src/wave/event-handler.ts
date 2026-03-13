@@ -122,7 +122,9 @@ function buildWaveSystemPrompt(
     "\n\n请用简体中文回复用户的所有消息。" +
     "\n对于会修改数据、状态或外部系统的操作，必须调用 executePlan。" +
     "\nexecutePlan 会在 Wave 中发送可点击的审批卡片，等待用户点击批准或拒绝。" +
-    "\n不要要求用户通过输入文字来确认执行计划。"
+    "\n不要要求用户通过输入文字来确认执行计划。" +
+    "\n\n当你需要向用户提问、收集信息或让用户做选择时，始终优先使用 askUser 工具而不是纯文本提问。" +
+    "\naskUser 会向用户发送交互式表单卡片（下拉框、输入框、日期选择器等），用户体验远好于纯文字交互。"
   );
 }
 
@@ -264,7 +266,7 @@ export async function handleWaveMessageFromContext(
 
   // 4a. Abort any previous active stream for this session.
   // This handles the case where the user sends a new message while a
-  // userSelect is waiting — the old streamText() gets aborted and any
+   // userSelect/askUser is waiting — the old streamText() gets aborted and any
   // pending selections for the session are rejected.
   const previousController = waveSessionManager.getActiveAbortController(sessionKey);
   if (previousController) {
@@ -429,7 +431,7 @@ async function handleStreamingResponse(
   const segments: CardSegment[] = [];
   let hasToolCalls = false;
   /** Whether the current step had a tool that sends its own separate card
-   *  (userSelect, executePlan). When true, the next step's text should go
+   *  (askUser, executePlan). When true, the next step's text should go
    *  to a new card so it doesn't land above the interactive card. */
   let hadSeparateCardTool = false;
 
@@ -587,7 +589,7 @@ async function handleStreamingResponse(
       //
       // The AI SDK emits `start-step` at the beginning of each LLM step.
       // When the previous step invoked a tool that sends its own separate
-      // card (userSelect, executePlan), finalize the current streaming card
+      // card (askUser, executePlan), finalize the current streaming card
       // and open a fresh one so the LLM's next text appears *below* the
       // interactive card rather than being appended to the old card above it.
       //

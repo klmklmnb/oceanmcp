@@ -37,7 +37,7 @@
  * The `type` field follows the `tool-<toolName>` convention from the SDK.
  */
 export interface StoredToolPart {
-  type: `tool-${string}`; // "tool-<toolName>" e.g. "tool-userSelect", "tool-deploy"
+  type: `tool-${string}`; // "tool-<toolName>" e.g. "tool-askUser", "tool-deploy"
   toolCallId: string;
   state:
     | "output-available"

@@ -131,7 +131,13 @@ export function getSystemPrompt(connectionId?: string, locale?: string): string 
   ];
 
   let system = basePrompt + buildSkillsPrompt(allSkills);
-  
+
+  // Always encourage using the askUser tool over plain-text questions
+  system += "\n\nWhen you need to ask the user a question, collect information, or have the user make a choice, " +
+    "ALWAYS prefer using the `askUser` tool instead of asking in plain text. " +
+    "The `askUser` tool renders an interactive form (dropdowns, text inputs, date pickers, checkboxes, etc.) " +
+    "which provides a much better user experience than plain-text questions.";
+
   if (locale && LOCALE_INSTRUCTIONS[locale]) {
     system += LOCALE_INSTRUCTIONS[locale];
   }

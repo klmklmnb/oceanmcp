@@ -1,11 +1,15 @@
 /**
- * Pending user-selection store for Wave interactive cards.
+ * Pending user-interaction store for Wave interactive cards.
  *
- * When the LLM calls `userSelect`, we send an interactive card (buttons or
- * dropdown) and store a pending entry keyed by the card's message ID.  When
- * the user clicks an option, Wave fires an `EventMsgCardReaction` whose
- * `open_msg_id` lets us look up and resolve the corresponding Promise so
- * the tool's `execute()` can return the selected value to the LLM.
+ * When the LLM calls `askUser`, we send an interactive card (buttons,
+ * dropdown, or form) and store a pending entry keyed by the card's message
+ * ID.  When the user interacts (clicks a button or submits a form), Wave
+ * fires an `EventMsgCardReaction` whose `open_msg_id` lets us look up and
+ * resolve the corresponding Promise so the tool's `execute()` can return
+ * the user's response to the LLM.
+ *
+ * The resolved value is always `Record<string, any>` — for simple button
+ * clicks the caller wraps the single value into `{ fieldName: selectedValue }`.
  *
  * Robustness features:
  *   - Session reverse index: enables bulk cleanup when a user sends a new
@@ -20,11 +24,11 @@ export interface PendingSelectionOption {
 }
 
 export interface PendingSelection {
-  /** Resolves the tool execute() Promise with the selected value. */
-  resolve: (value: string) => void;
+  /** Resolves the tool execute() Promise with the user's response. */
+  resolve: (value: Record<string, any>) => void;
   /** Rejects the tool execute() Promise (e.g. card deleted). */
   reject: (reason: Error) => void;
-  /** The options presented to the user — for label lookup. */
+  /** The options presented to the user — for label lookup (simple select mode). */
   options: PendingSelectionOption[];
   /** Session key — for reverse lookup and logging. */
   sessionKey: string;
@@ -99,16 +103,16 @@ function removeFromIndexes(cardMessageId: string): PendingSelection | undefined 
 // ── Public API ──────────────────────────────────────────────────────────────
 
 /**
- * Register a pending selection for a card message.
+ * Register a pending interaction for a card message.
  *
- * @returns A Promise that resolves with the selected `value` string
- *          when the user clicks a button / dropdown option.
+ * @returns A Promise that resolves with the user's response (key-value pairs)
+ *          when the user clicks a button / submits a form.
  */
 export function addPendingSelection(
   cardMessageId: string,
   options: PendingSelectionOption[],
   sessionKey: string,
-): Promise<string> {
+): Promise<Record<string, any>> {
   // If there was already a pending entry for this card (shouldn't happen),
   // reject the old one first.
   const existing = removeFromIndexes(cardMessageId);
@@ -116,7 +120,7 @@ export function addPendingSelection(
     existing.reject(new Error("Replaced by a new pending selection"));
   }
 
-  return new Promise<string>((resolve, reject) => {
+  return new Promise<Record<string, any>>((resolve, reject) => {
     pendingMap.set(cardMessageId, {
       resolve,
       reject,
@@ -136,21 +140,21 @@ export function addPendingSelection(
 }
 
 /**
- * Resolve a pending selection when the card reaction callback arrives.
+ * Resolve a pending interaction when the card reaction callback arrives.
  *
  * @param cardMessageId - The `open_msg_id` from `EventMsgCardReaction`.
- * @param selectedValue - The first value from `action.values`.
+ * @param responseData  - The user's response: form values or wrapped single selection.
  * @returns The pending entry (for logging / card update), or `undefined`
  *          if no pending selection was found for this card.
  */
 export function resolvePendingSelection(
   cardMessageId: string,
-  selectedValue: string,
+  responseData: Record<string, any>,
 ): PendingSelection | undefined {
   const entry = removeFromIndexes(cardMessageId);
   if (!entry) return undefined;
 
-  entry.resolve(selectedValue);
+  entry.resolve(responseData);
   return entry;
 }
 

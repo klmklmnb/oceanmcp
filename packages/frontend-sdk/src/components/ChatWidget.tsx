@@ -70,10 +70,10 @@ function shouldAutoDeny(part: any): boolean {
   );
 }
 
-function isPendingUserSelect(part: any): boolean {
+function isPendingAskUser(part: any): boolean {
   return (
     isToolPart(part) &&
-    getToolName(part) === "userSelect" &&
+    getToolName(part) === "askUser" &&
     part.state === TOOL_PART_STATE.INPUT_AVAILABLE
   );
 }
@@ -82,19 +82,19 @@ function isPendingUserSelect(part: any): boolean {
  * Pure-logic helper extracted from the `sendAutomaticallyWhen` callback so
  * it can be unit-tested without rendering the ChatWidget component.
  *
- * Returns `{ decision, approvalIds, userSelectIds }` where:
+ * Returns `{ decision, approvalIds, askUserIds }` where:
  *   - `decision` — whether `useChat` should automatically send a new request
  *   - `approvalIds` — approval IDs that should be marked as submitted
- *   - `userSelectIds` — userSelect toolCallIds that should be marked as submitted
+ *   - `askUserIds` — askUser toolCallIds that should be marked as submitted
  */
 export function evaluateSendAutomatically(
   messages: any[],
   submittedApprovalIds: Set<string>,
-  submittedUserSelectIds: Set<string>,
-): { decision: boolean; approvalIds: string[]; userSelectIds: string[] } {
+  submittedAskUserIds: Set<string>,
+): { decision: boolean; approvalIds: string[]; askUserIds: string[] } {
   const lastMsg = messages[messages.length - 1];
   if (!lastMsg || lastMsg.role !== MESSAGE_ROLE.ASSISTANT) {
-    return { decision: false, approvalIds: [], userSelectIds: [] };
+    return { decision: false, approvalIds: [], askUserIds: [] };
   }
 
   const toolParts = (lastMsg.parts || []).filter(isToolPart);
@@ -118,28 +118,28 @@ export function evaluateSendAutomatically(
       // APPROVAL_REQUESTED and INPUT_AVAILABLE are "settled enough"
       // for auto-send purposes — the stream has ended and these parts
       // will be resolved by their own interaction flows (approval
-      // buttons / userSelect cards). Without this, a resolved
-      // userSelect sitting next to an unresolved approval (or vice
+       // buttons / askUser cards). Without this, a resolved
+      // askUser sitting next to an unresolved approval (or vice
       // versa) would block the auto-send indefinitely.
       part.state === TOOL_PART_STATE.APPROVAL_REQUESTED ||
       part.state === TOOL_PART_STATE.INPUT_AVAILABLE
     );
   });
 
-  const settledUserSelectParts = toolParts.filter((part: any) => {
-    if (getToolName(part) !== "userSelect") return false;
+  const settledAskUserParts = toolParts.filter((part: any) => {
+    if (getToolName(part) !== "askUser") return false;
     if (!part.toolCallId) return false;
-    if (submittedUserSelectIds.has(part.toolCallId)) return false;
+    if (submittedAskUserIds.has(part.toolCallId)) return false;
     return (
       part.state === TOOL_PART_STATE.OUTPUT_AVAILABLE ||
       part.state === TOOL_PART_STATE.OUTPUT_ERROR
     );
   });
 
-  const hasUserSelectResult = settledUserSelectParts.length > 0;
+  const hasAskUserResult = settledAskUserParts.length > 0;
 
   const decision = Boolean(
-    allToolPartsSettled && (hasAnyApprovalResponse || hasUserSelectResult),
+    allToolPartsSettled && (hasAnyApprovalResponse || hasAskUserResult),
   );
 
   const approvalIds = decision
@@ -147,13 +147,13 @@ export function evaluateSendAutomatically(
         .map((p: any) => p.approval?.id)
         .filter(Boolean) as string[]
     : [];
-  const userSelectIds = decision
-    ? settledUserSelectParts
+  const askUserIds = decision
+    ? settledAskUserParts
         .map((p: any) => p.toolCallId)
         .filter(Boolean) as string[]
     : [];
 
-  return { decision, approvalIds, userSelectIds };
+  return { decision, approvalIds, askUserIds };
 }
 
 /**
@@ -254,8 +254,8 @@ function denyPendingInteractions(messages: any[]): {
         };
       }
 
-      // Handle pending userSelect parts
-      if (isPendingUserSelect(part)) {
+      // Handle pending askUser parts
+      if (isPendingAskUser(part)) {
         messageChanged = true;
         changed = true;
 
@@ -265,7 +265,7 @@ function denyPendingInteractions(messages: any[]): {
           output: { denied: true, reason: USER_SELECT_DENY_REASON },
           // AI SDK v6 unconditionally reads `approval.reason` when
           // converting OUTPUT_DENIED parts to model messages, so we
-          // must provide an approval object even for userSelect parts.
+          // must provide an approval object even for askUser parts.
           approval: {
             id: `auto-deny-select-${part.toolCallId ?? index}`,
             approved: false,
@@ -378,8 +378,8 @@ export function ChatWidget({ avatar }: { avatar?: string }) {
   const dragCounterRef = useRef(0);
   /** Track approval IDs that have already triggered an auto-submit to prevent re-sends. */
   const submittedApprovalIdsRef = useRef<Set<string>>(new Set());
-  /** Track userSelect toolCallIds that have already triggered an auto-submit to prevent re-sends. */
-  const submittedUserSelectIdsRef = useRef<Set<string>>(new Set());
+  /** Track askUser toolCallIds that have already triggered an auto-submit to prevent re-sends. */
+  const submittedAskUserIdsRef = useRef<Set<string>>(new Set());
   const lastCapturedChatErrorRef = useRef<unknown>(null);
 
   const welcomeTitle = sdkConfig.welcomeTitle ?? t("chat.welcome.title");
@@ -416,23 +416,23 @@ export function ChatWidget({ avatar }: { avatar?: string }) {
 
   const sendAutomaticallyWhen = useCallback(
     ({ messages: msgs }: { messages: any[] }) => {
-      const { decision, approvalIds, userSelectIds } =
+      const { decision, approvalIds, askUserIds } =
         evaluateSendAutomatically(
           msgs,
           submittedApprovalIdsRef.current,
-          submittedUserSelectIdsRef.current,
+          submittedAskUserIdsRef.current,
         );
 
       if (decision) {
         console.log(
           "[OceanMCP] sendAutomaticallyWhen → true",
-          { approvalCount: approvalIds.length, userSelectCount: userSelectIds.length },
+          { approvalCount: approvalIds.length, askUserCount: askUserIds.length },
         );
         for (const id of approvalIds) {
           submittedApprovalIdsRef.current.add(id);
         }
-        for (const id of userSelectIds) {
-          submittedUserSelectIdsRef.current.add(id);
+        for (const id of askUserIds) {
+          submittedAskUserIdsRef.current.add(id);
         }
       }
 
@@ -501,7 +501,7 @@ export function ChatWidget({ avatar }: { avatar?: string }) {
     const normalized = denyPendingInteractions(messages as any[]);
     if (normalized.changed) {
       // Only update visual state here. The server-side
-      // normalizeStaleInteractions converts stale userSelect / approval
+      // normalizeStaleInteractions converts stale askUser / approval
       // parts into OUTPUT_DENIED with a proper tool result before the
       // next LLM call, so we do NOT call addToolResult for auto-denied
       // selects (doing so would set the state to output-available and
@@ -972,7 +972,7 @@ export function ChatWidget({ avatar }: { avatar?: string }) {
   const handleUserSelect = (toolCallId: string, output: Record<string, any>) => {
     addToolResult({
       toolCallId,
-      tool: "userSelect",
+      tool: "askUser",
       output,
     });
   };
@@ -980,7 +980,7 @@ export function ChatWidget({ avatar }: { avatar?: string }) {
   const handleDenySelect = (toolCallId: string) => {
     addToolResult({
       toolCallId,
-      tool: "userSelect",
+      tool: "askUser",
       output: { denied: true, reason: "User denied the selection" },
     });
   };

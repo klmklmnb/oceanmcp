@@ -33,7 +33,7 @@ type ExecutableWaveTool = Tool<any, any> & {
 const BLOCKED_STEP_TOOL_IDS = new Set([
   "executePlan",
   "loadSkill",
-  "userSelect",
+  "askUser",
 ]);
 
 function getWaveExecutableTool(

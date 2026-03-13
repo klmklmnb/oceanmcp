@@ -1,7 +1,7 @@
 import { getServerStatus, echo } from "./server-tools";
 import { createBrowserExecuteTool } from "./browser-proxy-tool";
 import { createExecutePlanTool } from "./execute-plan-tool";
-import { userSelect } from "./user-select-tool";
+import { askUser } from "./ask-user-tool";
 import { imageOcr } from "./image-ocr-tool";
 import { readPdf } from "./read-pdf-tool";
 import type { ToolRetryTracker } from "./retry-tracker";
@@ -21,7 +21,7 @@ import { getSkillsContext } from "../prompts";
 
 /** Static tools that are always available */
 export const serverTools = {
-  userSelect,
+  askUser,
   getServerStatus,
   echo,
   imageOcr,
@@ -138,8 +138,8 @@ export function createZodSchema(parameters: ParameterDefinition[]) {
     const uncertainSelectionHint =
       param.type === PARAMETER_TYPE.STRING
         ? inferredValues.length > 0
-          ? `Inferred candidate values: ${inferredValues.join(", ")}. If user intent is ambiguous, call userSelect with options derived from these values before setting this parameter.`
-          : "If user intent is ambiguous, reason candidate options from context and this description, then call userSelect with explicit options before setting this parameter."
+          ? `Inferred candidate values: ${inferredValues.join(", ")}. If user intent is ambiguous, call askUser with a schema containing an enum field derived from these values before setting this parameter.`
+          : "If user intent is ambiguous, reason candidate options from context and this description, then call askUser with a schema containing an enum field before setting this parameter."
         : "";
 
     const description = [param.description, enumDescription, uncertainSelectionHint]
@@ -244,7 +244,7 @@ export function createBrowserProxyToolFromSchema(
  * frontend-registered skills.
  *
  * Tool priority (collision avoidance — first defined wins):
- *   1. Built-in server tools (userSelect, etc.)
+ *   1. Built-in server tools (askUser, etc.)
  *   2. Browser proxy tools (browserExecute, executePlan)
  *   3. loadSkill tool (when any skills exist)
  *   4. File-based skill-bundled tools (from skills' tools.ts exports)
@@ -257,7 +257,7 @@ export function getMergedTools(
   retryTracker?: ToolRetryTracker,
 ): Record<string, Tool<any, any>> {
   const tools: Record<string, Tool<any, any>> = {
-    userSelect,
+    askUser,
     imageOcr,
     readPdf,
     // ...serverTools,

@@ -1,13 +1,13 @@
 ---
 name: env-deploy
-description: Environment deployment tools. Use when the user wants to deploy to a specific environment or manage deployments. Demonstrates userSelect-driven workflows where the user must choose an environment or deployment target before proceeding.
+description: Environment deployment tools. Use when the user wants to deploy to a specific environment or manage deployments. Demonstrates askUser-driven workflows where the user must choose an environment or deployment target before proceeding.
 ---
 
 # Environment Deploy Skill
 
-This skill demonstrates how `userSelect` is triggered within a workflow.
+This skill demonstrates how `askUser` is triggered within a workflow.
 
-The `deploy` tool asks the user to pick a target environment (via `userSelect`) before executing the deployment. If there are 3 or fewer environments, buttons are shown; otherwise a dropdown is used.
+The `deploy` tool asks the user to pick a target environment (via `askUser`) before executing the deployment. If there are 3 or fewer environments, buttons are shown; otherwise a dropdown is used.
 
 ## Available Tools
 
@@ -16,5 +16,5 @@ The `deploy` tool asks the user to pick a target environment (via `userSelect`) 
 
 ## Usage
 
-- Ask: "Deploy to production" (triggers userSelect with ≤3 environments → buttons)
-- Ask: "Rollback the deployment" (triggers userSelect with >3 versions → dropdown)
+- Ask: "Deploy to production" (triggers askUser with ≤3 environments → buttons)
+- Ask: "Rollback the deployment" (triggers askUser with >3 versions → dropdown)

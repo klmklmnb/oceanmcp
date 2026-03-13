@@ -11,7 +11,7 @@ import {
 } from "@ocean-mcp/shared";
 import { FlowNodeCard, CollapsibleError } from "./FlowNodeCard";
 import { ApprovalButtons } from "./ApprovalButtons";
-import { UserSelectCard } from "./UserSelectCard";
+import { AskUserCard } from "./AskUserCard";
 import { MarkdownRenderer } from "./MarkdownRenderer";
 import { functionRegistry, skillRegistry } from "../registry";
 import { isDOMRenderDescriptor, DOMContainer } from "./DOMContainer";
@@ -931,13 +931,13 @@ export function MessageRenderer({
         );
       }
 
-      if (toolName === "userSelect") {
+      if (toolName === "askUser") {
         return (
           <div key={toolCallId || index}>
             {state === TOOL_PART_STATE.INPUT_STREAMING ? (
               streamingActive && !suppressInlineTypingIndicator ? <TypingIndicator /> : null
             ) : (
-              <UserSelectCard
+              <AskUserCard
                 toolCallId={toolCallId}
                 input={input}
                 output={output}

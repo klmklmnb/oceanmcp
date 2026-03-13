@@ -547,7 +547,11 @@ OceanMCPSDK.registerTool({
 
 ### 参数定义
 
-每个工具声明它接受的参数。AI 使用这些定义来构造正确的调用参数：
+每个工具声明它接受的参数。AI 使用这些定义来构造正确的调用参数。支持两种格式：
+
+#### 格式一：数组格式（简单）
+
+扁平数组格式是最简单的参数定义方式：
 
 ```ts
 parameters: [
@@ -566,7 +570,7 @@ parameters: [
 ];
 ```
 
-**高级参数选项：**
+**数组格式参数选项：**
 
 | 字段          | 类型                           | 说明                                                       |
 | ------------- | ------------------------------ | ---------------------------------------------------------- |
@@ -577,6 +581,82 @@ parameters: [
 | `showName`    | `string`                       | 在 UI 中显示的名称覆盖（比如显示"用户ID"而不是"userId"）   |
 | `enumMap`     | `Record<string, any>`          | 将原始值映射为显示标签（比如 `{ "prod": "生产环境" }`）    |
 | `columns`     | `Record<string, ColumnConfig>` | 数组/对象参数的列配置；设置后会在 UI 中以表格形式渲染      |
+
+#### 格式二：JSON Schema（高级）
+
+如果需要更丰富的类型定义——包括嵌套对象、数值约束、字符串正则匹配、数组元素类型、枚举值、默认值等——可以使用标准的 [JSON Schema](https://json-schema.org/)（Draft 7）格式：
+
+```ts
+OceanMCPSDK.registerTool({
+  id: "calculateShipping",
+  name: "Calculate Shipping Cost",
+  cnName: "计算运费",
+  description: "根据重量和目的地计算运费",
+  operationType: "read",
+  executor: async (args) => {
+    const { weight, destination, express, insurance } = args;
+    const baseCost = weight * (express ? 8 : 5) + 10;
+    const insuranceFee = insurance?.enabled ? (insurance.value || 0) * 0.02 : 0;
+    return { cost: Math.round((baseCost + insuranceFee) * 100) / 100, currency: "CNY" };
+  },
+  // JSON Schema 格式 —— 一个包含 type: "object" 和 properties 的对象
+  parameters: {
+    type: "object",
+    required: ["weight", "destination"],
+    properties: {
+      weight: {
+        type: "number",
+        description: "包裹重量（千克）",
+        minimum: 0.1,
+        maximum: 50,
+      },
+      destination: {
+        type: "string",
+        description: "目的地国家/城市",
+      },
+      express: {
+        type: "boolean",
+        description: "是否使用加急物流",
+        default: false,
+      },
+      insurance: {
+        type: "object",
+        description: "保险选项",
+        properties: {
+          enabled: {
+            type: "boolean",
+            description: "是否购买保险",
+            default: false,
+          },
+          value: {
+            type: "number",
+            description: "物品申报价值（元）",
+            minimum: 0,
+          },
+        },
+        additionalProperties: false,
+      },
+    },
+    additionalProperties: false,
+  },
+});
+```
+
+**JSON Schema 相比数组格式的优势：**
+
+| 特性                              | 数组格式       | JSON Schema |
+| --------------------------------- | -------------- | ----------- |
+| 基本类型                          | 支持           | 支持        |
+| 必填/可选                         | 支持           | 支持        |
+| 枚举值                            | 通过 `enumMap` | 原生 `enum` |
+| 嵌套对象属性                      | 不支持（使用 `z.any()`） | 支持 |
+| 数值约束（最小值/最大值）         | 不支持         | 支持        |
+| 字符串约束（正则、格式、最小长度）| 不支持         | 支持        |
+| 数组元素类型                      | 有限支持       | 支持        |
+| 默认值                            | 不支持         | 支持        |
+| 联合类型（oneOf/anyOf）           | 不支持         | 支持        |
+
+两种格式完全向后兼容。SDK 会在运行时自动检测格式：如果 `parameters` 是数组，使用数组格式；如果是包含 `type: "object"` 和 `properties` 的对象，使用 JSON Schema 格式。
 
 ---
 
@@ -795,7 +875,7 @@ interface ExecutorFunctionDefinition {
   operationType: "read" | "write";
   autoApprove?: boolean;          // 为 true 时，写操作工具无需用户审批即可执行
   executor: (args: Record<string, any>) => Promise<any>;
-  parameters: ParameterDefinition[];
+  parameters: FunctionParameters; // ParameterDefinition[] 或 JSONSchemaParameters
 }
 
 // Code 类型 —— 代码字符串，通过 new Function() 执行
@@ -808,11 +888,20 @@ interface CodeFunctionDefinition {
   operationType: "read" | "write";
   autoApprove?: boolean;          // 为 true 时，写操作工具无需用户审批即可执行
   code: string;
-  parameters: ParameterDefinition[];
+  parameters: FunctionParameters; // ParameterDefinition[] 或 JSONSchemaParameters
 }
 ```
 
-### ParameterDefinition
+### FunctionParameters
+
+`parameters` 字段接受两种格式：
+
+```ts
+// 联合类型 —— 两种格式都可以
+type FunctionParameters = ParameterDefinition[] | JSONSchemaParameters;
+```
+
+### ParameterDefinition（数组格式）
 
 ```ts
 interface ParameterDefinition {
@@ -828,6 +917,54 @@ interface ParameterDefinition {
 interface ColumnConfig {
   label?: string; // 列头标签
   render?: (value: any, row: Record<string, any>) => any; // 自定义单元格渲染器
+}
+```
+
+### JSONSchemaParameters（JSON Schema 格式）
+
+```ts
+interface JSONSchemaParameters {
+  type: "object";
+  properties: Record<string, JSONSchemaProperty>;
+  required?: string[];
+  additionalProperties?: boolean | JSONSchemaProperty;
+  description?: string;
+  [key: string]: unknown; // 允许其他 JSON Schema 关键字
+}
+
+interface JSONSchemaProperty {
+  type?: string | string[];
+  description?: string;
+  enum?: (string | number | boolean | null)[];
+  default?: unknown;
+
+  // 字符串约束
+  minLength?: number;
+  maxLength?: number;
+  pattern?: string;
+  format?: string;
+
+  // 数值约束
+  minimum?: number;
+  maximum?: number;
+  exclusiveMinimum?: number;
+  exclusiveMaximum?: number;
+
+  // 数组约束
+  items?: JSONSchemaProperty;
+  minItems?: number;
+  maxItems?: number;
+  uniqueItems?: boolean;
+
+  // 嵌套对象
+  properties?: Record<string, JSONSchemaProperty>;
+  required?: string[];
+  additionalProperties?: boolean | JSONSchemaProperty;
+
+  // 组合
+  oneOf?: JSONSchemaProperty[];
+  anyOf?: JSONSchemaProperty[];
+  allOf?: JSONSchemaProperty[];
 }
 ```
 
@@ -912,6 +1049,9 @@ OceanMCPSDK.registerTool({
 import type {
   MountOptions,
   FunctionDefinition,
+  FunctionParameters,
+  JSONSchemaParameters,
+  JSONSchemaProperty,
   SkillDefinition,
   SessionOptions,
   SlashCommand,

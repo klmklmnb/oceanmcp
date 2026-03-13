@@ -9,7 +9,7 @@
  *   3. Returns the appropriate response (challenge for verification, empty for events)
  *
  * Also handles card interaction callbacks (EventMsgCardReaction) for
- * the interactive user-selection cards sent by the Wave `userSelect` tool.
+ * the interactive cards sent by the Wave `askUser` tool.
  */
 
 import type { WaveConfig } from "./config";
@@ -314,13 +314,13 @@ export function registerEventHandlers(config: WaveConfig): void {
     );
   });
 
-  // ── Card interaction callback (buttons / dropdown selection) ─────────
+  // ── Card interaction callback (buttons / dropdown / form submission) ──
   //
-  // When a user clicks a button or selects a dropdown option on an
-  // interactive card sent by `userSelect`, Wave fires a
-  // `MsgCardReaction` event. We look up the pending selection by the
+  // When a user clicks a button, selects a dropdown option, or submits a
+  // form on an interactive card sent by `askUser`, Wave fires a
+  // `MsgCardReaction` event. We look up the pending interaction by the
   // card's message ID and resolve the corresponding Promise so the
-  // tool's execute() can return the selected value to the LLM.
+  // tool's execute() can return the user's response to the LLM.
   clients.event.onMsgCardReaction((event) => {
     const { open_msg_id, action } = event.event;
     const selectedValue = action?.values?.[0];
@@ -328,7 +328,7 @@ export function registerEventHandlers(config: WaveConfig): void {
     logger.debug(
       "[Wave] Card reaction event:",
       JSON.stringify(
-        { open_msg_id, selectedValue, allValues: action?.values },
+        { open_msg_id, selectedValue, allValues: action?.values, formValues: action?.form_values },
         null,
         2,
       ),
@@ -454,7 +454,7 @@ export function registerEventHandlers(config: WaveConfig): void {
       return;
     }
 
-    // Only handle events for cards we sent (pending userSelect cards).
+    // Only handle events for cards we sent (pending askUser cards).
     // If the card is not pending, it may be stale (server restart, abort,
     // timeout, etc.) — update it to inform the user.
     if (!hasPendingSelection(open_msg_id)) {
@@ -477,31 +477,54 @@ export function registerEventHandlers(config: WaveConfig): void {
       return;
     }
 
-    if (!selectedValue) {
+    // Determine the response data:
+    //   - Form submissions: action.form_values contains all field values
+    //   - Button/dropdown clicks: action.values[0] is the selected value
+    const formValues = action?.form_values;
+    const isFormSubmission = formValues != null && typeof formValues === "object" && Object.keys(formValues).length > 0;
+
+    if (!isFormSubmission && !selectedValue) {
       logger.warn(
-        `[Wave] Card reaction for ${open_msg_id} has no selected value`,
+        `[Wave] Card reaction for ${open_msg_id} has no selected value and no form data`,
       );
       return;
     }
 
-    // Resolve the pending selection — this unblocks the tool's execute()
-    const pending = resolvePendingSelection(open_msg_id, selectedValue);
+    let responseData: Record<string, any>;
+    let displayLabel: string;
+
+    if (isFormSubmission) {
+      // Form submission — pass all form values
+      responseData = formValues as Record<string, any>;
+      const fieldCount = Object.keys(responseData).length;
+      displayLabel = `${fieldCount} 个字段已提交`;
+    } else {
+      // Simple button/dropdown click — wrap in a record
+      responseData = { _selectedValue: selectedValue };
+      displayLabel = selectedValue!;
+    }
+
+    // Resolve the pending interaction — this unblocks the tool's execute()
+    const pending = resolvePendingSelection(open_msg_id, responseData);
     if (!pending) return;
 
-    // Find the label of the selected option for the card update
-    const selectedOption = pending.options.find(
-      (o) => o.value === selectedValue,
-    );
-    const selectedLabel = selectedOption?.label || selectedValue;
+    // For simple selects, resolve the display label from pending options
+    if (!isFormSubmission && selectedValue) {
+      const selectedOption = pending.options.find(
+        (o) => o.value === selectedValue,
+      );
+      displayLabel = selectedOption?.label || selectedValue;
+    }
 
-    // Update the card to show the confirmed selection (fire-and-forget)
+    // Update the card to show the confirmed response (fire-and-forget)
     void updateCardAfterSelection(
       clients,
       open_msg_id,
-      "选择完成",
-      selectedLabel,
+      "提交完成",
+      displayLabel,
+      isFormSubmission ? responseData : undefined,
     ).catch((err) =>
-      logger.error("[Wave] Failed to update card after selection:", err),
+      logger.error("[Wave] Failed to update card after user response:", err),
     );
   });
 }

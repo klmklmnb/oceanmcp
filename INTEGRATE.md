@@ -559,7 +559,11 @@ OceanMCPSDK.registerTool({
 
 ### Parameter Definitions
 
-Each tool declares the parameters it accepts. The AI uses these definitions to construct the correct arguments:
+Each tool declares the parameters it accepts. The AI uses these definitions to construct the correct arguments. Two formats are supported:
+
+#### Format 1: Legacy Array (Simple)
+
+The flat array format is the simplest way to define parameters:
 
 ```ts
 parameters: [
@@ -578,7 +582,7 @@ parameters: [
 ];
 ```
 
-**Advanced parameter options:**
+**Legacy parameter options:**
 
 | Field         | Type                           | Description                                                               |
 | ------------- | ------------------------------ | ------------------------------------------------------------------------- |
@@ -589,6 +593,81 @@ parameters: [
 | `showName`    | `string`                       | Display name override in the UI (e.g., "User ID" instead of "userId")     |
 | `enumMap`     | `Record<string, any>`          | Maps raw values to display labels (e.g., `{ "prod": "Production" }`)      |
 | `columns`     | `Record<string, ColumnConfig>` | Column config for array/object params; triggers table rendering in the UI |
+
+#### Format 2: JSON Schema (Advanced)
+
+For richer type definitions — including nested objects, number constraints, string patterns, array item schemas, enums, and default values — you can use standard [JSON Schema](https://json-schema.org/) (Draft 7) format:
+
+```ts
+OceanMCPSDK.registerTool({
+  id: "calculateShipping",
+  name: "Calculate Shipping Cost",
+  description: "Calculate shipping cost based on weight and destination",
+  operationType: "read",
+  executor: async (args) => {
+    const { weight, destination, express, insurance } = args;
+    const baseCost = weight * (express ? 8 : 5) + 10;
+    const insuranceFee = insurance?.enabled ? (insurance.value || 0) * 0.02 : 0;
+    return { cost: Math.round((baseCost + insuranceFee) * 100) / 100, currency: "USD" };
+  },
+  // JSON Schema format — an object with type: "object" and properties
+  parameters: {
+    type: "object",
+    required: ["weight", "destination"],
+    properties: {
+      weight: {
+        type: "number",
+        description: "Package weight in kilograms",
+        minimum: 0.1,
+        maximum: 50,
+      },
+      destination: {
+        type: "string",
+        description: "Destination country or city",
+      },
+      express: {
+        type: "boolean",
+        description: "Whether to use express shipping",
+        default: false,
+      },
+      insurance: {
+        type: "object",
+        description: "Insurance options",
+        properties: {
+          enabled: {
+            type: "boolean",
+            description: "Whether to add insurance",
+            default: false,
+          },
+          value: {
+            type: "number",
+            description: "Declared value of package contents (USD)",
+            minimum: 0,
+          },
+        },
+        additionalProperties: false,
+      },
+    },
+    additionalProperties: false,
+  },
+});
+```
+
+**JSON Schema advantages over the legacy format:**
+
+| Feature                  | Legacy Array | JSON Schema |
+| ------------------------ | ------------ | ----------- |
+| Basic types              | Yes          | Yes         |
+| Required/optional        | Yes          | Yes         |
+| Enum values              | Via `enumMap`| Native `enum` |
+| Nested object properties | No (uses `z.any()`) | Yes |
+| Number constraints (min/max) | No       | Yes         |
+| String constraints (pattern, format, minLength) | No | Yes |
+| Array item schemas       | Limited      | Yes         |
+| Default values           | No           | Yes         |
+| Union types (oneOf/anyOf)| No           | Yes         |
+
+Both formats are fully backward compatible. The SDK detects the format at runtime: if `parameters` is an array, it uses the legacy format; if it's an object with `type: "object"` and `properties`, it uses JSON Schema.
 
 ---
 
@@ -915,7 +994,7 @@ interface ExecutorFunctionDefinition {
   operationType: "read" | "write";
   autoApprove?: boolean;          // When true, write tools execute without user approval
   executor: (args: Record<string, any>) => Promise<any>;
-  parameters: ParameterDefinition[];
+  parameters: FunctionParameters; // ParameterDefinition[] or JSONSchemaParameters
 }
 
 // Code type — a code string executed via new Function()
@@ -928,11 +1007,20 @@ interface CodeFunctionDefinition {
   operationType: "read" | "write";
   autoApprove?: boolean;          // When true, write tools execute without user approval
   code: string;
-  parameters: ParameterDefinition[];
+  parameters: FunctionParameters; // ParameterDefinition[] or JSONSchemaParameters
 }
 ```
 
-### ParameterDefinition
+### FunctionParameters
+
+The `parameters` field accepts two formats:
+
+```ts
+// Union type — either format is accepted
+type FunctionParameters = ParameterDefinition[] | JSONSchemaParameters;
+```
+
+### ParameterDefinition (Legacy Format)
 
 ```ts
 interface ParameterDefinition {
@@ -948,6 +1036,54 @@ interface ParameterDefinition {
 interface ColumnConfig {
   label?: string; // Column header label
   render?: (value: any, row: Record<string, any>) => any; // Custom cell renderer
+}
+```
+
+### JSONSchemaParameters (JSON Schema Format)
+
+```ts
+interface JSONSchemaParameters {
+  type: "object";
+  properties: Record<string, JSONSchemaProperty>;
+  required?: string[];
+  additionalProperties?: boolean | JSONSchemaProperty;
+  description?: string;
+  [key: string]: unknown; // Additional JSON Schema keywords
+}
+
+interface JSONSchemaProperty {
+  type?: string | string[];
+  description?: string;
+  enum?: (string | number | boolean | null)[];
+  default?: unknown;
+
+  // String constraints
+  minLength?: number;
+  maxLength?: number;
+  pattern?: string;
+  format?: string;
+
+  // Number constraints
+  minimum?: number;
+  maximum?: number;
+  exclusiveMinimum?: number;
+  exclusiveMaximum?: number;
+
+  // Array constraints
+  items?: JSONSchemaProperty;
+  minItems?: number;
+  maxItems?: number;
+  uniqueItems?: boolean;
+
+  // Nested object
+  properties?: Record<string, JSONSchemaProperty>;
+  required?: string[];
+  additionalProperties?: boolean | JSONSchemaProperty;
+
+  // Composition
+  oneOf?: JSONSchemaProperty[];
+  anyOf?: JSONSchemaProperty[];
+  allOf?: JSONSchemaProperty[];
 }
 ```
 
@@ -1031,6 +1167,9 @@ You can also import individual types for use in your own code:
 import type {
   MountOptions,
   FunctionDefinition,
+  FunctionParameters,
+  JSONSchemaParameters,
+  JSONSchemaProperty,
   SkillDefinition,
   SessionOptions,
   SlashCommand,

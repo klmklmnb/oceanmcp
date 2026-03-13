@@ -27,7 +27,7 @@ const SERVER_TOOL_PREFIX = "__ocean__";
  */
 const SERVER_SIDE_TOOL_IDS = new Set([
   `${SERVER_TOOL_PREFIX}loadSkill`,
-  `${SERVER_TOOL_PREFIX}userSelect`,
+  `${SERVER_TOOL_PREFIX}askUser`,
   `${SERVER_TOOL_PREFIX}browserExecute`,
   `${SERVER_TOOL_PREFIX}executePlan`,
   `${SERVER_TOOL_PREFIX}getServerStatus`,

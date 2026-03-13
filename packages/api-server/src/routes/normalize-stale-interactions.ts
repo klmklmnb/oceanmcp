@@ -4,7 +4,7 @@ const AUTO_DENY_REASON =
   "User sent a new message instead of responding to approval.";
 
 const AUTO_DENY_SELECT_REASON =
-  "User sent a new message instead of responding to selection.";
+  "User sent a new message instead of responding to input request.";
 
 function isToolPart(part: any): boolean {
   return (
@@ -13,10 +13,12 @@ function isToolPart(part: any): boolean {
   );
 }
 
-function isUserSelectPart(part: any): boolean {
+function isAskUserPart(part: any): boolean {
   return (
     isToolPart(part) &&
-    part.type === `${TOOL_PART_TYPE_PREFIX}userSelect`
+    // Support both new "askUser" and legacy "userSelect" parts in history
+    (part.type === `${TOOL_PART_TYPE_PREFIX}askUser` ||
+     part.type === `${TOOL_PART_TYPE_PREFIX}userSelect`)
   );
 }
 
@@ -35,7 +37,7 @@ function shouldAutoDeny(part: any): boolean {
  * on) and explicit denied approvals into `output-denied` to emit a proper
  * tool result.
  *
- * Similarly, pending userSelect parts (state "input-available") that have a
+ * Similarly, pending askUser parts (state "input-available") that have a
  * later user message are also converted to `output-denied` so the LLM
  * receives a proper tool result instead of hanging.
  */
@@ -73,9 +75,9 @@ export function normalizeStaleInteractions(messages: any[]): any[] {
         };
       }
 
-      // Stale userSelect: user moved on past a pending selection
+      // Stale askUser: user moved on past a pending input request
       const denySelectBecauseMovedOn =
-        isUserSelectPart(part) &&
+        isAskUserPart(part) &&
         part.state === TOOL_PART_STATE.INPUT_AVAILABLE &&
         hasLaterUserMessage;
 
@@ -87,7 +89,7 @@ export function normalizeStaleInteractions(messages: any[]): any[] {
           output: { denied: true, reason: AUTO_DENY_SELECT_REASON },
           // AI SDK v6 unconditionally reads `approval.reason` when
           // converting OUTPUT_DENIED parts to model messages, so we
-          // must provide an approval object even for userSelect parts.
+          // must provide an approval object even for askUser parts.
           approval: {
             id: `auto-deny-select-${part.toolCallId ?? index}`,
             approved: false,

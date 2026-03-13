@@ -68,21 +68,22 @@ const zhCN = {
   "approval.allow": "允许",
   "approval.deny": "拒绝",
 
-  // UserSelectCard
-  "select.title": "请选择",
-  "select.status.complete": "已完成",
-  "select.status.error": "错误",
-  "select.status.pending": "待选择",
-  "select.selected": "已选择：",
-  "select.value": "值：",
-  "select.failed": "选择失败。",
-  "select.prompt": "请选择一个选项：",
-  "select.noOptions": "没有找到预定义选项，请手动输入。",
-  "select.inputPlaceholder": "输入值",
-  "select.confirm": "确认",
-  "select.deny": "取消",
-  "select.status.denied": "已取消",
-  "select.deniedMessage": "选择已取消。",
+  // AskUserCard
+  "askUser.title": "请填写",
+  "askUser.status.complete": "已完成",
+  "askUser.status.error": "错误",
+  "askUser.status.pending": "待填写",
+  "askUser.status.denied": "已取消",
+  "askUser.submitted": "已提交",
+  "askUser.value": "值：",
+  "askUser.failed": "提交失败。",
+  "askUser.prompt": "请提供以下信息：",
+  "askUser.confirm": "提交",
+  "askUser.deny": "取消",
+  "askUser.deniedMessage": "已取消填写。",
+  "askUser.required": "必填",
+  "askUser.selectPlaceholder": "请选择",
+  "askUser.inputPlaceholder": "请输入",
 };
 
 export default zhCN;

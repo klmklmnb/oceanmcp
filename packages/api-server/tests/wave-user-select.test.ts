@@ -1,10 +1,10 @@
 /**
- * Tests for Wave interactive user-selection (userSelect → card buttons/dropdown).
+ * Tests for Wave interactive askUser tool (card buttons/dropdown/form).
  *
  * Covers:
  *   1. pending-selections store (add, resolve, remove, has, edge cases)
  *   2. Card building helpers (buttons for ≤3 options, dropdown for >3)
- *   3. Wave userSelect tool execute() flow (sends card, awaits callback)
+ *   3. Wave askUser tool execute() flow (sends card, awaits callback)
  *   4. Card reaction webhook handler (resolves pending selection)
  */
 import { describe, test, expect, mock, beforeEach } from "bun:test";
@@ -59,14 +59,14 @@ describe("pending-selections", () => {
       expect(hasPendingSelection(cardId)).toBe(true);
 
       // Resolve it
-      resolvePendingSelection(cardId, "a");
+      resolvePendingSelection(cardId, { _selectedValue: "a" });
 
       const result = await promise;
-      expect(result).toBe("a");
+      expect(result).toEqual({ _selectedValue: "a" });
       expect(hasPendingSelection(cardId)).toBe(false);
     });
 
-    test("resolves with the exact value string passed to resolvePendingSelection", async () => {
+    test("resolves with the exact value object passed to resolvePendingSelection", async () => {
       const cardId = trackId("card_exact_val");
       const promise = addPendingSelection(
         cardId,
@@ -74,8 +74,8 @@ describe("pending-selections", () => {
         "wave:dm:test",
       );
 
-      resolvePendingSelection(cardId, "staging");
-      expect(await promise).toBe("staging");
+      resolvePendingSelection(cardId, { _selectedValue: "staging" });
+      expect(await promise).toEqual({ _selectedValue: "staging" });
     });
 
     test("replaces an existing pending entry for the same cardMessageId", async () => {
@@ -92,8 +92,8 @@ describe("pending-selections", () => {
       await expect(first).rejects.toThrow("Replaced");
 
       // Second should be resolvable
-      resolvePendingSelection(cardId, "x");
-      expect(await second).toBe("x");
+      resolvePendingSelection(cardId, { _selectedValue: "x" });
+      expect(await second).toEqual({ _selectedValue: "x" });
     });
   });
 
@@ -106,7 +106,7 @@ describe("pending-selections", () => {
       ];
       const promise = addPendingSelection(cardId, opts, "wave:group:chat1");
 
-      const entry = resolvePendingSelection(cardId, "v1");
+      const entry = resolvePendingSelection(cardId, { _selectedValue: "v1" });
       expect(entry).toBeDefined();
       expect(entry!.options).toEqual(opts);
       expect(entry!.sessionKey).toBe("wave:group:chat1");
@@ -115,7 +115,7 @@ describe("pending-selections", () => {
     });
 
     test("returns undefined for an unknown cardMessageId", () => {
-      const entry = resolvePendingSelection("card_nonexistent", "value");
+      const entry = resolvePendingSelection("card_nonexistent", { _selectedValue: "value" });
       expect(entry).toBeUndefined();
     });
 
@@ -128,7 +128,7 @@ describe("pending-selections", () => {
       );
 
       expect(hasPendingSelection(cardId)).toBe(true);
-      resolvePendingSelection(cardId, "x");
+      resolvePendingSelection(cardId, { _selectedValue: "x" });
       expect(hasPendingSelection(cardId)).toBe(false);
 
       await promise;
@@ -142,8 +142,8 @@ describe("pending-selections", () => {
         "wave:dm:test",
       );
 
-      const first = resolvePendingSelection(cardId, "a");
-      const second = resolvePendingSelection(cardId, "a");
+      const first = resolvePendingSelection(cardId, { _selectedValue: "a" });
+      const second = resolvePendingSelection(cardId, { _selectedValue: "a" });
 
       expect(first).toBeDefined();
       expect(second).toBeUndefined();
@@ -211,7 +211,7 @@ describe("pending-selections", () => {
       const p2 = addPendingSelection(id2, [{ value: "b" }], "s2");
       expect(pendingSelectionCount()).toBe(before + 2);
 
-      resolvePendingSelection(id1, "a");
+      resolvePendingSelection(id1, { _selectedValue: "a" });
       expect(pendingSelectionCount()).toBe(before + 1);
 
       removePendingSelection(id2);
@@ -224,14 +224,11 @@ describe("pending-selections", () => {
 });
 
 // ═════════════════════════════════════════════════════════════════════════════
-// 2. Card building — sendUserSelectCard and card content structure
+// 2. Card building — sendAskUserCard and card content structure
 // ═════════════════════════════════════════════════════════════════════════════
 
 // We test the card building logic by importing the SDK helpers directly and
 // verifying the expected card structure matches what message-sender.ts builds.
-// Since sendUserSelectCard calls clients.msg.send (which we can't easily mock
-// without the full SDK), we test the shape by calling the SDK card builders
-// directly — the same ones used in message-sender.ts.
 
 import {
   CardTag,
@@ -377,10 +374,8 @@ describe("card building helpers", () => {
 });
 
 // ═════════════════════════════════════════════════════════════════════════════
-// 3. Wave userSelect tool — execute flow
+// 3. Wave askUser tool — execute flow
 // ═════════════════════════════════════════════════════════════════════════════
-
-// We import the tool builder and test it with mock clients.
 
 import { buildWaveTools } from "../src/wave/tools";
 import type { WaveClients } from "../src/wave/client";
@@ -430,31 +425,38 @@ function createMockSandbox(): Sandbox {
   };
 }
 
-describe("Wave userSelect tool", () => {
-  test("buildWaveTools includes userSelect with an execute function", () => {
+describe("Wave askUser tool", () => {
+  test("buildWaveTools includes askUser with an execute function", () => {
     const clients = createMockWaveClients();
     const tools = buildWaveTools([], [], createMockSandbox(), clients, "ou_sender", "wave:dm:test", "oc_chat");
 
-    expect(tools.userSelect).toBeDefined();
-    // Verify it has an execute function (unlike the generic client-side userSelect)
-    expect((tools.userSelect as any).execute).toBeDefined();
+    expect(tools.askUser).toBeDefined();
+    // Verify it has an execute function (unlike the generic client-side askUser)
+    expect((tools.askUser as any).execute).toBeDefined();
   });
 
-  test("execute sends a card and returns selectedValue after callback resolution", async () => {
+  test("execute sends a card and returns field value after callback resolution (simple select)", async () => {
     const mockSend = mock(async () => ({ msg_id: "card_tool_test_001" }));
     const clients = createMockWaveClients({ msgSend: mockSend });
     const tools = buildWaveTools([], [], createMockSandbox(), clients, "ou_sender", "wave:dm:test", "oc_chat");
 
-    const userSelectTool = tools.userSelect as any;
+    const askUserTool = tools.askUser as any;
 
-    // Call execute in the background
-    const executePromise = userSelectTool.execute({
+    // Call execute with the new JSON Schema format (single enum field → simple select)
+    const executePromise = askUserTool.execute({
       message: "请选择部署环境",
-      options: [
-        { value: "dev", label: "Development" },
-        { value: "staging", label: "Staging" },
-        { value: "production", label: "Production" },
-      ],
+      schema: {
+        type: "object",
+        properties: {
+          environment: {
+            type: "string",
+            title: "Environment",
+            enum: ["dev", "staging", "production"],
+            enumLabels: { dev: "Development", staging: "Staging", production: "Production" },
+          },
+        },
+        required: ["environment"],
+      },
     });
 
     // Wait for execute to reach addPendingSelection (after the async send)
@@ -464,38 +466,41 @@ describe("Wave userSelect tool", () => {
     expect(mockSend).toHaveBeenCalled();
     expect(hasPendingSelection("card_tool_test_001")).toBe(true);
 
-    // Simulate the card reaction callback
-    resolvePendingSelection("card_tool_test_001", "staging");
+    // Simulate the card reaction callback (webhook wraps single value)
+    resolvePendingSelection("card_tool_test_001", { _selectedValue: "staging" });
 
     const result = await executePromise;
-    expect(result).toEqual({
-      selectedValue: "staging",
-      selectedLabel: "Staging",
-    });
+    expect(result.environment).toBe("staging");
+    expect(result.selectedLabel).toBe("Staging");
   });
 
-  test("execute returns error when no options provided and no functionId", async () => {
+  test("execute returns error when schema has no properties", async () => {
     const clients = createMockWaveClients();
     const tools = buildWaveTools([], [], createMockSandbox(), clients, "ou_sender", "wave:dm:test", "oc_chat");
-    const userSelectTool = tools.userSelect as any;
+    const askUserTool = tools.askUser as any;
 
-    const result = await userSelectTool.execute({
+    const result = await askUserTool.execute({
       message: "Select something",
-      options: [],
+      schema: { type: "object", properties: {} },
     });
 
-    expect(result.error).toContain("No options provided");
+    expect(result.error).toContain("No fields provided");
   });
 
   test("execute returns error when card send fails (empty msg_id)", async () => {
     const mockSend = mock(async () => ({ msg_id: "" }));
     const clients = createMockWaveClients({ msgSend: mockSend });
     const tools = buildWaveTools([], [], createMockSandbox(), clients, "ou_sender", "wave:dm:test", "oc_chat");
-    const userSelectTool = tools.userSelect as any;
+    const askUserTool = tools.askUser as any;
 
-    const result = await userSelectTool.execute({
+    const result = await askUserTool.execute({
       message: "Pick one",
-      options: [{ value: "a", label: "A" }],
+      schema: {
+        type: "object",
+        properties: {
+          choice: { type: "string", enum: ["a"] },
+        },
+      },
     });
 
     expect(result.error).toContain("Failed to send");
@@ -507,59 +512,45 @@ describe("Wave userSelect tool", () => {
     });
     const clients = createMockWaveClients({ msgSend: mockSend });
     const tools = buildWaveTools([], [], createMockSandbox(), clients, "ou_sender", "wave:dm:test", "oc_chat");
-    const userSelectTool = tools.userSelect as any;
+    const askUserTool = tools.askUser as any;
 
-    const result = await userSelectTool.execute({
+    const result = await askUserTool.execute({
       message: "Pick one",
-      options: [{ value: "a", label: "A" }],
+      schema: {
+        type: "object",
+        properties: {
+          choice: { type: "string", enum: ["a"] },
+        },
+      },
     });
 
     expect(result.error).toContain("Network error");
   });
 
-  test("execute uses value as label when label is not provided", async () => {
+  test("execute uses value as label when no enumLabels provided", async () => {
     const mockSend = mock(async () => ({ msg_id: "card_no_label_test" }));
     const clients = createMockWaveClients({ msgSend: mockSend });
     const tools = buildWaveTools([], [], createMockSandbox(), clients, "ou_sender", "wave:dm:test", "oc_chat");
-    const userSelectTool = tools.userSelect as any;
+    const askUserTool = tools.askUser as any;
 
-    const executePromise = userSelectTool.execute({
+    const executePromise = askUserTool.execute({
       message: "Pick",
-      options: [
-        { value: "alpha" },
-        { value: "beta" },
-      ],
+      schema: {
+        type: "object",
+        properties: {
+          choice: { type: "string", enum: ["alpha", "beta"] },
+        },
+      },
     });
 
     await tick();
-    resolvePendingSelection("card_no_label_test", "beta");
+    resolvePendingSelection("card_no_label_test", { _selectedValue: "beta" });
     const result = await executePromise;
-    expect(result.selectedValue).toBe("beta");
+    expect(result.choice).toBe("beta");
     expect(result.selectedLabel).toBe("beta");
   });
 
-  test("execute uses description in label when label is absent but description exists", async () => {
-    const mockSend = mock(async () => ({ msg_id: "card_desc_label_test" }));
-    const clients = createMockWaveClients({ msgSend: mockSend });
-    const tools = buildWaveTools([], [], createMockSandbox(), clients, "ou_sender", "wave:dm:test", "oc_chat");
-    const userSelectTool = tools.userSelect as any;
-
-    const executePromise = userSelectTool.execute({
-      options: [
-        { value: "dev", description: "Development environment" },
-        { value: "prod", description: "Production environment" },
-      ],
-    });
-
-    await tick();
-    resolvePendingSelection("card_desc_label_test", "dev");
-    const result = await executePromise;
-    expect(result.selectedValue).toBe("dev");
-    // Label should be "dev — Development environment"
-    expect(result.selectedLabel).toBe("dev — Development environment");
-  });
-
-  test("execute defaults message to '请选择一个选项' when not provided", async () => {
+  test("execute defaults message to '请提供以下信息' when not provided", async () => {
     const sendArgs: any[] = [];
     const mockSend = mock(async (...args: any[]) => {
       sendArgs.push(args);
@@ -567,17 +558,23 @@ describe("Wave userSelect tool", () => {
     });
     const clients = createMockWaveClients({ msgSend: mockSend });
     const tools = buildWaveTools([], [], createMockSandbox(), clients, "ou_sender", "wave:dm:test", "oc_chat");
-    const userSelectTool = tools.userSelect as any;
+    const askUserTool = tools.askUser as any;
 
-    const executePromise = userSelectTool.execute({
-      options: [{ value: "a", label: "A" }],
+    const executePromise = askUserTool.execute({
+      message: "",
+      schema: {
+        type: "object",
+        properties: {
+          choice: { type: "string", enum: ["a"] },
+        },
+      },
     });
 
     await tick();
-    // The card should have been sent with default message
+    // The card should have been sent
     expect(mockSend).toHaveBeenCalledTimes(1);
 
-    resolvePendingSelection("card_default_msg_test", "a");
+    resolvePendingSelection("card_default_msg_test", { _selectedValue: "a" });
     await executePromise;
   });
 });
@@ -588,11 +585,6 @@ describe("Wave userSelect tool", () => {
 
 describe("card reaction handling (integration)", () => {
   test("resolving a pending selection unblocks the tool execute() promise", async () => {
-    // This simulates the full flow:
-    // 1. Tool execute() sends a card and adds a pending selection
-    // 2. Webhook receives card reaction and calls resolvePendingSelection
-    // 3. Tool execute() returns with the selected value
-
     const cardMsgId = "card_integration_flow_001";
     const opts: PendingSelectionOption[] = [
       { value: "dev", label: "Development" },
@@ -600,27 +592,21 @@ describe("card reaction handling (integration)", () => {
       { value: "production", label: "Production" },
     ];
 
-    // Step 1: Add pending selection (simulates tool execute adding it)
     const selectionPromise = addPendingSelection(cardMsgId, opts, "wave:dm:user1");
 
-    // Step 2: Simulate webhook receiving card reaction
     expect(hasPendingSelection(cardMsgId)).toBe(true);
-    const entry = resolvePendingSelection(cardMsgId, "production");
+    const entry = resolvePendingSelection(cardMsgId, { _selectedValue: "production" });
     expect(entry).toBeDefined();
     expect(entry!.sessionKey).toBe("wave:dm:user1");
 
-    // Step 3: The promise resolves with the selected value
-    const selectedValue = await selectionPromise;
-    expect(selectedValue).toBe("production");
+    const result = await selectionPromise;
+    expect(result).toEqual({ _selectedValue: "production" });
 
-    // Entry is removed
     expect(hasPendingSelection(cardMsgId)).toBe(false);
   });
 
   test("webhook ignores card reactions for non-pending cards", () => {
-    // This simulates receiving a card reaction for a card that was not
-    // sent by userSelect (e.g. some other interactive card).
-    const result = resolvePendingSelection("card_unknown_xyz", "some_value");
+    const result = resolvePendingSelection("card_unknown_xyz", { _selectedValue: "some_value" });
     expect(result).toBeUndefined();
   });
 
@@ -632,9 +618,8 @@ describe("card reaction handling (integration)", () => {
     ];
 
     const promise = addPendingSelection(cardMsgId, opts, "wave:group:chat1");
-    const entry = resolvePendingSelection(cardMsgId, "v2.0");
+    const entry = resolvePendingSelection(cardMsgId, { _selectedValue: "v2.0" });
 
-    // The webhook handler can find the label from the entry
     const selectedOption = entry!.options.find((o) => o.value === "v2.0");
     expect(selectedOption?.label).toBe("Version 2.0 (beta)");
 
@@ -651,13 +636,13 @@ describe("card reaction handling (integration)", () => {
     const p3 = addPendingSelection(card3, [{ value: "c" }], "s3");
 
     // Resolve in reverse order
-    resolvePendingSelection(card3, "c");
-    resolvePendingSelection(card1, "a");
-    resolvePendingSelection(card2, "b");
+    resolvePendingSelection(card3, { val: "c" });
+    resolvePendingSelection(card1, { val: "a" });
+    resolvePendingSelection(card2, { val: "b" });
 
-    expect(await p1).toBe("a");
-    expect(await p2).toBe("b");
-    expect(await p3).toBe("c");
+    expect(await p1).toEqual({ val: "a" });
+    expect(await p2).toEqual({ val: "b" });
+    expect(await p3).toEqual({ val: "c" });
   });
 });
 
@@ -706,7 +691,7 @@ describe("env-deploy demo skill fixture", () => {
     )) as any;
 
     expect(result.error).toContain("Invalid environment");
-    expect(result.hint).toContain("userSelect");
+    expect(result.hint).toContain("askUser");
   });
 
   test("rollback tool executes successfully", async () => {
@@ -724,7 +709,7 @@ describe("env-deploy demo skill fixture", () => {
     expect(result.previousVersion).toBe("v1.2.0");
   });
 
-  test("demo skill SKILL.md describes the userSelect-driven workflow", async () => {
+  test("demo skill SKILL.md describes the askUser-driven workflow", async () => {
     const fs = await import("fs/promises");
     const path = await import("path");
     const skillMd = await fs.readFile(
@@ -733,7 +718,7 @@ describe("env-deploy demo skill fixture", () => {
     );
 
     expect(skillMd).toContain("name: env-deploy");
-    expect(skillMd).toContain("userSelect");
+    expect(skillMd).toContain("askUser");
     expect(skillMd).toContain("buttons");
     expect(skillMd).toContain("dropdown");
   });
@@ -745,8 +730,7 @@ describe("env-deploy demo skill fixture", () => {
 
 describe("button vs dropdown threshold", () => {
   // The threshold is ≤3 → buttons, >3 → dropdown
-  // We test the card-building decision indirectly through sendUserSelectCard
-  // by verifying the mock msg.send receives the expected card shape.
+  // We test via sendAskUserCard in simple-select mode.
 
   test("≤3 options → card body has Flow tag (buttons)", async () => {
     let sentContent: any = null;
@@ -756,15 +740,16 @@ describe("button vs dropdown threshold", () => {
     });
     const clients = createMockWaveClients({ msgSend: mockSend });
 
-    // Import sendUserSelectCard
-    const { sendUserSelectCard } = await import("../src/wave/message-sender");
-    const resultPromise = sendUserSelectCard(clients, "oc_chat", "Choose", [
-      { value: "a", label: "A" },
-      { value: "b", label: "B" },
-      { value: "c", label: "C" },
-    ]);
+    const { sendAskUserCard } = await import("../src/wave/message-sender");
+    const msgId = await sendAskUserCard(clients, "oc_chat", "Choose", {
+      mode: "simple-select",
+      options: [
+        { value: "a", label: "A" },
+        { value: "b", label: "B" },
+        { value: "c", label: "C" },
+      ],
+    });
 
-    const msgId = await resultPromise;
     expect(msgId).toBe("card_threshold_buttons");
     expect(sentContent).toBeDefined();
     expect(sentContent.card.tag).toBe(CardTag.Flow);
@@ -780,13 +765,16 @@ describe("button vs dropdown threshold", () => {
     });
     const clients = createMockWaveClients({ msgSend: mockSend });
 
-    const { sendUserSelectCard } = await import("../src/wave/message-sender");
-    const msgId = await sendUserSelectCard(clients, "oc_chat", "Choose version", [
-      { value: "v1" },
-      { value: "v2" },
-      { value: "v3" },
-      { value: "v4" },
-    ]);
+    const { sendAskUserCard } = await import("../src/wave/message-sender");
+    const msgId = await sendAskUserCard(clients, "oc_chat", "Choose version", {
+      mode: "simple-select",
+      options: [
+        { value: "v1" },
+        { value: "v2" },
+        { value: "v3" },
+        { value: "v4" },
+      ],
+    });
 
     expect(msgId).toBe("card_threshold_dropdown");
     expect(sentContent).toBeDefined();
@@ -802,12 +790,11 @@ describe("button vs dropdown threshold", () => {
     });
     const clients = createMockWaveClients({ msgSend: mockSend });
 
-    const { sendUserSelectCard } = await import("../src/wave/message-sender");
-    await sendUserSelectCard(clients, "oc_chat", "Pick", [
-      { value: "x" },
-      { value: "y" },
-      { value: "z" },
-    ]);
+    const { sendAskUserCard } = await import("../src/wave/message-sender");
+    await sendAskUserCard(clients, "oc_chat", "Pick", {
+      mode: "simple-select",
+      options: [{ value: "x" }, { value: "y" }, { value: "z" }],
+    });
 
     expect(sentContent.card.tag).toBe(CardTag.Flow);
   });
@@ -820,13 +807,11 @@ describe("button vs dropdown threshold", () => {
     });
     const clients = createMockWaveClients({ msgSend: mockSend });
 
-    const { sendUserSelectCard } = await import("../src/wave/message-sender");
-    await sendUserSelectCard(clients, "oc_chat", "Pick", [
-      { value: "a" },
-      { value: "b" },
-      { value: "c" },
-      { value: "d" },
-    ]);
+    const { sendAskUserCard } = await import("../src/wave/message-sender");
+    await sendAskUserCard(clients, "oc_chat", "Pick", {
+      mode: "simple-select",
+      options: [{ value: "a" }, { value: "b" }, { value: "c" }, { value: "d" }],
+    });
 
     expect(sentContent.card.tag).toBe(CardTag.Dropdown);
   });
@@ -839,10 +824,11 @@ describe("button vs dropdown threshold", () => {
     });
     const clients = createMockWaveClients({ msgSend: mockSend });
 
-    const { sendUserSelectCard } = await import("../src/wave/message-sender");
-    await sendUserSelectCard(clients, "oc_chat", "Confirm?", [
-      { value: "yes", label: "Yes" },
-    ]);
+    const { sendAskUserCard } = await import("../src/wave/message-sender");
+    await sendAskUserCard(clients, "oc_chat", "Confirm?", {
+      mode: "simple-select",
+      options: [{ value: "yes", label: "Yes" }],
+    });
 
     expect(sentContent.card.tag).toBe(CardTag.Flow);
     expect(sentContent.card.elements).toHaveLength(1);
@@ -862,18 +848,16 @@ describe("defaultValue support", () => {
     });
     const clients = createMockWaveClients({ msgSend: mockSend });
 
-    const { sendUserSelectCard } = await import("../src/wave/message-sender");
-    await sendUserSelectCard(
-      clients,
-      "oc_chat",
-      "Choose env",
-      [
+    const { sendAskUserCard } = await import("../src/wave/message-sender");
+    await sendAskUserCard(clients, "oc_chat", "Choose env", {
+      mode: "simple-select",
+      options: [
         { value: "dev", label: "Dev" },
         { value: "staging", label: "Staging" },
         { value: "prod", label: "Prod" },
       ],
-      "staging",
-    );
+      defaultValue: "staging",
+    });
 
     expect(sentContent.card.tag).toBe(CardTag.Flow);
     const buttons = sentContent.card.elements;
@@ -892,11 +876,14 @@ describe("defaultValue support", () => {
     });
     const clients = createMockWaveClients({ msgSend: mockSend });
 
-    const { sendUserSelectCard } = await import("../src/wave/message-sender");
-    await sendUserSelectCard(clients, "oc_chat", "Choose env", [
-      { value: "dev", label: "Dev" },
-      { value: "staging", label: "Staging" },
-    ]);
+    const { sendAskUserCard } = await import("../src/wave/message-sender");
+    await sendAskUserCard(clients, "oc_chat", "Choose env", {
+      mode: "simple-select",
+      options: [
+        { value: "dev", label: "Dev" },
+        { value: "staging", label: "Staging" },
+      ],
+    });
 
     const buttons = sentContent.card.elements;
     expect(buttons[0].style).toBe("primary");
@@ -911,17 +898,15 @@ describe("defaultValue support", () => {
     });
     const clients = createMockWaveClients({ msgSend: mockSend });
 
-    const { sendUserSelectCard } = await import("../src/wave/message-sender");
-    await sendUserSelectCard(
-      clients,
-      "oc_chat",
-      "Choose",
-      [
+    const { sendAskUserCard } = await import("../src/wave/message-sender");
+    await sendAskUserCard(clients, "oc_chat", "Choose", {
+      mode: "simple-select",
+      options: [
         { value: "a", label: "A" },
         { value: "b", label: "B" },
       ],
-      "nonexistent",
-    );
+      defaultValue: "nonexistent",
+    });
 
     const buttons = sentContent.card.elements;
     expect(buttons[0].style).toBe("primary");
@@ -936,19 +921,17 @@ describe("defaultValue support", () => {
     });
     const clients = createMockWaveClients({ msgSend: mockSend });
 
-    const { sendUserSelectCard } = await import("../src/wave/message-sender");
-    await sendUserSelectCard(
-      clients,
-      "oc_chat",
-      "Choose version",
-      [
+    const { sendAskUserCard } = await import("../src/wave/message-sender");
+    await sendAskUserCard(clients, "oc_chat", "Choose version", {
+      mode: "simple-select",
+      options: [
         { value: "v1", label: "V1" },
         { value: "v2", label: "V2" },
         { value: "v3", label: "V3" },
         { value: "v4", label: "V4" },
       ],
-      "v3",
-    );
+      defaultValue: "v3",
+    });
 
     expect(sentContent.card.tag).toBe(CardTag.Dropdown);
     const opts = sentContent.card.options;
@@ -968,13 +951,16 @@ describe("defaultValue support", () => {
     });
     const clients = createMockWaveClients({ msgSend: mockSend });
 
-    const { sendUserSelectCard } = await import("../src/wave/message-sender");
-    await sendUserSelectCard(clients, "oc_chat", "Choose version", [
-      { value: "v1" },
-      { value: "v2" },
-      { value: "v3" },
-      { value: "v4" },
-    ]);
+    const { sendAskUserCard } = await import("../src/wave/message-sender");
+    await sendAskUserCard(clients, "oc_chat", "Choose version", {
+      mode: "simple-select",
+      options: [
+        { value: "v1" },
+        { value: "v2" },
+        { value: "v3" },
+        { value: "v4" },
+      ],
+    });
 
     const opts = sentContent.card.options;
     expect(opts[0].value).toBe("v1");
@@ -991,19 +977,17 @@ describe("defaultValue support", () => {
     });
     const clients = createMockWaveClients({ msgSend: mockSend });
 
-    const { sendUserSelectCard } = await import("../src/wave/message-sender");
-    await sendUserSelectCard(
-      clients,
-      "oc_chat",
-      "Choose",
-      [
+    const { sendAskUserCard } = await import("../src/wave/message-sender");
+    await sendAskUserCard(clients, "oc_chat", "Choose", {
+      mode: "simple-select",
+      options: [
         { value: "a" },
         { value: "b" },
         { value: "c" },
         { value: "d" },
       ],
-      "nonexistent",
-    );
+      defaultValue: "nonexistent",
+    });
 
     const opts = sentContent.card.options;
     expect(opts[0].value).toBe("a");
@@ -1073,7 +1057,7 @@ describe("removeAllForSession", () => {
     await expect(p2).rejects.toThrow("User sent new message");
 
     // Cleanup session B
-    resolvePendingSelection("card_session_b1", "z");
+    resolvePendingSelection("card_session_b1", { _selectedValue: "z" });
     await p3;
   });
 
@@ -1094,8 +1078,8 @@ describe("removeAllForSession", () => {
 
     // s2 is unaffected
     expect(hasPendingSelection("card_iso_2")).toBe(true);
-    resolvePendingSelection("card_iso_2", "b");
-    expect(await p2).toBe("b");
+    resolvePendingSelection("card_iso_2", { _selectedValue: "b" });
+    expect(await p2).toEqual({ _selectedValue: "b" });
   });
 });
 
@@ -1222,16 +1206,10 @@ describe("updateCardAsExpired", () => {
 
 describe("safety-net timeout", () => {
   test("stopCleanup can be called without error", () => {
-    // Just verify the function is exported and callable
     stopCleanup();
-    // Restart it for other tests (the module auto-starts it)
-    // We can't easily restart it, but at least verify no crash
   });
 
   test("entries can be manually timed out by removing them", async () => {
-    // We can't easily test the setInterval-based cleanup without
-    // waiting 1 hour, but we can verify the pattern works:
-    // add entry → simulate timeout by calling removePendingSelection
     const promise = addPendingSelection("card_timeout_sim", [{ value: "a" }], "wave:dm:timeout");
 
     // Simulate what the cleanup sweep would do

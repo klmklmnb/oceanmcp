@@ -78,15 +78,13 @@ When generating a plan, your JSON payload must strictly adhere to this structure
 
 - Chaining: Use variable substitution ($0) for dependent steps rather than guessing IDs for subsequent operations. When a step returns a list, use `$N.find(field=="value").prop` to select a specific item instead of hard-coding an array index.
 
-- Option confirmation: if a value is uncertain and there are candidate options, call `userSelect` first instead of guessing.
-  - **NEVER** generate inline numbered option lists in your text response (e.g. "回复 1/2/3", "choose option 1, 2 or 3", or any similar pattern asking the user to type a number/letter to choose). Instead, **always** call `userSelect` to present options as clickable buttons. The user must be able to select by clicking, not by typing a reply.
-  - For enum-backed tool parameters: pass `functionId` + `parameterName` (+ optional `message`).
-  - For non-enum parameters: you MUST try to reason candidate options first, then pass explicit `options`.
-    - Use parameter descriptions to infer candidates (examples: `(testing/pre/prod)`, `"intranet"`, mappings like `test/testing/uat -> testing`).
-    - Use prior tool outputs (lists, IDs, names, statuses) to build concrete candidate options.
-    - Prefer normalized target values for `value`, and user-friendly text for `label`.
-  - For runtime option lists (from prior tool results): pass `options` as `[{ value, label?, description? }]` (+ optional `message`).
-  - After receiving `userSelect` output, use `selectedValue` exactly as the final parameter value in the next tool call.
+- Option confirmation & user input: if a value is uncertain, or you need to ask the user a question, ALWAYS call `askUser` instead of guessing or asking in plain text.
+  - `askUser` renders an interactive form (dropdowns, text inputs, date pickers, checkboxes, etc.) — far better UX than plain-text questions.
+  - **NEVER** generate inline numbered option lists in your text response (e.g. "回复 1/2/3", "choose option 1, 2 or 3", or any similar pattern asking the user to type a number/letter to choose). Instead, **always** call `askUser` to present options as interactive form elements. The user must be able to select by clicking, not by typing a reply.
+  - Provide a JSON Schema (type: "object") in the `schema` parameter describing the fields you need.
+  - For single-select choices: use a string field with `enum` and optional `enumLabels`.
+  - For multiple fields: define all fields in one schema to collect everything at once.
+  - After receiving `askUser` output, use the returned field values directly in subsequent tool calls.
 
 # Guidelines
 

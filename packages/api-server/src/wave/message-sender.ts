@@ -216,7 +216,7 @@ export type CardSegment =
   | { kind: "tool"; activity: ToolActivity };
 
 /** Tools that manage their own UI and should NOT appear as tool status lines. */
-const HIDDEN_TOOL_NAMES = new Set(["userSelect", "executePlan"]);
+const HIDDEN_TOOL_NAMES = new Set(["askUser", "executePlan"]);
 
 /** Check whether a tool activity is displayable (not hidden). */
 export function isDisplayableTool(toolName: string): boolean {
@@ -257,15 +257,28 @@ export function summariseToolArgs(toolName: string, input: unknown): string {
     return obj.name;
   }
 
+  /** Stringify a single arg value for display. */
+  function stringifyValue(val: unknown): string {
+    if (val === null || val === undefined) return "";
+    if (typeof val === "string") return val;
+    if (typeof val === "number" || typeof val === "boolean") return String(val);
+    // Objects / arrays — use compact JSON
+    try {
+      return JSON.stringify(val);
+    } catch {
+      return String(val);
+    }
+  }
+
   // For single-key inputs, show value directly
   if (keys.length === 1) {
-    return String(obj[keys[0]] ?? "");
+    return stringifyValue(obj[keys[0]]);
   }
 
   // For multi-key inputs, show key: value pairs
   return keys
     .map((key) => {
-      const val = String(obj[key] ?? "");
+      const val = stringifyValue(obj[key]);
       return `${key}: ${val}`;
     })
     .join(", ");
@@ -981,6 +994,28 @@ function buildSelectionConfirmedCard(
   };
 }
 
+/**
+ * Build a "form submitted" card shown after the user submits a form.
+ * Displays each field name and its value.
+ */
+function buildFormSubmittedCard(
+  message: string,
+  formValues: Record<string, any>,
+): MsgCard["content"] {
+  const lines = Object.entries(formValues).map(([key, value]) => {
+    const displayValue = Array.isArray(value)
+      ? value.join(", ")
+      : String(value ?? "");
+    return `**${key}**: ${displayValue}`;
+  });
+  return {
+    header: cardHeader(message, "success"),
+    card: cardColumn([
+      cardMarkdown(lines.join("\n")),
+    ]),
+  };
+}
+
 function buildExecutePlanCard(
   intent: string,
   steps: ExecutePlanStep[],
@@ -1058,37 +1093,51 @@ function buildExecutePlanResultContent(
 }
 
 /**
- * Send an interactive user-select card (buttons or dropdown).
+ * Send an interactive askUser card.
  *
- * @param clients   - Wave SDK clients
- * @param chatId       - The chat/receiver ID to send to
- * @param message      - Prompt text shown to the user
- * @param options      - Selection options
- * @param defaultValue - Optional default value to pre-select/highlight
+ * Supports two modes:
+ *   - `simple-select`: buttons (≤3 options) or dropdown (>3 options) — same as old userSelect
+ *   - `form`: a Wave form card with multiple input elements and a submit button
+ *
+ * @param clients - Wave SDK clients
+ * @param chatId  - The chat/receiver ID to send to
+ * @param message - Prompt text shown to the user
+ * @param config  - Card configuration (mode + options or formContent)
  * @returns The message ID of the sent card (used to correlate with the callback)
  */
-export async function sendUserSelectCard(
+export async function sendAskUserCard(
   clients: WaveClients,
   chatId: string,
   message: string,
-  options: PendingSelectionOption[],
-  defaultValue?: string,
+  config:
+    | { mode: "simple-select"; options: PendingSelectionOption[]; defaultValue?: string }
+    | { mode: "form"; formContent: MsgCard["content"] },
 ): Promise<string> {
-  const content =
-    options.length <= BUTTON_THRESHOLD
-      ? buildButtonSelectCard(message, options, defaultValue)
-      : buildDropdownSelectCard(message, options, defaultValue);
+  let content: MsgCard["content"];
+  let modeLabel: string;
+
+  if (config.mode === "simple-select") {
+    const { options, defaultValue } = config;
+    content =
+      options.length <= BUTTON_THRESHOLD
+        ? buildButtonSelectCard(message, options, defaultValue)
+        : buildDropdownSelectCard(message, options, defaultValue);
+    modeLabel = options.length <= BUTTON_THRESHOLD ? "buttons" : "dropdown";
+  } else {
+    content = config.formContent;
+    modeLabel = "form";
+  }
 
   const t0 = Date.now();
   try {
     const result = await clients.msg.send(chatId, msgCard(content));
     debugLog(
-      `${TAG} msg.send (userSelect card, ${options.length <= BUTTON_THRESHOLD ? "buttons" : "dropdown"}): ${Date.now() - t0}ms`,
+      `${TAG} msg.send (askUser card, ${modeLabel}): ${Date.now() - t0}ms`,
     );
     return result?.msg_id ?? "";
   } catch (err) {
     logger.error(
-      `${TAG} msg.send (userSelect card) FAILED after ${Date.now() - t0}ms:`,
+      `${TAG} msg.send (askUser card) FAILED after ${Date.now() - t0}ms:`,
       err,
     );
     throw err;
@@ -1168,9 +1217,10 @@ export async function updateExecutePlanResultCard(
 }
 
 /**
- * Update the interactive card after the user makes a selection.
+ * Update the interactive card after the user responds.
  *
- * Replaces the buttons/dropdown with a confirmation showing the selected option.
+ * For simple selections: shows "已选择: **label**"
+ * For form submissions: shows each field name and its submitted value.
  *
  * Uses `updateCardActively` (by message ID) instead of `updateCard` (by token)
  * because the token-based endpoint has issues with `receiver_id_type` validation
@@ -1178,16 +1228,20 @@ export async function updateExecutePlanResultCard(
  *
  * @param clients        - Wave SDK clients
  * @param cardMessageId  - The `open_msg_id` from the `EventMsgCardReaction` event
- * @param message        - Original prompt text
- * @param selectedLabel  - The label of the selected option
+ * @param message        - Header title text (e.g. "提交完成")
+ * @param selectedLabel  - The label of the selected option (simple select mode)
+ * @param formValues     - Optional form values to display (form submission mode)
  */
 export async function updateCardAfterSelection(
   clients: WaveClients,
   cardMessageId: string,
   message: string,
   selectedLabel: string,
+  formValues?: Record<string, any>,
 ): Promise<void> {
-  const content = buildSelectionConfirmedCard(message, selectedLabel);
+  const content = formValues
+    ? buildFormSubmittedCard(message, formValues)
+    : buildSelectionConfirmedCard(message, selectedLabel);
   const t0 = Date.now();
   try {
     await clients.msg.updateCardActively(cardMessageId, content);
