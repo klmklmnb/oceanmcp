@@ -46,6 +46,7 @@
     "ai": "6.0.37",
     "axios": "^1.13.6",
     "crypto-js": "^4.2.0",
+    "dayjs": "^1.11.20",
     "react": "19.0.1",
     "react-dom": "19.0.1",
     "react-markdown": "^10.1.0",

@@ -1,4 +1,5 @@
 import CryptoJS from "crypto-js";
+import dayjs from "dayjs";
 import {
   FUNCTION_TYPE,
   OPERATION_TYPE,
@@ -113,45 +114,41 @@ const LEAVE_TYPE_NAME: Record<string, string> = {
 // Returns { weekday (excludes Sat/Sun), naturalDay (all days) }
 // ---------------------------------------------------------------------------
 
-function parseSlot(dt: string): { date: Date; slotIndex: number } {
-  const [datePart, timePart] = dt.split(" ");
-  const [y, m, d] = datePart.split("-").map(Number);
-  const hour = parseInt(timePart.split(":")[0], 10);
-  // slot 0 = morning (10:00), slot 1 = afternoon (15:00), slot 2 = end-of-day (19:00)
-  let slotIndex = 0;
-  if (hour >= 19) slotIndex = 2;
-  else if (hour >= 15) slotIndex = 1;
-  return { date: new Date(y, m - 1, d), slotIndex };
+function hourToSlot(h: number): number {
+  if (h >= 19) return 2;
+  if (h >= 15) return 1;
+  return 0;
 }
 
 function calcLeaveDays(
   start: string,
   end: string,
 ): { weekday: number; naturalDay: number } {
-  const s = parseSlot(start);
-  const e = parseSlot(end);
+  const s = dayjs(start, "YYYY-MM-DD HH:mm");
+  const e = dayjs(end, "YYYY-MM-DD HH:mm");
+  const startSlot = hourToSlot(s.hour());
+  const endSlot = hourToSlot(e.hour());
 
   let naturalDay = 0;
   let weekday = 0;
+  let cur = s.startOf("day");
+  let curSlot = startSlot;
+  const endDay = e.startOf("day");
 
-  const cur = new Date(s.date);
-  let curSlot = s.slotIndex; // 0=morning, 1=afternoon
+  while (cur.isBefore(endDay) || cur.isSame(endDay, "day")) {
+    const isEnd = cur.isSame(endDay, "day");
+    const dayEnd = isEnd ? endSlot : 2;
+    const slots = dayEnd - curSlot;
 
-  while (cur <= e.date) {
-    const isSameEnd = cur.getTime() === e.date.getTime();
-    const endSlot = isSameEnd ? e.slotIndex : 2;
-    const slotsInDay = endSlot - curSlot;
-
-    if (slotsInDay > 0) {
-      const half = slotsInDay * 0.5;
+    if (slots > 0) {
+      const half = slots * 0.5;
       naturalDay += half;
-      const dow = cur.getDay();
-      if (dow !== 0 && dow !== 6) {
-        weekday += half;
-      }
+      const dow = cur.day();
+      if (dow !== 0 && dow !== 6) weekday += half;
     }
 
-    cur.setDate(cur.getDate() + 1);
+    if (isEnd) break;
+    cur = cur.add(1, "day");
     curSlot = 0;
   }
 
