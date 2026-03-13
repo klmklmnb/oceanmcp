@@ -721,7 +721,7 @@ function getToolName(part: any): string {
 function isToolMetaPart(part: any): boolean {
   if (!isToolPart(part)) return false;
   const toolName = getToolName(part);
-  if (toolName === "executePlan" || toolName === "userSelect") return false;
+  if (toolName === "executePlan" || toolName === "userSelect" || toolName === "askUser") return false;
   if (part.state === TOOL_PART_STATE.APPROVAL_REQUESTED) return false;
   return true;
 }
