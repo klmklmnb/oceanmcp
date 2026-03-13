@@ -40,9 +40,11 @@
   },
   "dependencies": {
     "@ai-sdk/react": "3.0.39",
+    "@dawn/oss-sdk": "0.3.4-beta.5",
     "@monaco-editor/react": "^4.7.0",
     "@ocean-mcp/shared": "workspace:*",
     "ai": "6.0.37",
+    "axios": "^1.13.6",
     "react": "19.0.1",
     "react-dom": "19.0.1",
     "react-markdown": "^10.1.0",
