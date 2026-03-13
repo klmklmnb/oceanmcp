@@ -64,7 +64,9 @@ export function resolveTheme(theme: Theme | undefined): "light" | "dark" {
   return THEME.LIGHT;
 }
 
-const config: SDKConfig = {};
+const config: SDKConfig = {
+  session: { enable: true },
+};
 
 export const sdkConfig = {
   get locale(): SupportedLocale | undefined {
