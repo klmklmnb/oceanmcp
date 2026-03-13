@@ -784,6 +784,76 @@ function getToolDisplayNameFromPart(part: any): string {
   return toolName;
 }
 
+function getToolRenderContext(part: any): {
+  toolName: string;
+  displayName: string;
+  fnDef?: ReturnType<typeof functionRegistry.get>;
+  fnArgs: Record<string, any>;
+} {
+  const toolName = getToolName(part);
+  const input = part?.input;
+  let displayName = toolName;
+  let fnDef: ReturnType<typeof functionRegistry.get> | undefined;
+  let fnArgs: Record<string, any> = {};
+
+  if (toolName === "browserExecute" && input?.functionId) {
+    fnDef = functionRegistry.get(input.functionId);
+    displayName = fnDef
+      ? sdkConfig.resolveDisplayName(fnDef.name, fnDef.cnName)
+      : input.functionId;
+    fnArgs = input.arguments || {};
+  } else if (toolName === "loadSkill" && input?.name) {
+    displayName = getLoadSkillDisplayName(input.name);
+  } else {
+    fnDef = functionRegistry.get(toolName);
+    if (fnDef) {
+      displayName = sdkConfig.resolveDisplayName(fnDef.name, fnDef.cnName) || toolName;
+      fnArgs = input || {};
+    }
+  }
+
+  return { toolName, displayName, fnDef, fnArgs };
+}
+
+function ToolCustomRender({
+  fnDef,
+  displayName,
+  fnArgs,
+  state,
+  output,
+}: {
+  fnDef?: ReturnType<typeof functionRegistry.get>;
+  displayName: string;
+  fnArgs: Record<string, any>;
+  state: string;
+  output?: any;
+}) {
+  if (!fnDef?.showRender) return null;
+  const isOutputError =
+    state === TOOL_PART_STATE.OUTPUT_AVAILABLE &&
+    output != null &&
+    typeof output === "object" &&
+    typeof output.error === "string";
+  const status =
+    state === TOOL_PART_STATE.OUTPUT_AVAILABLE && !isOutputError
+      ? ("success" as any)
+      : state === TOOL_PART_STATE.OUTPUT_ERROR || isOutputError
+        ? ("failed" as any)
+        : ("running" as any);
+  const rendered = fnDef.showRender({
+    id: fnDef.id,
+    functionId: fnDef.id,
+    title: displayName,
+    arguments: fnArgs,
+    status,
+    result: output,
+  });
+  if (isDOMRenderDescriptor(rendered)) {
+    return <DOMContainer descriptor={rendered} />;
+  }
+  return rendered ?? null;
+}
+
 /**
  * Message renderer — renders a single message with inline tool-call parts.
  *
@@ -887,25 +957,7 @@ export function MessageRenderer({
       //   1. browserExecute — wraps a function call (input.functionId identifies the function)
       //   2. Direct proxy tool — skill-bundled tools registered as native tools on the server
       //      (toolName IS the function ID, input contains the function's own arguments)
-      let displayName = toolName;
-      let fnDef: ReturnType<typeof functionRegistry.get> | undefined;
-      let fnArgs: Record<string, any> = {};
-      if (toolName === "browserExecute" && input?.functionId) {
-        fnDef = functionRegistry.get(input.functionId);
-        displayName = fnDef
-          ? sdkConfig.resolveDisplayName(fnDef.name, fnDef.cnName)
-          : input.functionId;
-        fnArgs = input.arguments || {};
-      } else if (toolName === "loadSkill" && input?.name) {
-        displayName = getLoadSkillDisplayName(input.name);
-      } else {
-        // Direct proxy tool — toolName is the function ID itself
-        fnDef = functionRegistry.get(toolName);
-        if (fnDef) {
-          displayName = sdkConfig.resolveDisplayName(fnDef.name, fnDef.cnName) || toolName;
-          fnArgs = input || {};
-        }
-      }
+      const { displayName, fnDef, fnArgs } = getToolRenderContext(part);
 
       return (
         <div key={toolCallId || index}>
@@ -918,7 +970,7 @@ export function MessageRenderer({
               onApprove={onApprove}
               onDeny={onDeny}
             />
-          ) : !showToolDebugCards ? (
+          ) : !showToolDebugCards && !fnDef?.showRender ? (
             <ToolCallInlineStatus
               displayName={displayName}
               state={state}
@@ -1237,7 +1289,17 @@ export function MessageRenderer({
       }
 
       if (isToolMetaPart(part)) {
-        const node = renderPart(part, index);
+        const { displayName, fnDef, fnArgs } = getToolRenderContext(part);
+        const node = fnDef?.showRender ? (
+          <ToolCallInlineStatus
+            displayName={displayName}
+            state={part.state}
+            output={part.output}
+            errorText={part.errorText}
+            approval={part.approval}
+            streamingActive={streamingActive}
+          />
+        ) : renderPart(part, index);
         if (node !== null) {
           const isActiveTool = !isToolMetaSettled(part);
           pushWrappedNode(
@@ -1256,6 +1318,25 @@ export function MessageRenderer({
                 ? getSkillLabel(part.input?.name)
                 : undefined,
             },
+          );
+        }
+        const shouldRenderCustomOutput =
+          part.state === TOOL_PART_STATE.OUTPUT_AVAILABLE && Boolean(fnDef?.showRender);
+        if (shouldRenderCustomOutput) {
+          pushWrappedNode(
+            "content",
+            <div className="my-3 ocean-fade-in">
+              <ToolCustomRender
+                fnDef={fnDef}
+                displayName={displayName}
+                fnArgs={fnArgs}
+                state={part.state}
+                output={part.output}
+              />
+            </div>,
+            `${keyPrefix}-content-tool-custom-${index}`,
+            index,
+            part,
           );
         }
         continue;

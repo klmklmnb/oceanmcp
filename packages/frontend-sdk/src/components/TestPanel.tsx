@@ -2,6 +2,15 @@ import React, { useState, useEffect, useRef, useCallback, useId } from "react";
 import OceanMCPSDK from "../main";
 import { sdkConfig, THEME, resolveTheme, type SupportedLocale, type Theme } from "../runtime/sdk-config";
 import { chatBridge } from "../runtime/chat-bridge";
+import {
+  TEST_FIXTURE_PROMPTS,
+  TEST_SKILL_NAMES,
+  TEST_STANDALONE_TOOL_IDS,
+  registerSkillFixtures,
+  registerStandaloneToolFixtures,
+  unregisterSkillFixtures,
+  unregisterStandaloneToolFixtures,
+} from "../test/tool-skill-fixtures";
 
 const btnBase: React.CSSProperties = {
   padding: "8px 0",
@@ -240,6 +249,7 @@ export function TestPanel() {
     () => window.matchMedia?.("(prefers-color-scheme: dark)").matches ?? false,
   );
   const toolMockTimeoutRef = useRef<number | null>(null);
+  const [fixtureStatus, setFixtureStatus] = useState({ tools: false, skills: false });
 
   // ---- Drag-and-drop state for the toggle button ----
   const BUTTON_SIZE = 36;
@@ -420,6 +430,50 @@ export function TestPanel() {
       setLoading(null);
     }
   };
+
+  const refreshFixtureStatus = useCallback(() => {
+    const toolIds = new Set(OceanMCPSDK.getTools().map((tool) => tool.id));
+    const skillNames = new Set(OceanMCPSDK.getSkills().map((skill) => skill.name));
+    setFixtureStatus({
+      tools: TEST_STANDALONE_TOOL_IDS.every((id) => toolIds.has(id)),
+      skills: TEST_SKILL_NAMES.every((name) => skillNames.has(name)),
+    });
+  }, []);
+
+  useEffect(() => {
+    refreshFixtureStatus();
+  }, [refreshFixtureStatus]);
+
+  const registerFixtureTools = useCallback(async () => {
+    const ids = registerStandaloneToolFixtures(OceanMCPSDK);
+    refreshFixtureStatus();
+    return { registeredTools: ids };
+  }, [refreshFixtureStatus]);
+
+  const registerFixtureSkills = useCallback(async () => {
+    const names = registerSkillFixtures(OceanMCPSDK);
+    refreshFixtureStatus();
+    return { registeredSkills: names };
+  }, [refreshFixtureStatus]);
+
+  const registerAllFixtures = useCallback(async () => {
+    const names = registerSkillFixtures(OceanMCPSDK);
+    const ids = registerStandaloneToolFixtures(OceanMCPSDK);
+    refreshFixtureStatus();
+    return { registeredSkills: names, registeredTools: ids };
+  }, [refreshFixtureStatus]);
+
+  const clearAllFixtures = useCallback(async () => {
+    unregisterSkillFixtures(OceanMCPSDK);
+    unregisterStandaloneToolFixtures(OceanMCPSDK);
+    refreshFixtureStatus();
+    return { cleared: true };
+  }, [refreshFixtureStatus]);
+
+  const runFixturePrompt = useCallback(async (prompt: string) => {
+    setText(prompt);
+    await OceanMCPSDK.chat(prompt);
+  }, []);
 
   const clearToolMockTimer = useCallback(() => {
     if (toolMockTimeoutRef.current != null) {
@@ -758,6 +812,83 @@ export function TestPanel() {
               >
                 6秒慢速演示
               </button>
+            </div>
+          </div>
+
+          {/* Tool/Skill fixtures */}
+          <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+            <p style={{ margin: 0, fontSize: 11, color: c.label, fontWeight: 500 }}>
+              <code style={{ background: c.codeBg, padding: "1px 4px", borderRadius: 3, fontSize: 10, color: c.label }}>tool/skill fixtures</code> 注册并调用测试工具与技能
+            </p>
+            <p style={{ margin: 0, fontSize: 11, color: c.label }}>
+              Tool: {fixtureStatus.tools ? "已注册" : "未注册"} | Skill: {fixtureStatus.skills ? "已注册" : "未注册"}
+            </p>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 6 }}>
+              <button
+                onClick={() => run("register-fixture-tools", registerFixtureTools)}
+                disabled={loading !== null}
+                style={{
+                  ...btnBase,
+                  background: loading !== null ? (isDark ? "#4b5563" : "#d1d5db") : "#0f766e",
+                  cursor: loading !== null ? "not-allowed" : "pointer",
+                  padding: "8px 10px",
+                }}
+              >
+                注册 Tool
+              </button>
+              <button
+                onClick={() => run("register-fixture-skills", registerFixtureSkills)}
+                disabled={loading !== null}
+                style={{
+                  ...btnBase,
+                  background: loading !== null ? (isDark ? "#4b5563" : "#d1d5db") : "#0369a1",
+                  cursor: loading !== null ? "not-allowed" : "pointer",
+                  padding: "8px 10px",
+                }}
+              >
+                注册 Skill
+              </button>
+              <button
+                onClick={() => run("register-fixture-all", registerAllFixtures)}
+                disabled={loading !== null}
+                style={{
+                  ...btnBase,
+                  background: loading !== null ? (isDark ? "#4b5563" : "#d1d5db") : "#2563eb",
+                  cursor: loading !== null ? "not-allowed" : "pointer",
+                  padding: "8px 10px",
+                }}
+              >
+                一键注册
+              </button>
+              <button
+                onClick={() => run("clear-fixture-all", clearAllFixtures)}
+                disabled={loading !== null}
+                style={{
+                  ...btnBase,
+                  background: loading !== null ? (isDark ? "#4b5563" : "#d1d5db") : "#dc2626",
+                  cursor: loading !== null ? "not-allowed" : "pointer",
+                  padding: "8px 10px",
+                }}
+              >
+                清理 Fixture
+              </button>
+            </div>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 6 }}>
+              {TEST_FIXTURE_PROMPTS.map((item) => (
+                <button
+                  key={item.id}
+                  onClick={() => run(`fixture-call-${item.id}`, () => runFixturePrompt(item.prompt))}
+                  disabled={loading !== null}
+                  style={{
+                    ...btnBase,
+                    background: loading !== null ? (isDark ? "#4b5563" : "#d1d5db") : "#7c3aed",
+                    cursor: loading !== null ? "not-allowed" : "pointer",
+                    padding: "8px 10px",
+                  }}
+                >
+                  {item.label}
+                </button>
+              ))}
             </div>
           </div>
 
