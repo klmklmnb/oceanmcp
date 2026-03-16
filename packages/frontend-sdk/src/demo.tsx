@@ -28,6 +28,7 @@ import { eamReceiveSkill } from "./registry/eam-receive";
 import { samSoftwareApplySkill } from "./registry/sam-software-apply";
 import { hoyowaveApiSkill, isWaveEnv } from "./registry/hoyowave-api";
 import { registerSkillFixtures } from "./test/tool-skill-fixtures";
+import { jsonSchemaTestTools } from "./registry/base/baseFunctions";
 
 const preregisteredSkills = [devopsSkill, miCoffeeSkill, miFoodSkill, reimburseSkill, vacationSkill, legalCaseSkill, eamReceiveSkill, samSoftwareApplySkill];
 for (const skill of preregisteredSkills) {
@@ -42,6 +43,10 @@ if (isWaveEnv()) {
 // Register test fixture skills (including askUser form tests) in dev mode only
 if (import.meta.env.DEV) {
   registerSkillFixtures(OceanMCPSDK);
+  // Register JSON Schema test tools (demonstrates new parameter format)
+  for (const fn of jsonSchemaTestTools) {
+    OceanMCPSDK.functionRegistry.register(fn);
+  }
 }
 
 reimburseFormService.initializeUserData()
