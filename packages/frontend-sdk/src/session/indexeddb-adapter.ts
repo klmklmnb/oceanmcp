@@ -4,7 +4,11 @@ import type {
   SessionMeta,
   SessionUpdateInput,
 } from "./session-adapter";
-import { DEFAULT_SESSION_TITLE, TITLE_MAX_LENGTH } from "./session-adapter";
+import {
+  DEFAULT_SESSION_TITLE,
+  TITLE_GENERATION_PENDING,
+  TITLE_MAX_LENGTH,
+} from "./session-adapter";
 
 const DB_NAME_PREFIX = "ocean-mcp-sessions";
 const DB_VERSION = 1;
@@ -146,6 +150,7 @@ export class IndexedDBSessionAdapter implements SessionAdapter {
       createdAt: now,
       updatedAt: now,
       messages: [],
+      titleGenerationState: TITLE_GENERATION_PENDING,
     };
 
     await this.withStore("readwrite", async (store) => {
@@ -170,11 +175,12 @@ export class IndexedDBSessionAdapter implements SessionAdapter {
 
     return sessions
       .sort((a, b) => b.updatedAt - a.updatedAt)
-      .map(({ id, title, createdAt, updatedAt }) => ({
+      .map(({ id, title, createdAt, updatedAt, titleGenerationState }) => ({
         id,
         title,
         createdAt,
         updatedAt,
+        titleGenerationState,
       }));
   }
 
@@ -196,6 +202,9 @@ export class IndexedDBSessionAdapter implements SessionAdapter {
         ...existing,
         ...(data.title != null && { title: normalizeTitle(data.title) }),
         ...(data.messages != null && { messages: data.messages }),
+        ...(data.titleGenerationState != null && {
+          titleGenerationState: data.titleGenerationState,
+        }),
         updatedAt: Date.now(),
       };
 

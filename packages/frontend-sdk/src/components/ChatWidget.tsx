@@ -29,7 +29,13 @@ import {
 } from "../command/command-registry";
 import { OPEN_SESSIONS_EVENT } from "../command/builtin-commands";
 import { sessionManager } from "../session/session-manager";
-import type { SessionMeta } from "../session/session-adapter";
+import {
+  DEFAULT_SESSION_TITLE,
+  LEGACY_ZH_DEFAULT_SESSION_TITLE,
+  TITLE_GENERATION_PENDING,
+  TITLE_MAX_LENGTH,
+  type SessionMeta,
+} from "../session/session-adapter";
 import { CommandPalette } from "./CommandPalette";
 import { SessionList } from "./SessionList";
 
@@ -43,6 +49,47 @@ type PendingFile = {
   attachment?: FileAttachment;
   error?: string;
 };
+
+function isDefaultSessionTitle(title?: string): boolean {
+  const normalized = title?.trim();
+  if (!normalized) return true;
+  return (
+    normalized === DEFAULT_SESSION_TITLE ||
+    normalized === LEGACY_ZH_DEFAULT_SESSION_TITLE
+  );
+}
+
+function deriveFirstUserFallbackTitle(messages: any[]): string | null {
+  if (!Array.isArray(messages)) return null;
+  for (const message of messages) {
+    if (message?.role !== MESSAGE_ROLE.USER || !Array.isArray(message.parts)) {
+      continue;
+    }
+    const text = message.parts
+      .filter((part: any) => part?.type === MESSAGE_PART_TYPE.TEXT)
+      .map((part: any) => part.text)
+      .join("")
+      .trim();
+    if (!text) continue;
+    return text.slice(0, TITLE_MAX_LENGTH);
+  }
+  return null;
+}
+
+function shouldSkipAiTitleGeneration(
+  title: string | undefined,
+  fallbackTitle: string | null,
+): boolean {
+  const normalized = title?.trim();
+  if (!normalized) return false;
+  if (isDefaultSessionTitle(normalized)) return false;
+  if (fallbackTitle && normalized === fallbackTitle) return false;
+  return true;
+}
+
+function shouldGenerateAiTitle(meta?: SessionMeta): boolean {
+  return meta?.titleGenerationState === TITLE_GENERATION_PENDING;
+}
 
 function isToolPart(part: any): boolean {
   return (
@@ -737,12 +784,14 @@ export function ChatWidget({ avatar }: { avatar?: string }) {
     if (status === "streaming" || status === "submitted") return;
     if (titleGeneratedSessions.current.has(currentSessionId)) return;
     if (titleGeneratingSessions.current.has(currentSessionId)) return;
+    const currentMeta = sessionMetas.find((meta) => meta.id === currentSessionId);
 
     const hasUserMsg = messages.some((m: any) => m.role === MESSAGE_ROLE.USER);
     const hasAssistantMsg = messages.some(
       (m: any) => m.role === MESSAGE_ROLE.ASSISTANT,
     );
     if (!hasUserMsg || !hasAssistantMsg) return;
+    const fallbackTitle = deriveFirstUserFallbackTitle(messages as any[]);
 
     const sessionId = currentSessionId;
 
@@ -763,31 +812,71 @@ export function ChatWidget({ avatar }: { avatar?: string }) {
 
     titleGeneratingSessions.current.add(sessionId);
     const controller = new AbortController();
-    fetch(`${API_URL}/api/generate-title`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ messages: lightweight }),
-      signal: controller.signal,
-    })
-      .then((res) => (res.ok ? res.json() : null))
-      .then((data) => {
-        if (data?.title) {
-          sessionManager
-            .updateSessionTitle(sessionId, data.title)
-            .then(() => {
-              titleGeneratedSessions.current.add(sessionId);
-              return refreshSessionMetas();
-            })
-            .catch(() => {});
-        }
-      })
+    const generateTitleIfDefault = async () => {
+      let persistedMeta = currentMeta;
+      if (!persistedMeta) {
+        const metas = await sessionManager.listSessions();
+        persistedMeta = metas.find((meta) => meta.id === sessionId);
+      }
+      if (!persistedMeta) return;
+      if (
+        !shouldGenerateAiTitle(persistedMeta)
+      ) {
+        titleGeneratedSessions.current.add(sessionId);
+        return;
+      }
+      if (shouldSkipAiTitleGeneration(persistedMeta.title, fallbackTitle)
+      ) {
+        await sessionManager.markSessionTitleGenerationCompleted(sessionId);
+        titleGeneratedSessions.current.add(sessionId);
+        await refreshSessionMetas();
+        return;
+      }
+
+      const response = await fetch(`${API_URL}/api/generate-title`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ messages: lightweight }),
+        signal: controller.signal,
+      });
+      if (!response.ok) return;
+      const data = await response.json();
+      if (!data?.title) return;
+
+      const latestMetas = await sessionManager.listSessions();
+      const latestMeta = latestMetas.find((meta) => meta.id === sessionId);
+      if (!latestMeta) return;
+      if (!shouldGenerateAiTitle(latestMeta)) {
+        titleGeneratedSessions.current.add(sessionId);
+        return;
+      }
+      if (shouldSkipAiTitleGeneration(latestMeta.title, fallbackTitle)) {
+        await sessionManager.markSessionTitleGenerationCompleted(sessionId);
+        titleGeneratedSessions.current.add(sessionId);
+        await refreshSessionMetas();
+        return;
+      }
+
+      await sessionManager.updateSessionTitle(sessionId, data.title);
+      titleGeneratedSessions.current.add(sessionId);
+      await refreshSessionMetas();
+    };
+
+    void generateTitleIfDefault()
       .catch(() => {})
       .finally(() => {
         titleGeneratingSessions.current.delete(sessionId);
       });
 
     return () => controller.abort();
-  }, [currentSessionId, messages, sessionsEnabled, status, refreshSessionMetas]);
+  }, [
+    currentSessionId,
+    messages,
+    refreshSessionMetas,
+    sessionMetas,
+    sessionsEnabled,
+    status,
+  ]);
 
   const handleCreateSession = useCallback(async () => {
     try {

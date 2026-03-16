@@ -5,7 +5,10 @@ import {
 import { chatBridge } from "../runtime/chat-bridge";
 import { IndexedDBSessionAdapter } from "./indexeddb-adapter";
 import type { SessionAdapter, SessionData, SessionMeta, SessionMessage } from "./session-adapter";
-import { TITLE_MAX_LENGTH } from "./session-adapter";
+import {
+  TITLE_GENERATION_COMPLETED,
+  TITLE_MAX_LENGTH,
+} from "./session-adapter";
 
 function extractMessageText(message: SessionMessage): string {
   if (!message || message.role !== MESSAGE_ROLE.USER || !Array.isArray(message.parts)) {
@@ -205,8 +208,18 @@ export class SessionManager {
 
   async updateSessionTitle(id: string, title: string): Promise<void> {
     if (!this.enabled || !id) return;
-    await this.adapter.update(id, { title });
+    await this.adapter.update(id, {
+      title,
+      titleGenerationState: TITLE_GENERATION_COMPLETED,
+    });
     this.titleDerivedSessions.add(id);
+  }
+
+  async markSessionTitleGenerationCompleted(id: string): Promise<void> {
+    if (!this.enabled || !id) return;
+    await this.adapter.update(id, {
+      titleGenerationState: TITLE_GENERATION_COMPLETED,
+    });
   }
 
   async deleteSession(id: string): Promise<void> {
