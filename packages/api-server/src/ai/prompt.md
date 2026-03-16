@@ -89,6 +89,8 @@ When generating a plan, your JSON payload must strictly adhere to this structure
 
 {{ subagent_section }}
 
+{{ upload_section }}
+
 # Guidelines
 
 - Always prefer reading data before making changes to understand the current state.

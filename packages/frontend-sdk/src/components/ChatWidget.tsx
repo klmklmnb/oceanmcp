@@ -82,19 +82,19 @@ function isPendingAskUser(part: any): boolean {
  * Pure-logic helper extracted from the `sendAutomaticallyWhen` callback so
  * it can be unit-tested without rendering the ChatWidget component.
  *
- * Returns `{ decision, approvalIds, userSelectIds }` where:
+ * Returns `{ decision, approvalIds, askUserIds }` where:
  *   - `decision` — whether `useChat` should automatically send a new request
  *   - `approvalIds` — approval IDs that should be marked as submitted
- *   - `userSelectIds` — userSelect toolCallIds that should be marked as submitted
+ *   - `askUserIds` — askUser toolCallIds that should be marked as submitted
  */
 export function evaluateSendAutomatically(
   messages: any[],
   submittedApprovalIds: Set<string>,
-  submittedUserSelectIds: Set<string>,
-): { decision: boolean; approvalIds: string[]; userSelectIds: string[] } {
+  submittedAskUserIds: Set<string>,
+): { decision: boolean; approvalIds: string[]; askUserIds: string[] } {
   const lastMsg = messages[messages.length - 1];
   if (!lastMsg || lastMsg.role !== MESSAGE_ROLE.ASSISTANT) {
-    return { decision: false, approvalIds: [], userSelectIds: [] };
+    return { decision: false, approvalIds: [], askUserIds: [] };
   }
 
   const toolParts = (lastMsg.parts || []).filter(isToolPart);
@@ -118,28 +118,28 @@ export function evaluateSendAutomatically(
       // APPROVAL_REQUESTED and INPUT_AVAILABLE are "settled enough"
       // for auto-send purposes — the stream has ended and these parts
       // will be resolved by their own interaction flows (approval
-      // buttons / userSelect cards). Without this, a resolved
-      // userSelect sitting next to an unresolved approval (or vice
+      // buttons / askUser cards). Without this, a resolved
+      // askUser sitting next to an unresolved approval (or vice
       // versa) would block the auto-send indefinitely.
       part.state === TOOL_PART_STATE.APPROVAL_REQUESTED ||
       part.state === TOOL_PART_STATE.INPUT_AVAILABLE
     );
   });
 
-  const settledUserSelectParts = toolParts.filter((part: any) => {
-    if (getToolName(part) !== "userSelect") return false;
+  const settledAskUserParts = toolParts.filter((part: any) => {
+    if (getToolName(part) !== "askUser") return false;
     if (!part.toolCallId) return false;
-    if (submittedUserSelectIds.has(part.toolCallId)) return false;
+    if (submittedAskUserIds.has(part.toolCallId)) return false;
     return (
       part.state === TOOL_PART_STATE.OUTPUT_AVAILABLE ||
       part.state === TOOL_PART_STATE.OUTPUT_ERROR
     );
   });
 
-  const hasUserSelectResult = settledUserSelectParts.length > 0;
+  const hasAskUserResult = settledAskUserParts.length > 0;
 
   const decision = Boolean(
-    allToolPartsSettled && (hasAnyApprovalResponse || hasUserSelectResult),
+    allToolPartsSettled && (hasAnyApprovalResponse || hasAskUserResult),
   );
 
   const approvalIds = decision
@@ -147,13 +147,13 @@ export function evaluateSendAutomatically(
         .map((p: any) => p.approval?.id)
         .filter(Boolean) as string[]
     : [];
-  const userSelectIds = decision
-    ? settledUserSelectParts
+  const askUserIds = decision
+    ? settledAskUserParts
         .map((p: any) => p.toolCallId)
         .filter(Boolean) as string[]
     : [];
 
-  return { decision, approvalIds, userSelectIds };
+  return { decision, approvalIds, askUserIds };
 }
 
 /**
@@ -364,6 +364,8 @@ export function ChatWidget({ avatar }: { avatar?: string }) {
   const sessionsEnabled = sdkConfig.session?.enable === true;
   const currentLocale = useLocale();
   const scrollRef = useRef<HTMLDivElement>(null);
+  /** Whether the scroll container is currently at (or near) the bottom. */
+  const isAtBottomRef = useRef(true);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const [input, setInput] = useState("");
   const [pendingFiles, setPendingFiles] = useState<PendingFile[]>([]);
@@ -378,8 +380,8 @@ export function ChatWidget({ avatar }: { avatar?: string }) {
   const dragCounterRef = useRef(0);
   /** Track approval IDs that have already triggered an auto-submit to prevent re-sends. */
   const submittedApprovalIdsRef = useRef<Set<string>>(new Set());
-  /** Track userSelect toolCallIds that have already triggered an auto-submit to prevent re-sends. */
-  const submittedUserSelectIdsRef = useRef<Set<string>>(new Set());
+  /** Track askUser toolCallIds that have already triggered an auto-submit to prevent re-sends. */
+  const submittedAskUserIdsRef = useRef<Set<string>>(new Set());
   const lastCapturedChatErrorRef = useRef<unknown>(null);
 
   const welcomeTitle = sdkConfig.welcomeTitle ?? t("chat.welcome.title");
@@ -418,6 +420,7 @@ export function ChatWidget({ avatar }: { avatar?: string }) {
             subagentTimeoutMs: subagent?.enable && subagent.timeoutSeconds != null
               ? subagent.timeoutSeconds * 1000
               : undefined,
+            uploaderRegistered: uploadRegistry.isRegistered,
           };
         },
       }),
@@ -426,23 +429,23 @@ export function ChatWidget({ avatar }: { avatar?: string }) {
 
   const sendAutomaticallyWhen = useCallback(
     ({ messages: msgs }: { messages: any[] }) => {
-      const { decision, approvalIds, userSelectIds } =
+      const { decision, approvalIds, askUserIds } =
         evaluateSendAutomatically(
           msgs,
           submittedApprovalIdsRef.current,
-          submittedUserSelectIdsRef.current,
+          submittedAskUserIdsRef.current,
         );
 
       if (decision) {
         console.log(
           "[OceanMCP] sendAutomaticallyWhen → true",
-          { approvalCount: approvalIds.length, userSelectCount: userSelectIds.length },
+          { approvalCount: approvalIds.length, askUserCount: askUserIds.length },
         );
         for (const id of approvalIds) {
           submittedApprovalIdsRef.current.add(id);
         }
-        for (const id of userSelectIds) {
-          submittedUserSelectIdsRef.current.add(id);
+        for (const id of askUserIds) {
+          submittedAskUserIdsRef.current.add(id);
         }
       }
 
@@ -525,6 +528,9 @@ export function ChatWidget({ avatar }: { avatar?: string }) {
       fileCount: 0,
     });
 
+    // Programmatic send — follow the response by scrolling
+    isAtBottomRef.current = true;
+
     await sendMessage({
       role: MESSAGE_ROLE.USER,
       parts: [{ type: MESSAGE_PART_TYPE.TEXT, text }],
@@ -579,15 +585,30 @@ export function ChatWidget({ avatar }: { avatar?: string }) {
     };
     addSdkBreadcrumb("chat.submit", submitData);
 
+    // User just sent a message — follow the response by scrolling
+    isAtBottomRef.current = true;
+
     await sendMessage({
       role: MESSAGE_ROLE.USER,
       parts,
     });
   };
 
-  // Auto-scroll to bottom on new messages
+  // Track whether the user has scrolled away from the bottom.
+  // When near the bottom, auto-scroll continues; when the user scrolls up,
+  // auto-scroll is suppressed until they scroll back down.
+  const SCROLL_BOTTOM_THRESHOLD = 40; // px tolerance
+
+  const handleScrollContainer = useCallback(() => {
+    const el = scrollRef.current;
+    if (!el) return;
+    isAtBottomRef.current =
+      el.scrollHeight - el.scrollTop - el.clientHeight <= SCROLL_BOTTOM_THRESHOLD;
+  }, []);
+
+  // Auto-scroll to bottom on new messages — only when already at the bottom
   useEffect(() => {
-    if (scrollRef.current) {
+    if (isAtBottomRef.current && scrollRef.current) {
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
     }
   }, [messages]);
@@ -1060,6 +1081,7 @@ export function ChatWidget({ avatar }: { avatar?: string }) {
       {/* Messages area */}
       <div
         ref={scrollRef}
+        onScroll={handleScrollContainer}
         className="flex-1 overflow-y-auto ocean-scrollbar px-4 py-6"
       >
         <div className="max-w-3xl mx-auto space-y-6">

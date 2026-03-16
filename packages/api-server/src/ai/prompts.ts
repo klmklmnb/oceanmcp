@@ -128,6 +128,28 @@ For complex tasks that benefit from parallel execution, you can delegate indepen
 
 ---`;
 
+const UPLOAD_PROMPT_SECTION = `# File Uploads
+
+The user has a file upload capability enabled. They can attach files to their messages using the paperclip button or by dragging and dropping files into the chat.
+
+When the user uploads files, each file appears in the message as a structured block:
+
+\`\`\`
+[Uploaded file]
+- Name: <filename>
+- Type: <MIME type>
+- Size: <file size>
+- URL: <accessible URL>
+\`\`\`
+
+**Guidelines for handling uploaded files:**
+- Acknowledge uploaded files and refer to them by name.
+- Use the file URL when you need to reference or process the file content.
+- The metadata fields (Name, Type, Size, URL) and any additional fields are provided by the upload handler and can be used in subsequent tool calls.
+- If a skill or tool requires file attachments (e.g. for creating records with attachments), use the uploaded file information as provided — do not modify or reconstruct it.
+
+---`;
+
 // ─── Locale Instructions ─────────────────────────────────────────────────────
 
 const LOCALE_INSTRUCTIONS: Record<string, string> = {
@@ -147,6 +169,8 @@ export interface SystemPromptOptions {
   locale?: string;
   /** Whether the subagent feature is enabled for this request. Default: false. */
   subagentEnabled?: boolean;
+  /** Whether the frontend has a file upload handler registered. Default: false. */
+  uploaderRegistered?: boolean;
 }
 
 /**
@@ -162,10 +186,11 @@ export interface SystemPromptOptions {
  *
  * Template variables in prompt.md are resolved:
  *   - `{{ subagent_section }}` → subagent delegation instructions (when enabled) or empty
+ *   - `{{ upload_section }}` → file upload instructions (when uploader is registered) or empty
  *
  * Called on every chat request to ensure the latest skills are included.
  *
- * @param options - System prompt options (connectionId, locale, subagentEnabled)
+ * @param options - System prompt options (connectionId, locale, subagentEnabled, uploaderRegistered)
  */
 export function getSystemPrompt(options?: SystemPromptOptions): string;
 /**
@@ -180,11 +205,13 @@ export function getSystemPrompt(
   let connectionId: string | undefined;
   let locale: string | undefined;
   let subagentEnabled = false;
+  let uploaderRegistered = false;
 
   if (typeof connectionIdOrOptions === "object" && connectionIdOrOptions !== null) {
     connectionId = connectionIdOrOptions.connectionId;
     locale = connectionIdOrOptions.locale;
     subagentEnabled = connectionIdOrOptions.subagentEnabled === true;
+    uploaderRegistered = connectionIdOrOptions.uploaderRegistered === true;
   } else {
     connectionId = connectionIdOrOptions;
     locale = localeArg;
@@ -193,6 +220,7 @@ export function getSystemPrompt(
   // Resolve template variables
   const templateVars: Record<string, string> = {
     subagent_section: subagentEnabled ? SUBAGENT_PROMPT_SECTION : "",
+    upload_section: uploaderRegistered ? UPLOAD_PROMPT_SECTION : "",
   };
 
   const renderedPrompt = renderPromptTemplate(basePrompt, templateVars);

@@ -84,6 +84,7 @@ export async function handleChatRequest(req: Request): Promise<Response> {
       subagentEnabled,
       subagentModel,
       subagentTimeoutMs,
+      uploaderRegistered,
     }: {
       messages: any[];
       modelConfig?: ModelConfig;
@@ -93,6 +94,7 @@ export async function handleChatRequest(req: Request): Promise<Response> {
       subagentEnabled?: boolean;
       subagentModel?: ModelConfig;
       subagentTimeoutMs?: number;
+      uploaderRegistered?: boolean;
     } = body;
 
     if (!messages || !Array.isArray(messages)) {
@@ -148,7 +150,7 @@ export async function handleChatRequest(req: Request): Promise<Response> {
         // in — it will be consumed once task-level model routing is added
         // (e.g. using the fast model for intent classification or summaries).
         model: resolvedModel,
-        system: getSystemPrompt({ connectionId, locale, subagentEnabled }),
+        system: getSystemPrompt({ connectionId, locale, subagentEnabled, uploaderRegistered }),
         messages: modelMessages,
         tools: mergedTools,
         maxOutputTokens: resolveMaxTokens(modelConfig?.maxTokens),
