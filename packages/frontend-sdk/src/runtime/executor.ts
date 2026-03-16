@@ -1,4 +1,4 @@
-import { FUNCTION_TYPE, type FunctionDefinition } from "@ocean-mcp/shared";
+import { FUNCTION_TYPE, getErrorMessage, type FunctionDefinition } from "@ocean-mcp/shared";
 import { functionRegistry } from "../registry";
 
 /**
@@ -47,7 +47,7 @@ async function executeCodeFunction(
     return await fn(args, window, document, fetch.bind(window));
   } catch (error) {
     throw new Error(
-      `Code execution failed: ${error instanceof Error ? error.message : String(error)}`,
+      `Code execution failed: ${getErrorMessage(error)}`,
     );
   }
 }

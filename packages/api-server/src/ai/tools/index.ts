@@ -9,6 +9,7 @@ import {
   OPERATION_TYPE,
   PARAMETER_TYPE,
   isJSONSchemaParameters,
+  getErrorMessage,
   type FunctionSchema,
   type FunctionParameters,
   type ParameterDefinition,
@@ -212,7 +213,7 @@ export function createBrowserProxyToolFromSchema(
           connectionId,
         );
       } catch (error) {
-        const msg = error instanceof Error ? error.message : String(error);
+        const msg = getErrorMessage(error);
 
         if (retryTracker) {
           const canRetry = retryTracker.recordFailure(schema.id);

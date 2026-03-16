@@ -1,6 +1,6 @@
 import { tool } from "ai";
 import { z } from "zod";
-import { FLOW_STEP_STATUS, isJSONSchemaParameters } from "@ocean-mcp/shared";
+import { FLOW_STEP_STATUS, isJSONSchemaParameters, getErrorMessage } from "@ocean-mcp/shared";
 import { connectionManager } from "../../ws/connection-manager";
 import { createZodSchema } from "./index";
 import { containsVariableRef, resolveVariableRefs } from "./variable-ref";
@@ -210,7 +210,7 @@ export function createExecutePlanTool(connectionId?: string, retryTracker?: Tool
             result,
           });
         } catch (error) {
-          const errMsg = error instanceof Error ? error.message : String(error);
+          const errMsg = getErrorMessage(error);
           const canRetry = retryTracker
             ? retryTracker.recordFailure(step.functionId)
             : false;

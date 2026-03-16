@@ -72,3 +72,30 @@ export const TOOL_PART_STATE = {
 export type ToolPartState = ValueOf<typeof TOOL_PART_STATE>;
 
 export const TOOL_PART_TYPE_PREFIX = "tool-" as const;
+
+/**
+ * Safely extract a human-readable error message from any thrown value.
+ *
+ * Handles:
+ * - `Error` instances → `.message`
+ * - Strings → returned directly
+ * - Objects with `.message` or `.error` string fields → that field
+ * - Other objects → `JSON.stringify`
+ * - Primitives → `String()`
+ */
+export function getErrorMessage(error: unknown): string {
+  if (error instanceof Error) return error.message;
+  if (typeof error === "string") return error;
+  if (error != null && typeof error === "object") {
+    // Common patterns: { message: "..." } or { error: "..." }
+    const obj = error as Record<string, unknown>;
+    if (typeof obj.message === "string" && obj.message) return obj.message;
+    if (typeof obj.error === "string" && obj.error) return obj.error;
+    try {
+      return JSON.stringify(error);
+    } catch {
+      return "[object Object]";
+    }
+  }
+  return String(error);
+}

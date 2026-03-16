@@ -32,6 +32,7 @@ import type {
   StoredMessagePart,
   StoredToolPart,
 } from "./session-store";
+import { getErrorMessage } from "@ocean-mcp/shared";
 
 // ── Type helpers for step content parts ──────────────────────────────────────
 
@@ -178,10 +179,9 @@ export function buildAssistantStoredMessage(
           }
 
           if (matchedError) {
-            toolPart.errorText =
-              matchedError.error instanceof Error
-                ? matchedError.error.message
-                : String(matchedError.error ?? "Tool execution error");
+            toolPart.errorText = getErrorMessage(
+              matchedError.error ?? "Tool execution error",
+            );
           }
 
           parts.push(toolPart);

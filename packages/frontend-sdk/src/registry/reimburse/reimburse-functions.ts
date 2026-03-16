@@ -1,6 +1,7 @@
 import * as reimburseFormService from './reimburse-service';
 import type { FunctionDefinition } from '../../types';
 import type { TravelDocument } from './reimburse-service';
+import { getErrorMessage } from "@ocean-mcp/shared";
 
 interface ImageInput {
   imageUrl: string;
@@ -362,7 +363,7 @@ function makeGetTravelDocuments(): FunctionDefinition {
         };
       } catch (error) {
         console.error('[getTravelDocuments] Failed to fetch travel documents:', error);
-        const errorMessage = error instanceof Error ? error.message : String(error);
+        const errorMessage = getErrorMessage(error);
         throw new Error(`获取差旅申请单失败: ${errorMessage}`);
       }
     },

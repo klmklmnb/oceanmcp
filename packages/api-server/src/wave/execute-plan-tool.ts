@@ -1,6 +1,6 @@
 import { tool, type Tool } from "ai";
 import { z } from "zod";
-import { FLOW_STEP_STATUS } from "@ocean-mcp/shared";
+import { FLOW_STEP_STATUS, getErrorMessage } from "@ocean-mcp/shared";
 import type { WaveClients } from "./client";
 import {
   addPendingPlanApproval,
@@ -157,7 +157,7 @@ export function createWaveExecutePlanTool(
           sessionKey,
         );
       } catch (error) {
-        const reason = error instanceof Error ? error.message : String(error);
+        const reason = getErrorMessage(error);
         return {
           denied: true,
           reason,
@@ -226,7 +226,7 @@ export function createWaveExecutePlanTool(
             title: step.title,
             functionId: step.functionId,
             status: FLOW_STEP_STATUS.FAILED,
-            error: error instanceof Error ? error.message : String(error),
+            error: getErrorMessage(error),
           });
           break;
         }

@@ -1,6 +1,6 @@
 import { tool } from "ai";
 import { z } from "zod";
-import { OPERATION_TYPE } from "@ocean-mcp/shared";
+import { OPERATION_TYPE, getErrorMessage } from "@ocean-mcp/shared";
 import { connectionManager } from "../../ws/connection-manager";
 import type { ToolRetryTracker } from "./retry-tracker";
 
@@ -148,7 +148,7 @@ export function createBrowserExecuteTool(connectionId?: string, retryTracker?: T
           connectionId,
         );
       } catch (error) {
-        const msg = error instanceof Error ? error.message : String(error);
+        const msg = getErrorMessage(error);
 
         if (retryTracker) {
           const canRetry = retryTracker.recordFailure(functionId);
