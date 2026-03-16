@@ -1,4 +1,5 @@
 import CryptoJS from "crypto-js";
+import dayjs from "dayjs";
 import {
   FUNCTION_TYPE,
   OPERATION_TYPE,
@@ -39,6 +40,9 @@ const API_BASE =
 const GET_DETAIL_URL = `${API_BASE}/initiate/center/get_detail_encrypt`;
 const START_PROCESS_URL = `${API_BASE}/detail/process/start_encrypt`;
 
+const USERINFO_URL =
+  "https://api-test.agw.mihoyo.com/ssoapi/portal/web/userinfo/detail/query";
+
 const HEADERS: Record<string, string> = {
   "accept": "application/json, text/plain, */*",
   "accept-language": "zh-CN",
@@ -55,6 +59,24 @@ const HEADERS: Record<string, string> = {
 // ---------------------------------------------------------------------------
 // Shared helpers
 // ---------------------------------------------------------------------------
+
+async function fetchUserInfo(): Promise<Record<string, any>> {
+  const res = await fetch(USERINFO_URL, {
+    method: "POST",
+    headers: {
+      "accept": "application/json, text/plain, */*",
+      "accept-language": "zh-CN",
+      "cache-control": "no-cache",
+      "content-type": "application/json",
+      "pragma": "no-cache",
+      "x-mi-clientid": "015505129022b2db",
+    },
+    credentials: "include",
+  }).then((r) => r.json());
+
+  if (res.code !== 0) throw new Error(res.message ?? "userinfo query failed");
+  return res.data ?? {};
+}
 
 async function fetchFormDetail(): Promise<{
   formData: Record<string, any>;
@@ -113,45 +135,41 @@ const LEAVE_TYPE_NAME: Record<string, string> = {
 // Returns { weekday (excludes Sat/Sun), naturalDay (all days) }
 // ---------------------------------------------------------------------------
 
-function parseSlot(dt: string): { date: Date; slotIndex: number } {
-  const [datePart, timePart] = dt.split(" ");
-  const [y, m, d] = datePart.split("-").map(Number);
-  const hour = parseInt(timePart.split(":")[0], 10);
-  // slot 0 = morning (10:00), slot 1 = afternoon (15:00), slot 2 = end-of-day (19:00)
-  let slotIndex = 0;
-  if (hour >= 19) slotIndex = 2;
-  else if (hour >= 15) slotIndex = 1;
-  return { date: new Date(y, m - 1, d), slotIndex };
+function hourToSlot(h: number): number {
+  if (h >= 19) return 2;
+  if (h >= 15) return 1;
+  return 0;
 }
 
 function calcLeaveDays(
   start: string,
   end: string,
 ): { weekday: number; naturalDay: number } {
-  const s = parseSlot(start);
-  const e = parseSlot(end);
+  const s = dayjs(start, "YYYY-MM-DD HH:mm");
+  const e = dayjs(end, "YYYY-MM-DD HH:mm");
+  const startSlot = hourToSlot(s.hour());
+  const endSlot = hourToSlot(e.hour());
 
   let naturalDay = 0;
   let weekday = 0;
+  let cur = s.startOf("day");
+  let curSlot = startSlot;
+  const endDay = e.startOf("day");
 
-  const cur = new Date(s.date);
-  let curSlot = s.slotIndex; // 0=morning, 1=afternoon
+  while (cur.isBefore(endDay) || cur.isSame(endDay, "day")) {
+    const isEnd = cur.isSame(endDay, "day");
+    const dayEnd = isEnd ? endSlot : 2;
+    const slots = dayEnd - curSlot;
 
-  while (cur <= e.date) {
-    const isSameEnd = cur.getTime() === e.date.getTime();
-    const endSlot = isSameEnd ? e.slotIndex : 2;
-    const slotsInDay = endSlot - curSlot;
-
-    if (slotsInDay > 0) {
-      const half = slotsInDay * 0.5;
+    if (slots > 0) {
+      const half = slots * 0.5;
       naturalDay += half;
-      const dow = cur.getDay();
-      if (dow !== 0 && dow !== 6) {
-        weekday += half;
-      }
+      const dow = cur.day();
+      if (dow !== 0 && dow !== 6) weekday += half;
     }
 
-    cur.setDate(cur.getDate() + 1);
+    if (isEnd) break;
+    cur = cur.add(1, "day");
     curSlot = 0;
   }
 
@@ -192,7 +210,13 @@ function makeGetVacationFormDetail(): ExecutorFunctionDefinition {
     autoApprove: true,
     parameters: [],
     executor: async () => {
-      const { formData } = await fetchFormDetail();
+      const [{ formData }, userInfo] = await Promise.all([
+        fetchFormDetail(),
+        fetchUserInfo().catch((): Record<string, any> => ({})),
+      ]);
+      if (userInfo.annualLeaveInfo) {
+        formData.annualLeaveInfo = userInfo.annualLeaveInfo;
+      }
       return formData;
     },
   };
@@ -216,7 +240,7 @@ function makeSubmitVacationRequest(): ExecutorFunctionDefinition {
         name: "leaveType",
         type: PARAMETER_TYPE.STRING,
         description:
-          'Leave type code. Currently fixed to "AnnL" (年假). Pass "AnnL".',
+          'Leave type code from leaveTypeList. Supported: "AnnL" (年假), "SicLM" (带薪病假), "SicL" (普通病假). Default to "AnnL" if user does not specify.',
         required: true,
       },
       {
@@ -239,25 +263,13 @@ function makeSubmitVacationRequest(): ExecutorFunctionDefinition {
         description: "Reason for the leave request (max 400 characters).",
         required: true,
       },
-      {
-        name: "informedPerson",
-        type: PARAMETER_TYPE.STRING,
-        description:
-          'Comma-separated domain names of people to notify (e.g. "alice.wang,bob.li"). Only required if getVacationFormDetail returned an empty informedPerson list.',
-        required: false,
-      },
     ],
     executor: async (args: Record<string, any>) => {
       const { formData } = await fetchFormDetail();
 
-      let informed: string[];
-      if (args.informedPerson) {
-        informed = (args.informedPerson as string).split(",").map((s: string) => s.trim());
-      } else if (Array.isArray(formData.informedPerson) && formData.informedPerson.length > 0) {
-        informed = formData.informedPerson;
-      } else {
-        informed = formData.nextApprover ? [formData.nextApprover] : [];
-      }
+      const informed: string[] = Array.isArray(formData.informedPerson) && formData.informedPerson.length > 0
+        ? formData.informedPerson
+        : formData.parentDomain ? [formData.parentDomain] : [];
 
       const { weekday, naturalDay } = calcLeaveDays(args.leaveStartDate, args.leaveEndDate);
       const now = new Date().toISOString().replace("T", " ").slice(0, 19);

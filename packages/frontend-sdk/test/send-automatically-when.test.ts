@@ -90,10 +90,10 @@ function approvalRespondedPart(
   };
 }
 
-/** A userSelect tool waiting for user input (stream ended, card shown) */
-function pendingUserSelectPart(toolCallId: string) {
+/** An askUser tool waiting for user input (stream ended, card shown) */
+function pendingAskUserPart(toolCallId: string) {
   return {
-    type: "tool-userSelect",
+    type: "tool-askUser",
     toolCallId,
     state: "input-available",
     input: {
@@ -106,10 +106,10 @@ function pendingUserSelectPart(toolCallId: string) {
   };
 }
 
-/** A userSelect tool that the user has answered */
-function settledUserSelectPart(toolCallId: string) {
+/** An askUser tool that the user has answered */
+function settledAskUserPart(toolCallId: string) {
   return {
-    type: "tool-userSelect",
+    type: "tool-askUser",
     toolCallId,
     state: "output-available",
     input: {
@@ -123,10 +123,10 @@ function settledUserSelectPart(toolCallId: string) {
   };
 }
 
-/** A userSelect tool that errored */
-function erroredUserSelectPart(toolCallId: string) {
+/** An askUser tool that errored */
+function erroredAskUserPart(toolCallId: string) {
   return {
-    type: "tool-userSelect",
+    type: "tool-askUser",
     toolCallId,
     state: "output-error",
     input: {
@@ -147,7 +147,7 @@ function inputStreamingPart(toolCallId: string, toolName = "browserExecute") {
   };
 }
 
-/** A non-userSelect tool in INPUT_AVAILABLE state (unusual but possible) */
+/** A non-askUser tool in INPUT_AVAILABLE state (unusual but possible) */
 function inputAvailablePart(toolCallId: string, toolName = "someTool") {
   return {
     type: `tool-${toolName}`,
@@ -187,7 +187,7 @@ describe("evaluateSendAutomatically", () => {
         new Set(),
       );
       // No tool parts → allToolPartsSettled is vacuously true, but
-      // neither hasAnyApprovalResponse nor hasUserSelectResult is true
+      // neither hasAnyApprovalResponse nor hasAskUserResult is true
       expect(decision).toBe(false);
     });
 
@@ -205,7 +205,7 @@ describe("evaluateSendAutomatically", () => {
       expect(decision).toBe(false);
     });
 
-    test("only server-executed tools settled (no userSelect / no approval)", () => {
+    test("only server-executed tools settled (no askUser / no approval)", () => {
       // This is the normal case: LLM called tools, server executed them,
       // multi-step loop continued on server. Stream finished normally.
       // No auto-send needed — the server already handled continuation.
@@ -221,8 +221,8 @@ describe("evaluateSendAutomatically", () => {
       expect(decision).toBe(false);
     });
 
-    test("pending userSelect not yet answered (input-available)", () => {
-      const msg = assistantMsg([pendingUserSelectPart("sel-1")]);
+    test("pending askUser not yet answered (input-available)", () => {
+      const msg = assistantMsg([pendingAskUserPart("sel-1")]);
       const { decision } = evaluateSendAutomatically(
         [msg],
         new Set(),
@@ -245,7 +245,7 @@ describe("evaluateSendAutomatically", () => {
 
     test("tool still streaming input (input-streaming blocks)", () => {
       const msg = assistantMsg([
-        settledUserSelectPart("sel-1"),
+        settledAskUserPart("sel-1"),
         inputStreamingPart("call-2"),
       ]);
       const { decision } = evaluateSendAutomatically(
@@ -257,13 +257,13 @@ describe("evaluateSendAutomatically", () => {
       expect(decision).toBe(false);
     });
 
-    test("already-submitted userSelect ID is ignored", () => {
-      const msg = assistantMsg([settledUserSelectPart("sel-1")]);
-      const submittedUserSelectIds = new Set(["sel-1"]);
+    test("already-submitted askUser ID is ignored", () => {
+      const msg = assistantMsg([settledAskUserPart("sel-1")]);
+      const submittedAskUserIds = new Set(["sel-1"]);
       const { decision } = evaluateSendAutomatically(
         [msg],
         new Set(),
-        submittedUserSelectIds,
+        submittedAskUserIds,
       );
       expect(decision).toBe(false);
     });
@@ -282,35 +282,35 @@ describe("evaluateSendAutomatically", () => {
     });
   });
 
-  // ── Should trigger: userSelect answered ───────────────────────────────
+  // ── Should trigger: askUser answered ───────────────────────────────
 
-  describe("should trigger when userSelect is answered", () => {
-    test("single userSelect resolved (output-available)", () => {
-      const msg = assistantMsg([settledUserSelectPart("sel-1")]);
-      const { decision, userSelectIds } = evaluateSendAutomatically(
+  describe("should trigger when askUser is answered", () => {
+    test("single askUser resolved (output-available)", () => {
+      const msg = assistantMsg([settledAskUserPart("sel-1")]);
+      const { decision, askUserIds } = evaluateSendAutomatically(
         [msg],
         new Set(),
         new Set(),
       );
       expect(decision).toBe(true);
-      expect(userSelectIds).toEqual(["sel-1"]);
+      expect(askUserIds).toEqual(["sel-1"]);
     });
 
-    test("userSelect errored (output-error)", () => {
-      const msg = assistantMsg([erroredUserSelectPart("sel-1")]);
-      const { decision, userSelectIds } = evaluateSendAutomatically(
+    test("askUser errored (output-error)", () => {
+      const msg = assistantMsg([erroredAskUserPart("sel-1")]);
+      const { decision, askUserIds } = evaluateSendAutomatically(
         [msg],
         new Set(),
         new Set(),
       );
       expect(decision).toBe(true);
-      expect(userSelectIds).toEqual(["sel-1"]);
+      expect(askUserIds).toEqual(["sel-1"]);
     });
 
-    test("userSelect resolved alongside completed server tool", () => {
+    test("askUser resolved alongside completed server tool", () => {
       const msg = assistantMsg([
         completedToolPart("call-1"),
-        settledUserSelectPart("sel-1"),
+        settledAskUserPart("sel-1"),
       ]);
       const { decision } = evaluateSendAutomatically(
         [msg],
@@ -320,10 +320,10 @@ describe("evaluateSendAutomatically", () => {
       expect(decision).toBe(true);
     });
 
-    test("userSelect resolved alongside denied tool", () => {
+    test("askUser resolved alongside denied tool", () => {
       const msg = assistantMsg([
         deniedToolPart("call-1"),
-        settledUserSelectPart("sel-1"),
+        settledAskUserPart("sel-1"),
       ]);
       const { decision } = evaluateSendAutomatically(
         [msg],
@@ -333,18 +333,18 @@ describe("evaluateSendAutomatically", () => {
       expect(decision).toBe(true);
     });
 
-    test("multiple userSelects, both resolved", () => {
+    test("multiple askUsers, both resolved", () => {
       const msg = assistantMsg([
-        settledUserSelectPart("sel-1"),
-        settledUserSelectPart("sel-2"),
+        settledAskUserPart("sel-1"),
+        settledAskUserPart("sel-2"),
       ]);
-      const { decision, userSelectIds } = evaluateSendAutomatically(
+      const { decision, askUserIds } = evaluateSendAutomatically(
         [msg],
         new Set(),
         new Set(),
       );
       expect(decision).toBe(true);
-      expect(userSelectIds).toEqual(["sel-1", "sel-2"]);
+      expect(askUserIds).toEqual(["sel-1", "sel-2"]);
     });
   });
 
@@ -394,35 +394,35 @@ describe("evaluateSendAutomatically", () => {
   // ── BUG REGRESSION: mixed interactive parts ───────────────────────────
   //
   // These tests verify the fix for the core bug: when a resolved
-  // userSelect sits next to an unresolved approval (or vice versa),
+  // askUser sits next to an unresolved approval (or vice versa),
   // the old code would block the auto-send because APPROVAL_REQUESTED
   // and INPUT_AVAILABLE were not considered "settled".
 
   describe("BUG FIX: mixed interactive parts (regression tests)", () => {
-    test("userSelect resolved + sibling APPROVAL_REQUESTED → should trigger", () => {
-      // This was the main bug: the user answered the userSelect, but the
+    test("askUser resolved + sibling APPROVAL_REQUESTED → should trigger", () => {
+      // This was the main bug: the user answered the askUser, but the
       // approval card was still waiting. The old code had allToolPartsSettled
       // = false because APPROVAL_REQUESTED was not in the settled set.
       const msg = assistantMsg([
-        settledUserSelectPart("sel-1"),
+        settledAskUserPart("sel-1"),
         approvalRequestedPart("call-2", "approval-1"),
       ]);
-      const { decision, userSelectIds } = evaluateSendAutomatically(
+      const { decision, askUserIds } = evaluateSendAutomatically(
         [msg],
         new Set(),
         new Set(),
       );
       expect(decision).toBe(true);
-      expect(userSelectIds).toEqual(["sel-1"]);
+      expect(askUserIds).toEqual(["sel-1"]);
     });
 
-    test("approval responded + sibling pending userSelect → should trigger", () => {
-      // The user responded to the approval, but a userSelect card is
+    test("approval responded + sibling pending askUser → should trigger", () => {
+      // The user responded to the approval, but a askUser card is
       // still waiting for input. The approval response should still
-      // trigger auto-send — the userSelect will be handled later.
+      // trigger auto-send — the askUser will be handled later.
       const msg = assistantMsg([
         approvalRespondedPart("call-1", "approval-1", true),
-        pendingUserSelectPart("sel-1"),
+        pendingAskUserPart("sel-1"),
       ]);
       const { decision, approvalIds } = evaluateSendAutomatically(
         [msg],
@@ -433,11 +433,11 @@ describe("evaluateSendAutomatically", () => {
       expect(approvalIds).toEqual(["approval-1"]);
     });
 
-    test("userSelect resolved + sibling INPUT_AVAILABLE non-userSelect → should trigger", () => {
-      // A non-userSelect tool is in input-available state (unusual but
-      // possible). This should not block the userSelect auto-send.
+    test("askUser resolved + sibling INPUT_AVAILABLE non-askUser → should trigger", () => {
+      // A non-askUser tool is in input-available state (unusual but
+      // possible). This should not block the askUser auto-send.
       const msg = assistantMsg([
-        settledUserSelectPart("sel-1"),
+        settledAskUserPart("sel-1"),
         inputAvailablePart("call-2", "someOtherTool"),
       ]);
       const { decision } = evaluateSendAutomatically(
@@ -448,12 +448,12 @@ describe("evaluateSendAutomatically", () => {
       expect(decision).toBe(true);
     });
 
-    test("userSelect resolved + completed tool + approval requested → should trigger", () => {
-      // Three tools: one completed, one userSelect answered, one approval
-      // waiting. The answered userSelect should still trigger.
+    test("askUser resolved + completed tool + approval requested → should trigger", () => {
+      // Three tools: one completed, one askUser answered, one approval
+      // waiting. The answered askUser should still trigger.
       const msg = assistantMsg([
         completedToolPart("call-1"),
-        settledUserSelectPart("sel-1"),
+        settledAskUserPart("sel-1"),
         approvalRequestedPart("call-3", "approval-1"),
       ]);
       const { decision } = evaluateSendAutomatically(
@@ -464,24 +464,24 @@ describe("evaluateSendAutomatically", () => {
       expect(decision).toBe(true);
     });
 
-    test("both userSelect answered AND approval responded → should trigger with both IDs", () => {
+    test("both askUser answered AND approval responded → should trigger with both IDs", () => {
       const msg = assistantMsg([
-        settledUserSelectPart("sel-1"),
+        settledAskUserPart("sel-1"),
         approvalRespondedPart("call-2", "approval-1", true),
       ]);
-      const { decision, approvalIds, userSelectIds } =
+      const { decision, approvalIds, askUserIds } =
         evaluateSendAutomatically([msg], new Set(), new Set());
       expect(decision).toBe(true);
       expect(approvalIds).toEqual(["approval-1"]);
-      expect(userSelectIds).toEqual(["sel-1"]);
+      expect(askUserIds).toEqual(["sel-1"]);
     });
   });
 
   // ── Deduplication tracking ────────────────────────────────────────────
 
   describe("deduplication: subsequent calls with same IDs return false", () => {
-    test("userSelect ID tracked after first trigger", () => {
-      const msg = assistantMsg([settledUserSelectPart("sel-1")]);
+    test("askUser ID tracked after first trigger", () => {
+      const msg = assistantMsg([settledAskUserPart("sel-1")]);
       const approvalIds = new Set<string>();
       const selectIds = new Set<string>();
 
@@ -490,7 +490,7 @@ describe("evaluateSendAutomatically", () => {
       expect(first.decision).toBe(true);
 
       // Simulate marking IDs as submitted
-      for (const id of first.userSelectIds) selectIds.add(id);
+      for (const id of first.askUserIds) selectIds.add(id);
 
       // Second call with same state — should NOT trigger
       const second = evaluateSendAutomatically([msg], approvalIds, selectIds);
@@ -513,28 +513,28 @@ describe("evaluateSendAutomatically", () => {
       expect(second.decision).toBe(false);
     });
 
-    test("new userSelect in a new message triggers after previous was tracked", () => {
+    test("new askUser in a new message triggers after previous was tracked", () => {
       const approvalIds = new Set<string>();
       const selectIds = new Set<string>(["sel-1"]); // already submitted
 
-      // New message with a different userSelect
-      const msg = assistantMsg([settledUserSelectPart("sel-2")]);
-      const { decision, userSelectIds } = evaluateSendAutomatically(
+      // New message with a different askUser
+      const msg = assistantMsg([settledAskUserPart("sel-2")]);
+      const { decision, askUserIds } = evaluateSendAutomatically(
         [msg],
         approvalIds,
         selectIds,
       );
       expect(decision).toBe(true);
-      expect(userSelectIds).toEqual(["sel-2"]);
+      expect(askUserIds).toEqual(["sel-2"]);
     });
   });
 
   // ── Edge cases ────────────────────────────────────────────────────────
 
   describe("edge cases", () => {
-    test("userSelect with no toolCallId is ignored", () => {
+    test("askUser with no toolCallId is ignored", () => {
       const part = {
-        type: "tool-userSelect",
+        type: "tool-askUser",
         // no toolCallId
         state: "output-available",
         input: { message: "Pick" },
@@ -546,14 +546,14 @@ describe("evaluateSendAutomatically", () => {
         new Set(),
         new Set(),
       );
-      // No valid userSelect → hasUserSelectResult is false
+      // No valid askUser → hasAskUserResult is false
       expect(decision).toBe(false);
     });
 
     test("only looks at the LAST message", () => {
-      // Even though the first message has a settled userSelect,
+      // Even though the first message has a settled askUser,
       // the function only looks at the last message.
-      const msg1 = assistantMsg([settledUserSelectPart("sel-1")]);
+      const msg1 = assistantMsg([settledAskUserPart("sel-1")]);
       const msg2 = assistantMsg([completedToolPart("call-1")]);
 
       const { decision } = evaluateSendAutomatically(
@@ -561,30 +561,30 @@ describe("evaluateSendAutomatically", () => {
         new Set(),
         new Set(),
       );
-      // Last message has no userSelect/approval → false
+      // Last message has no askUser/approval → false
       expect(decision).toBe(false);
     });
 
     test("user message between assistant messages — only last msg matters", () => {
-      const msg1 = assistantMsg([settledUserSelectPart("sel-old")]);
+      const msg1 = assistantMsg([settledAskUserPart("sel-old")]);
       const msg2 = userMsg("follow up");
-      const msg3 = assistantMsg([settledUserSelectPart("sel-new")]);
+      const msg3 = assistantMsg([settledAskUserPart("sel-new")]);
 
-      const { decision, userSelectIds } = evaluateSendAutomatically(
+      const { decision, askUserIds } = evaluateSendAutomatically(
         [msg1, msg2, msg3],
         new Set(),
         new Set(),
       );
       expect(decision).toBe(true);
-      expect(userSelectIds).toEqual(["sel-new"]);
+      expect(askUserIds).toEqual(["sel-new"]);
     });
 
-    test("denied userSelect is not counted as a trigger", () => {
-      // A denied userSelect has state OUTPUT_DENIED, which is "settled"
-      // but is NOT counted as hasUserSelectResult (which requires
+    test("denied askUser is not counted as a trigger", () => {
+      // A denied askUser has state OUTPUT_DENIED, which is "settled"
+      // but is NOT counted as hasAskUserResult (which requires
       // OUTPUT_AVAILABLE or OUTPUT_ERROR).
       const part = {
-        type: "tool-userSelect",
+        type: "tool-askUser",
         toolCallId: "sel-1",
         state: "output-denied",
         input: { message: "Pick" },
@@ -597,13 +597,13 @@ describe("evaluateSendAutomatically", () => {
         new Set(),
         new Set(),
       );
-      // Denied userSelect does not satisfy hasUserSelectResult
+      // Denied askUser does not satisfy hasAskUserResult
       expect(decision).toBe(false);
     });
 
-    test("mix of denied + settled userSelects → triggers for the settled one", () => {
+    test("mix of denied + settled askUsers → triggers for the settled one", () => {
       const deniedPart = {
-        type: "tool-userSelect",
+        type: "tool-askUser",
         toolCallId: "sel-denied",
         state: "output-denied",
         input: { message: "Pick" },
@@ -616,15 +616,15 @@ describe("evaluateSendAutomatically", () => {
       };
       const msg = assistantMsg([
         deniedPart,
-        settledUserSelectPart("sel-answered"),
+        settledAskUserPart("sel-answered"),
       ]);
-      const { decision, userSelectIds } = evaluateSendAutomatically(
+      const { decision, askUserIds } = evaluateSendAutomatically(
         [msg],
         new Set(),
         new Set(),
       );
       expect(decision).toBe(true);
-      expect(userSelectIds).toEqual(["sel-answered"]);
+      expect(askUserIds).toEqual(["sel-answered"]);
     });
   });
 });

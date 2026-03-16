@@ -118,7 +118,7 @@ export function evaluateSendAutomatically(
       // APPROVAL_REQUESTED and INPUT_AVAILABLE are "settled enough"
       // for auto-send purposes — the stream has ended and these parts
       // will be resolved by their own interaction flows (approval
-       // buttons / askUser cards). Without this, a resolved
+      // buttons / askUser cards). Without this, a resolved
       // askUser sitting next to an unresolved approval (or vice
       // versa) would block the auto-send indefinitely.
       part.state === TOOL_PART_STATE.APPROVAL_REQUESTED ||
@@ -364,6 +364,8 @@ export function ChatWidget({ avatar }: { avatar?: string }) {
   const sessionsEnabled = sdkConfig.session?.enable === true;
   const currentLocale = useLocale();
   const scrollRef = useRef<HTMLDivElement>(null);
+  /** Whether the scroll container is currently at (or near) the bottom. */
+  const isAtBottomRef = useRef(true);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const [input, setInput] = useState("");
   const [pendingFiles, setPendingFiles] = useState<PendingFile[]>([]);
@@ -405,11 +407,25 @@ export function ChatWidget({ avatar }: { avatar?: string }) {
     () =>
       new DefaultChatTransport({
         api: `${API_URL}/api/chat`,
-        body: () => ({
-          connectionId: wsClient.currentConnectionId ?? undefined,
-          modelConfig: sdkConfig.model ?? undefined,
-          toolRetries: sdkConfig.toolRetries ?? undefined,
-        }),
+        body: () => {
+          const subagent = sdkConfig.subagent;
+          return {
+            connectionId: wsClient.currentConnectionId ?? undefined,
+            modelConfig: sdkConfig.model ?? undefined,
+            toolRetries: sdkConfig.toolRetries ?? undefined,
+            subagentEnabled: subagent?.enable ?? undefined,
+            subagentModel: subagent?.enable
+              ? (subagent.model ?? sdkConfig.model ?? undefined)
+              : undefined,
+            subagentTimeoutMs: subagent?.enable && subagent.timeoutSeconds != null
+              ? subagent.timeoutSeconds * 1000
+              : undefined,
+            subagentMaxParallel: subagent?.enable && subagent.maxParallel != null
+              ? subagent.maxParallel
+              : undefined,
+            uploaderRegistered: uploadRegistry.isRegistered,
+          };
+        },
       }),
     [],
   );
@@ -515,6 +531,9 @@ export function ChatWidget({ avatar }: { avatar?: string }) {
       fileCount: 0,
     });
 
+    // Programmatic send — follow the response by scrolling
+    isAtBottomRef.current = true;
+
     await sendMessage({
       role: MESSAGE_ROLE.USER,
       parts: [{ type: MESSAGE_PART_TYPE.TEXT, text }],
@@ -569,15 +588,30 @@ export function ChatWidget({ avatar }: { avatar?: string }) {
     };
     addSdkBreadcrumb("chat.submit", submitData);
 
+    // User just sent a message — follow the response by scrolling
+    isAtBottomRef.current = true;
+
     await sendMessage({
       role: MESSAGE_ROLE.USER,
       parts,
     });
   };
 
-  // Auto-scroll to bottom on new messages
+  // Track whether the user has scrolled away from the bottom.
+  // When near the bottom, auto-scroll continues; when the user scrolls up,
+  // auto-scroll is suppressed until they scroll back down.
+  const SCROLL_BOTTOM_THRESHOLD = 40; // px tolerance
+
+  const handleScrollContainer = useCallback(() => {
+    const el = scrollRef.current;
+    if (!el) return;
+    isAtBottomRef.current =
+      el.scrollHeight - el.scrollTop - el.clientHeight <= SCROLL_BOTTOM_THRESHOLD;
+  }, []);
+
+  // Auto-scroll to bottom on new messages — only when already at the bottom
   useEffect(() => {
-    if (scrollRef.current) {
+    if (isAtBottomRef.current && scrollRef.current) {
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
     }
   }, [messages]);
@@ -1110,6 +1144,7 @@ export function ChatWidget({ avatar }: { avatar?: string }) {
       {/* Messages area */}
       <div
         ref={scrollRef}
+        onScroll={handleScrollContainer}
         className="flex-1 overflow-y-auto ocean-scrollbar px-4 py-6"
       >
         <div className="max-w-3xl mx-auto space-y-6">

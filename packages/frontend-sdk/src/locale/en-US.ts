@@ -84,6 +84,15 @@ const enUS = {
   "askUser.required": "Required",
   "askUser.selectPlaceholder": "Select an option",
   "askUser.inputPlaceholder": "Enter value",
+
+  // SubagentCard
+  "subagent.title": "Subtask",
+  "subagent.status.running": "Running...",
+  "subagent.status.complete": "Complete",
+  "subagent.status.error": "Failed",
+  "subagent.status.timeout": "Timed out",
+  "subagent.systemPrompt": "System Prompt",
+  "subagent.modelOutput": "Model Output (returned to main agent)",
 };
 
 export default enUS;

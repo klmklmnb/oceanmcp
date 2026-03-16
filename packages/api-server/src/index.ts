@@ -9,6 +9,7 @@ import {
 } from "@ocean-mcp/shared";
 import { handleChatRequest } from "./routes/chat";
 import { handleGenerateTitleRequest } from "./routes/generate-title";
+import { handleWaveTicket } from "./routes/wave-ticket";
 import { connectionManager } from "./ws/connection-manager";
 import { initSkills, getSkillsContext } from "./ai/prompts";
 import { loadSkillsFromZip } from "./ai/skills";
@@ -59,6 +60,12 @@ const server = Bun.serve<{ connectionId: string }>({
     // ── Generate title API ───────────────────────────────────────────
     if (url.pathname === "/api/generate-title" && req.method === "POST") {
       const response = await handleGenerateTitleRequest(req);
+      response.headers.set("Access-Control-Allow-Origin", "*");
+      return response;
+    }
+    // ── Wave JSSDK Ticket ───────────────────────────────────────────────
+    if (url.pathname === "/api/wave/ticket" && req.method === "GET") {
+      const response = await handleWaveTicket(req);
       response.headers.set("Access-Control-Allow-Origin", "*");
       return response;
     }

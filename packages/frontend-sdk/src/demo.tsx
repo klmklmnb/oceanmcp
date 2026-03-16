@@ -23,10 +23,31 @@ import { miCoffeeSkill } from "./registry/mi-coffee";
 import { miFoodSkill } from "./registry/mi-food";
 import { reimburseSkill } from "./registry/reimburse";
 import { vacationSkill } from "./registry/vacation";
+import { legalCaseSkill } from "./registry/legal-case";
+import { eamReceiveSkill } from "./registry/eam-receive";
+import { samSoftwareApplySkill } from "./registry/sam-software-apply";
+import { hoyowaveApiSkill, isWaveEnv } from "./registry/hoyowave-api";
+import { registerSkillFixtures, registerStandaloneToolFixtures } from "./test/tool-skill-fixtures";
+import { jsonSchemaTestTools } from "./registry/base/baseFunctions";
 
-const preregisteredSkills = [devopsSkill, miCoffeeSkill, miFoodSkill, reimburseSkill, vacationSkill];
+const preregisteredSkills = [devopsSkill, miCoffeeSkill, miFoodSkill, reimburseSkill, vacationSkill, legalCaseSkill, eamReceiveSkill, samSoftwareApplySkill];
 for (const skill of preregisteredSkills) {
   OceanMCPSDK.registerSkill(skill);
+}
+
+// Register HoYowave API skill only inside the Wave app environment
+if (isWaveEnv()) {
+  OceanMCPSDK.registerSkill(hoyowaveApiSkill);
+}
+
+// Register test fixture skills (including askUser form tests) in dev mode only
+if (import.meta.env.DEV) {
+  registerSkillFixtures(OceanMCPSDK);
+  registerStandaloneToolFixtures(OceanMCPSDK);
+  // Register JSON Schema test tools (demonstrates new parameter format)
+  for (const fn of jsonSchemaTestTools) {
+    OceanMCPSDK.functionRegistry.register(fn);
+  }
 }
 
 reimburseFormService.initializeUserData()
@@ -98,9 +119,12 @@ OceanMCPSDK.registerUploader(async (files: File[]) => {
 OceanMCPSDK.mount({
   locale: "zh-CN",
   theme: "auto",
+  subagent: { enable: true },
   suggestions: [
     { label: "帮我填写报销单" },
     { label: "帮我在米咖点一杯拿铁" },
+    { label: "帮我申请一台显示器" },
+    { label: "帮我申请 GitLab" },
     { label: "米饭上今天的晚餐是什么？" },
     { label: "你能做什么？" },
     { label: "这个页面有什么？", text: "详细分析当前页面内容" },

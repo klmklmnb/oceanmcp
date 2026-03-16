@@ -43,6 +43,7 @@ import { tool, type Tool } from "ai";
 import {
   FUNCTION_TYPE,
   OPERATION_TYPE,
+  getErrorMessage,
   type CodeFunctionDefinition,
   type ParameterDefinition,
 } from "@ocean-mcp/shared";
@@ -189,7 +190,7 @@ async function executeCodeFunction(
     return await fn(args, windowMock, documentMock, serverFetch, consoleMock);
   } catch (error) {
     throw new Error(
-      `Code tool execution failed: ${error instanceof Error ? error.message : String(error)}`,
+      `Code tool execution failed: ${getErrorMessage(error)}`,
     );
   }
 }

@@ -245,6 +245,7 @@ export function TestPanel() {
   const [locale, setLocale] = useState<SupportedLocale | "">(sdkConfig.locale ?? "zh-CN");
   const [theme, setTheme] = useState<Theme | undefined>(sdkConfig.theme);
   const [debug, setDebug] = useState<boolean>(sdkConfig.debug);
+  const [subagentEnabled, setSubagentEnabled] = useState<boolean>(sdkConfig.subagent?.enable === true);
   const [systemDark, setSystemDark] = useState(
     () => window.matchMedia?.("(prefers-color-scheme: dark)").matches ?? false,
   );
@@ -782,6 +783,53 @@ export function TestPanel() {
             </div>
           </div>
 
+          {/* Subagent toggle */}
+          <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+            <p style={{ margin: 0, fontSize: 11, color: c.label, fontWeight: 500 }}>
+              <code style={{ background: c.codeBg, padding: "1px 4px", borderRadius: 3, fontSize: 10, color: c.label }}>subagent</code> 子智能体委派
+            </p>
+            <div style={{ display: "flex", gap: 6 }}>
+              <button
+                onClick={() => {
+                  setSubagentEnabled(false);
+                  sdkConfig.subagent = { enable: false };
+                }}
+                style={{
+                  flex: 1,
+                  padding: "6px 0",
+                  borderRadius: 8,
+                  border: !subagentEnabled ? `2px solid ${c.selectedBorder}` : `1px solid ${c.unselectedBorder}`,
+                  background: !subagentEnabled ? c.selectedBg : c.unselectedBg,
+                  color: !subagentEnabled ? c.selectedText : c.unselectedText,
+                  fontSize: 11,
+                  fontWeight: !subagentEnabled ? 600 : 400,
+                  cursor: "pointer",
+                }}
+              >
+                off (默认)
+              </button>
+              <button
+                onClick={() => {
+                  setSubagentEnabled(true);
+                  sdkConfig.subagent = { enable: true };
+                }}
+                style={{
+                  flex: 1,
+                  padding: "6px 0",
+                  borderRadius: 8,
+                  border: subagentEnabled ? `2px solid ${c.selectedBorder}` : `1px solid ${c.unselectedBorder}`,
+                  background: subagentEnabled ? c.selectedBg : c.unselectedBg,
+                  color: subagentEnabled ? c.selectedText : c.unselectedText,
+                  fontSize: 11,
+                  fontWeight: subagentEnabled ? 600 : 400,
+                  cursor: "pointer",
+                }}
+              >
+                on (启用)
+              </button>
+            </div>
+          </div>
+
           {/* Tool state simulator */}
           <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
             <p style={{ margin: 0, fontSize: 11, color: c.label, fontWeight: 500 }}>
@@ -874,21 +922,42 @@ export function TestPanel() {
               </button>
             </div>
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 6 }}>
-              {TEST_FIXTURE_PROMPTS.map((item) => (
-                <button
-                  key={item.id}
-                  onClick={() => run(`fixture-call-${item.id}`, () => runFixturePrompt(item.prompt))}
-                  disabled={loading !== null}
-                  style={{
-                    ...btnBase,
-                    background: loading !== null ? (isDark ? "#4b5563" : "#d1d5db") : "#7c3aed",
-                    cursor: loading !== null ? "not-allowed" : "pointer",
-                    padding: "8px 10px",
-                  }}
-                >
-                  {item.label}
-                </button>
-              ))}
+              {TEST_FIXTURE_PROMPTS.map((item) => {
+                const needsFixtures = item.requiresFixtures === true;
+                const needsSubagent = item.requiresSubagent === true;
+                const fixturesMissing = needsFixtures && !(fixtureStatus.tools && fixtureStatus.skills);
+                const subagentMissing = needsSubagent && !subagentEnabled;
+                const prerequisitesMet = !fixturesMissing && !subagentMissing;
+
+                let tooltip = "";
+                if (fixturesMissing && subagentMissing) {
+                  tooltip = "需要先注册 fixtures 并启用 subagent";
+                } else if (fixturesMissing) {
+                  tooltip = "需要先注册 fixtures（点击上方「一键注册」）";
+                } else if (subagentMissing) {
+                  tooltip = "需要先启用 subagent";
+                }
+
+                return (
+                  <button
+                    key={item.id}
+                    onClick={() => run(`fixture-call-${item.id}`, () => runFixturePrompt(item.prompt))}
+                    disabled={loading !== null || !prerequisitesMet}
+                    title={tooltip || undefined}
+                    style={{
+                      ...btnBase,
+                      background: loading !== null || !prerequisitesMet
+                        ? (isDark ? "#4b5563" : "#d1d5db")
+                        : "#7c3aed",
+                      cursor: loading !== null || !prerequisitesMet ? "not-allowed" : "pointer",
+                      padding: "8px 10px",
+                      opacity: !prerequisitesMet ? 0.5 : 1,
+                    }}
+                  >
+                    {item.label}
+                  </button>
+                );
+              })}
             </div>
           </div>
 

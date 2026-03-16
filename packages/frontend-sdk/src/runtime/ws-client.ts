@@ -2,6 +2,7 @@ import {
   WSMessageType,
   createWSMessage,
   parseWSMessage,
+  getErrorMessage,
   type ExecuteToolRequest,
   type SkillMetadata,
 } from "@ocean-mcp/shared";
@@ -391,7 +392,7 @@ class WSClient {
           payload: {
             requestId: request.requestId,
             functionId: request.functionId,
-            error: error instanceof Error ? error.message : String(error),
+            error: getErrorMessage(error),
           },
         }),
       );
