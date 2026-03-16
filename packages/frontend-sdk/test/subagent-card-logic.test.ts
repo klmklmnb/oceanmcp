@@ -10,6 +10,7 @@ import {
   TOOL_PART_STATE,
   TOOL_PART_TYPE_PREFIX,
 } from "@ocean-mcp/shared";
+import { extractModelOutput } from "../src/components/SubagentCard";
 
 // ---------------------------------------------------------------------------
 // Re-implement the status resolution logic from SubagentCard for testing.
@@ -220,5 +221,115 @@ describe("task label truncation", () => {
     const result = truncateTaskLabel(task);
     expect(result.length).toBe(83); // 80 + "..."
     expect(result.endsWith("...")).toBe(true);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// extractModelOutput — mirrors server-side toModelOutput logic
+// ---------------------------------------------------------------------------
+
+describe("extractModelOutput", () => {
+  test("returns fallback for null output", () => {
+    expect(extractModelOutput(null)).toBe("Subagent task completed with no output.");
+  });
+
+  test("returns fallback for undefined output", () => {
+    expect(extractModelOutput(undefined)).toBe("Subagent task completed with no output.");
+  });
+
+  test("returns fallback for output with no parts", () => {
+    expect(extractModelOutput({ id: "msg-1", role: "assistant" })).toBe(
+      "Subagent task completed with no output.",
+    );
+  });
+
+  test("returns fallback for output with empty parts array", () => {
+    expect(extractModelOutput({ parts: [] })).toBe(
+      "Subagent task completed with no text output.",
+    );
+  });
+
+  test("returns fallback for output with only non-text parts", () => {
+    const output = {
+      parts: [
+        { type: "reasoning", text: "thinking..." },
+        { type: "tool-browserExecute", state: "output-available" },
+      ],
+    };
+    expect(extractModelOutput(output)).toBe(
+      "Subagent task completed with no text output.",
+    );
+  });
+
+  test("returns the last text part when there is one text part", () => {
+    const output = {
+      parts: [{ type: "text", text: "The answer is 42." }],
+    };
+    expect(extractModelOutput(output)).toBe("The answer is 42.");
+  });
+
+  test("returns the last text part when there are multiple text parts", () => {
+    const output = {
+      parts: [
+        { type: "text", text: "First, let me look up the data." },
+        { type: "tool-browserExecute", state: "output-available" },
+        { type: "text", text: "Based on my research, the server is healthy." },
+      ],
+    };
+    expect(extractModelOutput(output)).toBe(
+      "Based on my research, the server is healthy.",
+    );
+  });
+
+  test("skips whitespace-only text parts", () => {
+    const output = {
+      parts: [
+        { type: "text", text: "First meaningful text." },
+        { type: "text", text: "   \n  " },
+      ],
+    };
+    expect(extractModelOutput(output)).toBe("First meaningful text.");
+  });
+
+  test("returns fallback when all text parts are whitespace-only", () => {
+    const output = {
+      parts: [
+        { type: "text", text: "  " },
+        { type: "text", text: "\n" },
+      ],
+    };
+    expect(extractModelOutput(output)).toBe(
+      "Subagent task completed with no text output.",
+    );
+  });
+
+  test("handles timeout output structure", () => {
+    const output = {
+      id: "subagent-timeout",
+      role: "assistant",
+      parts: [
+        {
+          type: "text",
+          text: "[Subagent timed out after 120s. Partial results may be available above.]",
+        },
+      ],
+    };
+    expect(extractModelOutput(output)).toContain("timed out");
+  });
+
+  test("handles parts with non-string text gracefully", () => {
+    const output = {
+      parts: [
+        { type: "text", text: 123 },
+        { type: "text", text: "Valid text." },
+      ],
+    };
+    expect(extractModelOutput(output)).toBe("Valid text.");
+  });
+
+  test("returns fallback for output with parts that is not an array", () => {
+    expect(extractModelOutput({ parts: "not-an-array" })).toBe(
+      "Subagent task completed with no output.",
+    );
   });
 });

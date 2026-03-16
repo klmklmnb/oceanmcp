@@ -45,6 +45,11 @@ export type SubagentConfig = {
    * When omitted, the server's `SUBAGENT_TIMEOUT_MS` env var is used.
    */
   timeoutSeconds?: number;
+  /**
+   * Maximum number of concurrent subagent invocations per chat request.
+   * When omitted, the server's `SUBAGENT_MAX_PARALLEL` env var is used (default: 5).
+   */
+  maxParallel?: number;
 };
 
 export type SDKConfig = {

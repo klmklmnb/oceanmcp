@@ -922,21 +922,42 @@ export function TestPanel() {
               </button>
             </div>
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 6 }}>
-              {TEST_FIXTURE_PROMPTS.map((item) => (
-                <button
-                  key={item.id}
-                  onClick={() => run(`fixture-call-${item.id}`, () => runFixturePrompt(item.prompt))}
-                  disabled={loading !== null}
-                  style={{
-                    ...btnBase,
-                    background: loading !== null ? (isDark ? "#4b5563" : "#d1d5db") : "#7c3aed",
-                    cursor: loading !== null ? "not-allowed" : "pointer",
-                    padding: "8px 10px",
-                  }}
-                >
-                  {item.label}
-                </button>
-              ))}
+              {TEST_FIXTURE_PROMPTS.map((item) => {
+                const needsFixtures = item.requiresFixtures === true;
+                const needsSubagent = item.requiresSubagent === true;
+                const fixturesMissing = needsFixtures && !(fixtureStatus.tools && fixtureStatus.skills);
+                const subagentMissing = needsSubagent && !subagentEnabled;
+                const prerequisitesMet = !fixturesMissing && !subagentMissing;
+
+                let tooltip = "";
+                if (fixturesMissing && subagentMissing) {
+                  tooltip = "需要先注册 fixtures 并启用 subagent";
+                } else if (fixturesMissing) {
+                  tooltip = "需要先注册 fixtures（点击上方「一键注册」）";
+                } else if (subagentMissing) {
+                  tooltip = "需要先启用 subagent";
+                }
+
+                return (
+                  <button
+                    key={item.id}
+                    onClick={() => run(`fixture-call-${item.id}`, () => runFixturePrompt(item.prompt))}
+                    disabled={loading !== null || !prerequisitesMet}
+                    title={tooltip || undefined}
+                    style={{
+                      ...btnBase,
+                      background: loading !== null || !prerequisitesMet
+                        ? (isDark ? "#4b5563" : "#d1d5db")
+                        : "#7c3aed",
+                      cursor: loading !== null || !prerequisitesMet ? "not-allowed" : "pointer",
+                      padding: "8px 10px",
+                      opacity: !prerequisitesMet ? 0.5 : 1,
+                    }}
+                  >
+                    {item.label}
+                  </button>
+                );
+              })}
             </div>
           </div>
 

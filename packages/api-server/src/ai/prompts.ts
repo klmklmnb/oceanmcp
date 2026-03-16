@@ -123,7 +123,7 @@ For complex tasks that benefit from parallel execution, you can delegate indepen
   - What specific task to accomplish
   - What output format to produce in its final response
   - That it can only read data and must write a clear summary as its final response
-- You can call multiple \`subagent\` tools in parallel in a single step for concurrent work
+- You can call multiple \`subagent\` tools in parallel in a single step for concurrent work (up to the configured parallel limit — excess calls will be rejected and should be retried in the next step)
 - After receiving all subagent results, synthesize them into a coherent response for the user
 
 ---`;

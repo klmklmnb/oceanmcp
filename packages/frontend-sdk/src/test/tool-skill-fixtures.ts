@@ -700,6 +700,8 @@ and subagents can call these tools to gather information.
 | test_subagent_server_metrics | Returns mock CPU, memory, and request metrics for a given server |
 | test_subagent_search_logs | Searches mock application logs by keyword and severity |
 | test_subagent_user_profile | Looks up a mock user profile by username |
+| test_subagent_flaky_service | Simulates a flaky service that fails on certain hosts |
+| test_subagent_slow_query | Simulates a slow database query (configurable delay) |
 
 ## Example Delegation Patterns
 
@@ -970,6 +972,84 @@ Delegate multiple tasks concurrently:
           };
         },
       },
+      {
+        id: "test_subagent_flaky_service",
+        name: "Test Subagent Flaky Service",
+        cnName: "测试子智能体-不稳定服务",
+        description:
+          "Simulates a flaky microservice health check. Certain hostnames always fail " +
+          "with an error, useful for testing subagent error handling.",
+        type: FUNCTION_TYPE.EXECUTOR,
+        operationType: OPERATION_TYPE.READ,
+        parameters: [
+          {
+            name: "hostname",
+            type: PARAMETER_TYPE.STRING,
+            description:
+              'Service hostname to check. Hosts containing "bad" or "fail" will throw an error.',
+            required: true,
+          },
+        ],
+        executor: async (args) => {
+          const hostname =
+            typeof args.hostname === "string" ? args.hostname.trim().toLowerCase() : "";
+          // Simulate flaky behavior based on hostname
+          if (hostname.includes("bad") || hostname.includes("fail")) {
+            throw new Error(
+              `Service health check failed: ${hostname} returned HTTP 503 — upstream connection refused`,
+            );
+          }
+          if (hostname.includes("timeout")) {
+            // Simulate a hang that would cause a subagent timeout
+            await new Promise((resolve) => setTimeout(resolve, 300_000));
+            return { status: "unreachable" };
+          }
+          return {
+            hostname,
+            status: "healthy",
+            latencyMs: Math.floor(Math.random() * 50) + 5,
+            checkedAt: new Date().toISOString(),
+          };
+        },
+      },
+      {
+        id: "test_subagent_slow_query",
+        name: "Test Subagent Slow Query",
+        cnName: "测试子智能体-慢查询",
+        description:
+          "Simulates a slow database query with configurable delay. " +
+          "Useful for testing subagent timeout behavior.",
+        type: FUNCTION_TYPE.EXECUTOR,
+        operationType: OPERATION_TYPE.READ,
+        parameters: [
+          {
+            name: "table",
+            type: PARAMETER_TYPE.STRING,
+            description: "Table name to query.",
+            required: true,
+          },
+          {
+            name: "delaySeconds",
+            type: PARAMETER_TYPE.NUMBER,
+            description:
+              "Simulated query delay in seconds. Default: 3. Set to a very high value to test timeout.",
+            required: false,
+          },
+        ],
+        executor: async (args) => {
+          const table =
+            typeof args.table === "string" ? args.table.trim() : "unknown_table";
+          const delay = Math.max(0, Number(args.delaySeconds) || 3);
+          await new Promise((resolve) => setTimeout(resolve, delay * 1000));
+          return {
+            table,
+            delaySeconds: delay,
+            rowCount: Math.floor(Math.random() * 1000) + 1,
+            queryTime: `${delay}s`,
+            result: `Query on ${table} completed after ${delay}s simulated delay.`,
+          };
+        },
+      },
     ],
   },
 ];
@@ -981,48 +1061,59 @@ export type FixturePromptPreset = {
   id: string;
   label: string;
   prompt: string;
+  /** When true, this preset requires test fixtures (tools/skills) to be registered. */
+  requiresFixtures?: boolean;
+  /** When true, this preset requires the subagent feature to be enabled. */
+  requiresSubagent?: boolean;
 };
 
 export const TEST_FIXTURE_PROMPTS: FixturePromptPreset[] = [
   {
     id: "read-echo",
     label: "调用: read echo",
+    requiresFixtures: true,
     prompt:
       "请只调用工具 test_read_echo，并传入 text='fixture hello'、tags=['demo','inline']，不要调用其他工具。",
   },
   {
     id: "dom-render",
     label: "调用: DOM render",
+    requiresFixtures: true,
     prompt:
       "请调用工具 test_read_dom_render，并传入 title='Standalone Visual'、values=[12,7,18,9]。",
   },
   {
     id: "read-error",
     label: "调用: read error",
+    requiresFixtures: true,
     prompt:
       "请调用工具 test_read_fail，reason='simulate error card'。",
   },
   {
     id: "write-approval",
     label: "调用: write approval",
+    requiresFixtures: true,
     prompt:
       "请调用工具 test_write_requires_approval，参数 target='demo-config'、enabled=true。",
   },
   {
     id: "skill-load-ops",
     label: "调用: loadSkill ops",
+    requiresFixtures: true,
     prompt:
       "请先调用 loadSkill 加载 test-skill-ops，再调用 test_skill_lookup_orders，customer='alice'。",
   },
   {
     id: "skill-load-visual",
     label: "调用: loadSkill visual",
+    requiresFixtures: true,
     prompt:
       "请先调用 loadSkill 加载 test-skill-visual，再调用 test_skill_visual_card，title='Skill Visual Demo'、values=[4,9,6,11]。",
   },
   {
     id: "askuser-all",
     label: "askUser: 全字段表单",
+    requiresFixtures: true,
     prompt:
       "请先调用 loadSkill 加载 test-skill-askuser-form，然后调用 test_askuser_get_schemas（formType='all'），" +
       "再用返回的 message 和 schema 调用 askUser，最后把用户填写的结果告诉我。",
@@ -1030,6 +1121,7 @@ export const TEST_FIXTURE_PROMPTS: FixturePromptPreset[] = [
   {
     id: "askuser-multiselect",
     label: "askUser: 多选复选框",
+    requiresFixtures: true,
     prompt:
       "请先调用 loadSkill 加载 test-skill-askuser-form，然后调用 test_askuser_get_schemas（formType='multiselect'），" +
       "再用返回的 message 和 schema 调用 askUser，最后把用户选择的结果告诉我。",
@@ -1037,6 +1129,7 @@ export const TEST_FIXTURE_PROMPTS: FixturePromptPreset[] = [
   {
     id: "askuser-enum-select",
     label: "askUser: 枚举选择",
+    requiresFixtures: true,
     prompt:
       "请先调用 loadSkill 加载 test-skill-askuser-form，然后调用 test_askuser_get_schemas（formType='enum-select'），" +
       "再用返回的 message 和 schema 调用 askUser，最后把用户选择的结果告诉我。",
@@ -1044,6 +1137,8 @@ export const TEST_FIXTURE_PROMPTS: FixturePromptPreset[] = [
   {
     id: "subagent-single",
     label: "subagent: 单任务",
+    requiresFixtures: true,
+    requiresSubagent: true,
     prompt:
       "请使用 subagent 工具委派一个子任务：查询 web-01 服务器的指标（使用 test_subagent_server_metrics），" +
       "并根据结果总结该服务器的健康状态。",
@@ -1051,6 +1146,8 @@ export const TEST_FIXTURE_PROMPTS: FixturePromptPreset[] = [
   {
     id: "subagent-parallel",
     label: "subagent: 并行任务",
+    requiresFixtures: true,
+    requiresSubagent: true,
     prompt:
       "请同时委派 3 个 subagent 并行执行以下任务：\n" +
       "1. 查询 web-01 和 api-02 的服务器指标（test_subagent_server_metrics），对比两台服务器的负载\n" +
@@ -1061,12 +1158,50 @@ export const TEST_FIXTURE_PROMPTS: FixturePromptPreset[] = [
   {
     id: "subagent-research",
     label: "subagent: 深度调研",
+    requiresFixtures: true,
+    requiresSubagent: true,
     prompt:
       "我怀疑 payment 服务最近有问题。请用 subagent 帮我做一次全面调研：\n" +
       "- 查询 payment 相关的所有日志（不限严重级别）\n" +
       "- 查询 gateway 服务的 ERROR 日志，看看是否有上游连接问题\n" +
       "- 查询 api-02 服务器的指标\n" +
       "请让 subagent 自行决定调用哪些工具，最后给我一份分析报告。",
+  },
+  {
+    id: "subagent-fail",
+    label: "subagent: 工具报错",
+    requiresFixtures: true,
+    requiresSubagent: true,
+    prompt:
+      "请使用 subagent 委派以下任务：对 bad-server-01 执行健康检查（使用 test_subagent_flaky_service），" +
+      "这个服务会报错。请观察 subagent 如何处理工具调用失败的情况，并汇报结果。",
+  },
+  {
+    id: "subagent-timeout",
+    label: "subagent: 超时测试",
+    requiresFixtures: true,
+    requiresSubagent: true,
+    prompt:
+      "请使用 subagent 委派以下任务：执行一个 test_subagent_slow_query，" +
+      "参数 table='audit_logs'、delaySeconds=999。这会模拟一个非常慢的查询，" +
+      "用来测试 subagent 超时后的表现。",
+  },
+  {
+    id: "subagent-overflow",
+    label: "subagent: 并发超限",
+    requiresFixtures: true,
+    requiresSubagent: true,
+    prompt:
+      "请同时委派 8 个 subagent 并行执行以下任务（故意超出并发限制来测试拒绝行为）：\n" +
+      "1. 查询 web-01 服务器指标\n" +
+      "2. 查询 web-02 服务器指标\n" +
+      "3. 查询 api-01 服务器指标\n" +
+      "4. 查询 api-02 服务器指标\n" +
+      "5. 查询 db-primary 服务器指标\n" +
+      "6. 搜索 payment 的 ERROR 日志\n" +
+      "7. 搜索 gateway 的 WARN 日志\n" +
+      "8. 查询用户 alice 的资料\n" +
+      "每个任务都使用 test_subagent_* 系列工具。观察哪些被执行、哪些被拒绝。",
   },
 ];
 

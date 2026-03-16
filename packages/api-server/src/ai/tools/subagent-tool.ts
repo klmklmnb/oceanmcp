@@ -27,10 +27,11 @@
  *
  * ## Configuration (env vars)
  *
- *   SUBAGENT_ENABLED    — master kill switch (default: "true")
- *   SUBAGENT_MODEL      — model ID for subagents (default: same as main model)
- *   SUBAGENT_TIMEOUT_MS — per-invocation timeout in ms (default: 120000)
- *   SUBAGENT_MAX_STEPS  — max LLM steps per subagent (default: 30)
+ *   SUBAGENT_ENABLED      — master kill switch (default: "true")
+ *   SUBAGENT_MODEL        — model ID for subagents (default: same as main model)
+ *   SUBAGENT_TIMEOUT_MS   — per-invocation timeout in ms (default: 120000)
+ *   SUBAGENT_MAX_STEPS    — max LLM steps per subagent (default: 30)
+ *   SUBAGENT_MAX_PARALLEL — max concurrent subagents per chat request (default: 5)
  */
 
 import {
@@ -60,6 +61,12 @@ const SUBAGENT_TIMEOUT_MS = Math.max(
 const SUBAGENT_MAX_STEPS = Math.max(
   1,
   Number(process.env.SUBAGENT_MAX_STEPS) || 30,
+);
+
+/** Maximum number of concurrent subagent invocations per chat request. */
+const SUBAGENT_MAX_PARALLEL = Math.max(
+  1,
+  Number(process.env.SUBAGENT_MAX_PARALLEL) || 5,
 );
 
 // ── Read-only tool filtering ─────────────────────────────────────────────────
@@ -186,6 +193,11 @@ export interface SubagentToolOptions {
    * When provided, overrides `SUBAGENT_TIMEOUT_MS` env var.
    */
   subagentTimeoutMs?: number;
+  /**
+   * Maximum number of concurrent subagent invocations per chat request.
+   * When provided, overrides `SUBAGENT_MAX_PARALLEL` env var.
+   */
+  maxParallel?: number;
 }
 
 /**
@@ -212,6 +224,15 @@ export function createSubagentTool(
   const effectiveTimeoutMs = options?.subagentTimeoutMs != null && options.subagentTimeoutMs > 0
     ? Math.max(5_000, options.subagentTimeoutMs)
     : SUBAGENT_TIMEOUT_MS;
+
+  // Resolve max parallel: frontend override → server env → default (5)
+  const maxParallel = options?.maxParallel != null && options.maxParallel > 0
+    ? options.maxParallel
+    : SUBAGENT_MAX_PARALLEL;
+
+  // Shared concurrency counter — scoped to this createSubagentTool() invocation,
+  // meaning one counter per chat request (since getMergedTools is called once per request).
+  let activeCount = 0;
 
   // Resolve subagent model: frontend override → server env → main model
   const resolveSubagentModel = (): LanguageModel => {
@@ -248,83 +269,106 @@ export function createSubagentTool(
     }),
 
     execute: async function* ({ task, systemPrompt }, { abortSignal }) {
-      const readOnlyTools = filterReadOnlyTools(allTools, toolSchemas, skillSchemas);
+      // ── Concurrency gate: reject if all parallel slots are in use ──────
+      if (activeCount >= maxParallel) {
+        logger.warn(
+          `[Subagent] Rejected: ${activeCount}/${maxParallel} parallel slots in use`,
+        );
+        yield {
+          id: "subagent-rejected",
+          role: "assistant" as const,
+          parts: [
+            {
+              type: "text" as const,
+              text: `[Subagent rejected: all ${maxParallel} parallel slot(s) are in use. Retry this task in a subsequent step.]`,
+            },
+          ],
+        };
+        return;
+      }
 
-      const toolNames = Object.keys(readOnlyTools);
-      logger.info(
-        `[Subagent] Starting with ${toolNames.length} read-only tool(s): ${toolNames.join(", ") || "(none)"}`,
-      );
-
-      // Resolve the subagent model: frontend config → env override → main model
-      const subagentModel = resolveSubagentModel();
-
-      const subagent = new ToolLoopAgent({
-        model: subagentModel,
-        instructions: systemPrompt,
-        tools: readOnlyTools,
-        stopWhen: stepCountIs(SUBAGENT_MAX_STEPS),
-      });
-
-      // Create a timeout abort controller merged with the parent signal
-      const timeoutController = new AbortController();
-      const timer = setTimeout(
-        () => timeoutController.abort("Subagent timeout"),
-        effectiveTimeoutMs,
-      );
-
-      const signals: AbortSignal[] = [timeoutController.signal];
-      if (abortSignal) signals.push(abortSignal);
-      const mergedSignal = AbortSignal.any(signals);
-
+      activeCount++;
       try {
-        const result = await subagent.stream({
-          prompt: task,
-          abortSignal: mergedSignal,
+        const readOnlyTools = filterReadOnlyTools(allTools, toolSchemas, skillSchemas);
+
+        const toolNames = Object.keys(readOnlyTools);
+        logger.info(
+          `[Subagent] Starting (${activeCount}/${maxParallel} slots) with ${toolNames.length} read-only tool(s): ${toolNames.join(", ") || "(none)"}`,
+        );
+
+        // Resolve the subagent model: frontend config → env override → main model
+        const subagentModel = resolveSubagentModel();
+
+        const subagent = new ToolLoopAgent({
+          model: subagentModel,
+          instructions: systemPrompt,
+          tools: readOnlyTools,
+          stopWhen: stepCountIs(SUBAGENT_MAX_STEPS),
         });
 
-        // Stream incremental UIMessage updates as preliminary tool results.
-        // Each `yield` replaces the previous output entirely on the frontend.
-        for await (const message of readUIMessageStream({
-          stream: result.toUIMessageStream(),
-        })) {
-          yield message;
-        }
+        // Create a timeout abort controller merged with the parent signal
+        const timeoutController = new AbortController();
+        const timer = setTimeout(
+          () => timeoutController.abort("Subagent timeout"),
+          effectiveTimeoutMs,
+        );
 
-        logger.info("[Subagent] Completed successfully");
-      } catch (err: unknown) {
-        // If the parent request was aborted (user clicked stop), re-throw
-        // so the main agent's stream terminates cleanly.
-        if (abortSignal?.aborted) {
-          logger.info("[Subagent] Aborted by parent signal");
+        const signals: AbortSignal[] = [timeoutController.signal];
+        if (abortSignal) signals.push(abortSignal);
+        const mergedSignal = AbortSignal.any(signals);
+
+        try {
+          const result = await subagent.stream({
+            prompt: task,
+            abortSignal: mergedSignal,
+          });
+
+          // Stream incremental UIMessage updates as preliminary tool results.
+          // Each `yield` replaces the previous output entirely on the frontend.
+          for await (const message of readUIMessageStream({
+            stream: result.toUIMessageStream(),
+          })) {
+            yield message;
+          }
+
+          logger.info("[Subagent] Completed successfully");
+        } catch (err: unknown) {
+          // If the parent request was aborted (user clicked stop), re-throw
+          // so the main agent's stream terminates cleanly.
+          if (abortSignal?.aborted) {
+            logger.info("[Subagent] Aborted by parent signal");
+            throw err;
+          }
+
+          // Timeout — log and let the last yielded partial result stand.
+          // The generator ends, making the last yielded UIMessage the final output.
+          if (timeoutController.signal.aborted) {
+            logger.warn(
+              `[Subagent] Timed out after ${effectiveTimeoutMs}ms`,
+            );
+            // Yield a final text-only message indicating timeout
+            yield {
+              id: "subagent-timeout",
+              role: "assistant" as const,
+              parts: [
+                {
+                  type: "text" as const,
+                  text: `[Subagent timed out after ${Math.round(effectiveTimeoutMs / 1000)}s. Partial results may be available above.]`,
+                },
+              ],
+            };
+            return;
+          }
+
+          // Unexpected error
+          const msg = err instanceof Error ? err.message : String(err);
+          logger.error(`[Subagent] Error: ${msg}`);
           throw err;
+        } finally {
+          clearTimeout(timer);
         }
-
-        // Timeout — log and let the last yielded partial result stand.
-        // The generator ends, making the last yielded UIMessage the final output.
-        if (timeoutController.signal.aborted) {
-          logger.warn(
-            `[Subagent] Timed out after ${effectiveTimeoutMs}ms`,
-          );
-          // Yield a final text-only message indicating timeout
-          yield {
-            id: "subagent-timeout",
-            role: "assistant" as const,
-            parts: [
-              {
-                type: "text" as const,
-                text: `[Subagent timed out after ${Math.round(effectiveTimeoutMs / 1000)}s. Partial results may be available above.]`,
-              },
-            ],
-          };
-          return;
-        }
-
-        // Unexpected error
-        const msg = err instanceof Error ? err.message : String(err);
-        logger.error(`[Subagent] Error: ${msg}`);
-        throw err;
       } finally {
-        clearTimeout(timer);
+        activeCount--;
       }
     },
 

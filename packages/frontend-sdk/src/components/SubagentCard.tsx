@@ -65,6 +65,31 @@ function getStatusConfig(status: SubagentStatus) {
   }
 }
 
+// ── Model output extraction (mirrors server-side toModelOutput logic) ────────
+
+/**
+ * Extract the text that `toModelOutput` returns to the main agent.
+ *
+ * The server's `toModelOutput` finds the last text part from the subagent's
+ * UIMessage output and returns it as the compressed context for the main agent.
+ * This function replicates that logic on the frontend for debug display.
+ *
+ * @exported for testing
+ */
+export function extractModelOutput(output: any): string {
+  if (!output?.parts || !Array.isArray(output.parts)) {
+    return "Subagent task completed with no output.";
+  }
+
+  const lastTextPart = [...output.parts]
+    .reverse()
+    .find(
+      (p: any) => p.type === "text" && typeof p.text === "string" && p.text.trim(),
+    );
+
+  return lastTextPart?.text ?? "Subagent task completed with no text output.";
+}
+
 // ── Inline tool status for subagent's internal tool calls ────────────────────
 
 function SubagentToolInlineStatus({
@@ -270,6 +295,8 @@ export function SubagentCard({
   const status = resolveSubagentStatus(state, errorText, preliminary);
   const statusConfig = getStatusConfig(status);
   const [expanded, setExpanded] = useState(false);
+  const isDebug = sdkConfig.debug;
+  const isComplete = status === "complete";
 
   const taskLabel = input?.task
     ? input.task.length > 80
@@ -319,9 +346,12 @@ export function SubagentCard({
       {/* Body */}
       {expanded && (
         <div className="px-4 py-3">
-          {/* System prompt (collapsible, shown in debug mode) */}
-          {sdkConfig.debug && input?.systemPrompt && (
-            <SystemPromptSection systemPrompt={input.systemPrompt} />
+          {/* System prompt (collapsible code block, debug mode only) */}
+          {isDebug && input?.systemPrompt && (
+            <DebugCollapsibleSection
+              label={t("subagent.systemPrompt")}
+              content={input.systemPrompt}
+            />
           )}
 
           {/* Subagent output parts */}
@@ -353,28 +383,47 @@ export function SubagentCard({
               <div className="w-2 h-2 rounded-full bg-ocean-400 ocean-typing-dot" />
             </div>
           )}
+
+          {/* Model output — what the main agent sees (debug mode, after completion) */}
+          {isDebug && isComplete && hasOutput && (
+            <DebugCollapsibleSection
+              label={t("subagent.modelOutput")}
+              content={extractModelOutput(output)}
+            />
+          )}
         </div>
       )}
     </div>
   );
 }
 
-// ── SystemPromptSection (debug-only) ─────────────────────────────────────────
+// ── Debug-only collapsible code snippet ──────────────────────────────────────
 
-function SystemPromptSection({ systemPrompt }: { systemPrompt: string }) {
-  const [showPrompt, setShowPrompt] = useState(false);
+/**
+ * Collapsible code snippet for debug-mode inspection.
+ * Used for both the system prompt and the model output sections.
+ * Collapsed by default.
+ */
+function DebugCollapsibleSection({
+  label,
+  content,
+}: {
+  label: string;
+  content: string;
+}) {
+  const [show, setShow] = useState(false);
 
   return (
     <div className="mb-3">
       <button
-        onClick={() => setShowPrompt((v) => !v)}
+        onClick={() => setShow((v) => !v)}
         className="text-xs text-text-tertiary hover:text-text-secondary transition-colors cursor-pointer"
       >
-        {showPrompt ? "▼" : "▶"} {t("subagent.systemPrompt")}
+        {show ? "▼" : "▶"} {label}
       </button>
-      {showPrompt && (
+      {show && (
         <pre className="mt-1.5 text-xs bg-surface-tertiary rounded-lg p-3 overflow-x-auto text-text-secondary font-mono max-h-40 overflow-y-auto whitespace-pre-wrap">
-          {systemPrompt}
+          {content}
         </pre>
       )}
     </div>

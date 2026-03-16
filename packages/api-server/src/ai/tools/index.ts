@@ -257,6 +257,11 @@ export interface MergedToolsOptions {
    * When provided, overrides the server's `SUBAGENT_TIMEOUT_MS` env var.
    */
   subagentTimeoutMs?: number;
+  /**
+   * Maximum number of concurrent subagent invocations per chat request, from the frontend.
+   * When provided, overrides the server's `SUBAGENT_MAX_PARALLEL` env var.
+   */
+  subagentMaxParallel?: number;
 }
 
 /**
@@ -360,6 +365,7 @@ export function getMergedTools(
       {
         subagentModel: options.subagentModel,
         subagentTimeoutMs: options.subagentTimeoutMs,
+        maxParallel: options.subagentMaxParallel,
       },
     );
   }

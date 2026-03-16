@@ -92,6 +92,7 @@ const zhCN = {
   "subagent.status.error": "执行失败",
   "subagent.status.timeout": "执行超时",
   "subagent.systemPrompt": "系统提示词",
+  "subagent.modelOutput": "模型输出（返回给主智能体）",
 };
 
 export default zhCN;

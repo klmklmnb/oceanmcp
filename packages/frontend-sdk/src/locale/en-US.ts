@@ -92,6 +92,7 @@ const enUS = {
   "subagent.status.error": "Failed",
   "subagent.status.timeout": "Timed out",
   "subagent.systemPrompt": "System Prompt",
+  "subagent.modelOutput": "Model Output (returned to main agent)",
 };
 
 export default enUS;

@@ -84,6 +84,7 @@ export async function handleChatRequest(req: Request): Promise<Response> {
       subagentEnabled,
       subagentModel,
       subagentTimeoutMs,
+      subagentMaxParallel,
       uploaderRegistered,
     }: {
       messages: any[];
@@ -94,6 +95,7 @@ export async function handleChatRequest(req: Request): Promise<Response> {
       subagentEnabled?: boolean;
       subagentModel?: ModelConfig;
       subagentTimeoutMs?: number;
+      subagentMaxParallel?: number;
       uploaderRegistered?: boolean;
     } = body;
 
@@ -131,6 +133,7 @@ export async function handleChatRequest(req: Request): Promise<Response> {
       subagentEnabled,
       subagentModel,
       subagentTimeoutMs,
+      subagentMaxParallel,
       model: resolvedModel,
     });
 

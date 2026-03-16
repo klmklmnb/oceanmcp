@@ -420,6 +420,9 @@ export function ChatWidget({ avatar }: { avatar?: string }) {
             subagentTimeoutMs: subagent?.enable && subagent.timeoutSeconds != null
               ? subagent.timeoutSeconds * 1000
               : undefined,
+            subagentMaxParallel: subagent?.enable && subagent.maxParallel != null
+              ? subagent.maxParallel
+              : undefined,
             uploaderRegistered: uploadRegistry.isRegistered,
           };
         },
