@@ -46,9 +46,11 @@ import sdkStyles from "./styles/index.css?inline";
 for (const fn of baseFunctions) {
   functionRegistry.register(fn);
 }
-// Register JSON Schema test tools (demonstrates new parameter format)
-for (const fn of jsonSchemaTestTools) {
-  functionRegistry.register(fn);
+// Register JSON Schema test tools only in local dev (demonstrates new parameter format)
+if (import.meta.env.DEV) {
+  for (const fn of jsonSchemaTestTools) {
+    functionRegistry.register(fn);
+  }
 }
 
 // Initialize the SDK's built-in Sentry client in parallel with the WebSocket.
