@@ -84,6 +84,14 @@ const zhCN = {
   "askUser.required": "必填",
   "askUser.selectPlaceholder": "请选择",
   "askUser.inputPlaceholder": "请输入",
+
+  // SubagentCard
+  "subagent.title": "子任务",
+  "subagent.status.running": "执行中...",
+  "subagent.status.complete": "已完成",
+  "subagent.status.error": "执行失败",
+  "subagent.status.timeout": "执行超时",
+  "subagent.systemPrompt": "系统提示词",
 };
 
 export default zhCN;

@@ -32,6 +32,21 @@ export type SessionConfig = {
   maxSessions?: number;
 };
 
+export type SubagentConfig = {
+  /** Whether the subagent delegation feature is enabled. Default: false. */
+  enable: boolean;
+  /**
+   * LLM model configuration for subagents.
+   * When omitted, subagents use the main model configuration (`sdkConfig.model`).
+   */
+  model?: ModelConfig;
+  /**
+   * Maximum execution time per subagent invocation in seconds.
+   * When omitted, the server's `SUBAGENT_TIMEOUT_MS` env var is used.
+   */
+  timeoutSeconds?: number;
+};
+
 export type SDKConfig = {
   locale?: SupportedLocale;
   avatar?: string;
@@ -47,6 +62,8 @@ export type SDKConfig = {
   toolRetries?: number;
   /** Session options for persistence and namespace isolation. */
   session?: SessionConfig;
+  /** Subagent delegation configuration. When disabled, the subagent tool is not registered on the server. */
+  subagent?: SubagentConfig;
   /** Whether to show verbose tool debug cards. Default: false. */
   debug?: boolean;
 };
@@ -162,6 +179,14 @@ export const sdkConfig = {
 
   set session(value: SessionConfig | undefined) {
     config.session = value;
+  },
+
+  get subagent(): SubagentConfig | undefined {
+    return config.subagent;
+  },
+
+  set subagent(value: SubagentConfig | undefined) {
+    config.subagent = value;
   },
 
   get debug(): boolean {

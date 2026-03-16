@@ -12,6 +12,7 @@ import {
 import { FlowNodeCard, CollapsibleError } from "./FlowNodeCard";
 import { ApprovalButtons } from "./ApprovalButtons";
 import { AskUserCard } from "./AskUserCard";
+import { SubagentCard } from "./SubagentCard";
 import { MarkdownRenderer } from "./MarkdownRenderer";
 import { functionRegistry, skillRegistry } from "../registry";
 import { isDOMRenderDescriptor, DOMContainer } from "./DOMContainer";
@@ -721,7 +722,7 @@ function getToolName(part: any): string {
 function isToolMetaPart(part: any): boolean {
   if (!isToolPart(part)) return false;
   const toolName = getToolName(part);
-  if (toolName === "executePlan" || toolName === "userSelect" || toolName === "askUser") return false;
+  if (toolName === "executePlan" || toolName === "userSelect" || toolName === "askUser" || toolName === "subagent") return false;
   if (part.state === TOOL_PART_STATE.APPROVAL_REQUESTED) return false;
   return true;
 }
@@ -945,6 +946,27 @@ export function MessageRenderer({
                 errorText={errorText}
                 onSubmit={onUserSelect}
                 onDeny={onDenySelect}
+              />
+            )}
+          </div>
+        );
+      }
+
+      // Subagent tool — render as subagent card with streaming output
+      if (toolName === "subagent") {
+        return (
+          <div key={toolCallId || index}>
+            {state === TOOL_PART_STATE.INPUT_STREAMING ? (
+              streamingActive && !suppressInlineTypingIndicator ? <TypingIndicator /> : null
+            ) : (
+              <SubagentCard
+                toolCallId={toolCallId}
+                input={input}
+                output={output}
+                state={state}
+                errorText={errorText}
+                preliminary={part.preliminary === true}
+                streamingActive={streamingActive}
               />
             )}
           </div>

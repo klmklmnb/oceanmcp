@@ -1,6 +1,7 @@
 import { getServerStatus, echo } from "./server-tools";
 import { createBrowserExecuteTool } from "./browser-proxy-tool";
 import { createExecutePlanTool } from "./execute-plan-tool";
+import { createSubagentTool, SUBAGENT_SERVER_ENABLED } from "./subagent-tool";
 import { askUser } from "./ask-user-tool";
 import { imageOcr } from "./image-ocr-tool";
 import { readPdf } from "./read-pdf-tool";
@@ -14,7 +15,7 @@ import {
   type FunctionParameters,
   type ParameterDefinition,
 } from "@ocean-mcp/shared";
-import { tool, jsonSchema, type Tool, type FlexibleSchema } from "ai";
+import { tool, jsonSchema, type Tool, type FlexibleSchema, type LanguageModel } from "ai";
 import { z } from "zod";
 import { connectionManager } from "../../ws/connection-manager";
 import { createLoadSkillTool } from "../skills/loader";
@@ -239,10 +240,30 @@ export function createBrowserProxyToolFromSchema(
 }
 
 /**
+ * Options for getMergedTools beyond the original positional parameters.
+ */
+export interface MergedToolsOptions {
+  /** Whether the frontend SDK has the subagent feature enabled. Default: undefined (treated as disabled). */
+  subagentEnabled?: boolean;
+  /** The resolved language model for the current request (needed to create the subagent tool). */
+  model?: LanguageModel;
+  /**
+   * LLM model configuration for subagents from the frontend.
+   * When provided, the subagent uses this model config instead of `SUBAGENT_MODEL` env var.
+   */
+  subagentModel?: import("@ocean-mcp/shared").ModelConfig;
+  /**
+   * Maximum execution time per subagent invocation in milliseconds, from the frontend.
+   * When provided, overrides the server's `SUBAGENT_TIMEOUT_MS` env var.
+   */
+  subagentTimeoutMs?: number;
+}
+
+/**
  * Merge all tools for a streamText call.
  * Combines server tools + browser proxy tools + dynamic tools from the frontend
  * registry + the loadSkill tool + skill-bundled tools from both file-based and
- * frontend-registered skills.
+ * frontend-registered skills + the subagent tool (when enabled).
  *
  * Tool priority (collision avoidance — first defined wins):
  *   1. Built-in server tools (askUser, etc.)
@@ -251,11 +272,13 @@ export function createBrowserProxyToolFromSchema(
  *   4. File-based skill-bundled tools (from skills' tools.ts exports)
  *   5. Frontend skill-bundled tools (from SkillSchema.tools)
  *   6. Standalone dynamic tools from frontend registry (via WebSocket)
+ *   7. Subagent tool (when enabled on both server and frontend)
  */
 export function getMergedTools(
   dynamicToolSchemas?: FunctionSchema[],
   connectionId?: string,
   retryTracker?: ToolRetryTracker,
+  options?: MergedToolsOptions,
 ): Record<string, Tool<any, any>> {
   const tools: Record<string, Tool<any, any>> = {
     askUser,
@@ -320,6 +343,25 @@ export function getMergedTools(
         retryTracker,
       );
     }
+  }
+
+  // ── Subagent tool (gated by server env + frontend config) ──────────────
+  // Both SUBAGENT_SERVER_ENABLED (env var) and the frontend's subagentEnabled
+  // flag must be true for the tool to be registered. Default is disabled.
+  const frontendSubagentEnabled = options?.subagentEnabled === true;
+  if (SUBAGENT_SERVER_ENABLED && frontendSubagentEnabled && options?.model) {
+    const toolSchemas = dynamicToolSchemas ?? [];
+    const skillSchemas = connectionManager.getSkillSchemas(connectionId);
+    tools.subagent = createSubagentTool(
+      options.model,
+      tools,
+      toolSchemas,
+      skillSchemas,
+      {
+        subagentModel: options.subagentModel,
+        subagentTimeoutMs: options.subagentTimeoutMs,
+      },
+    );
   }
 
   return tools;

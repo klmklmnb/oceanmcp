@@ -86,6 +86,70 @@ export async function initSkills(): Promise<void> {
   }
 }
 
+// ─── Template Variables ──────────────────────────────────────────────────────
+
+/**
+ * Replace `{{ varName }}` placeholders in the prompt template with values.
+ * Unmatched placeholders are removed (replaced with empty string).
+ */
+function renderPromptTemplate(
+  template: string,
+  vars: Record<string, string>,
+): string {
+  return template.replace(
+    /\{\{\s*(\w+)\s*\}\}/g,
+    (_match, key: string) => vars[key] ?? "",
+  );
+}
+
+const SUBAGENT_PROMPT_SECTION = `# Subagent Delegation (Parallel Sub-Tasks)
+
+For complex tasks that benefit from parallel execution, you can delegate independent subtasks to subagents using the \`subagent\` tool.
+
+**When to use subagents:**
+- Tasks requiring parallel research or data gathering from multiple sources
+- Independent subtasks that don't depend on each other's results
+- Tasks that would consume too much context if done in sequence
+
+**Subagent constraints:**
+- Subagents can ONLY use READ tools — they cannot perform write/mutation operations
+- Subagents are fully autonomous — they cannot ask the user questions
+- If a subtask ultimately requires a write operation, instruct the subagent to gather and return the necessary parameters (e.g. IDs, configurations, values). Then perform the write yourself using \`executePlan\`.
+
+**How to call:**
+- Provide a clear, self-contained \`task\` description
+- Write a \`systemPrompt\` that tells the subagent:
+  - What input/context it has
+  - What specific task to accomplish
+  - What output format to produce in its final response
+  - That it can only read data and must write a clear summary as its final response
+- You can call multiple \`subagent\` tools in parallel in a single step for concurrent work
+- After receiving all subagent results, synthesize them into a coherent response for the user
+
+---`;
+
+const UPLOAD_PROMPT_SECTION = `# File Uploads
+
+The user has a file upload capability enabled. They can attach files to their messages using the paperclip button or by dragging and dropping files into the chat.
+
+When the user uploads files, each file appears in the message as a structured block:
+
+\`\`\`
+[Uploaded file]
+- Name: <filename>
+- Type: <MIME type>
+- Size: <file size>
+- URL: <accessible URL>
+\`\`\`
+
+**Guidelines for handling uploaded files:**
+- Acknowledge uploaded files and refer to them by name.
+- Use the file URL when you need to reference or process the file content.
+- The metadata fields (Name, Type, Size, URL) and any additional fields are provided by the upload handler and can be used in subsequent tool calls.
+- If a skill or tool requires file attachments (e.g. for creating records with attachments), use the uploaded file information as provided — do not modify or reconstruct it.
+
+---`;
+
 // ─── Locale Instructions ─────────────────────────────────────────────────────
 
 const LOCALE_INSTRUCTIONS: Record<string, string> = {
@@ -94,6 +158,20 @@ const LOCALE_INSTRUCTIONS: Record<string, string> = {
 };
 
 // ─── Public API ──────────────────────────────────────────────────────────────
+
+/**
+ * Options for building the system prompt.
+ */
+export interface SystemPromptOptions {
+  /** Optional WS connection ID for per-connection skills. */
+  connectionId?: string;
+  /** Optional locale string (e.g., "zh-CN", "en-US") to append language instructions. */
+  locale?: string;
+  /** Whether the subagent feature is enabled for this request. Default: false. */
+  subagentEnabled?: boolean;
+  /** Whether the frontend has a file upload handler registered. Default: false. */
+  uploaderRegistered?: boolean;
+}
 
 /**
  * Get the full system prompt, including the skills catalog.
@@ -106,12 +184,47 @@ const LOCALE_INSTRUCTIONS: Record<string, string> = {
  * File-based and zip-loaded skills (server-side) take priority over
  * frontend-registered skills on name conflicts.
  *
+ * Template variables in prompt.md are resolved:
+ *   - `{{ subagent_section }}` → subagent delegation instructions (when enabled) or empty
+ *   - `{{ upload_section }}` → file upload instructions (when uploader is registered) or empty
+ *
  * Called on every chat request to ensure the latest skills are included.
  *
- * @param connectionId - Optional WS connection ID for per-connection skills
- * @param locale - Optional locale string (e.g., "zh-CN", "en-US") to append language instructions
+ * @param options - System prompt options (connectionId, locale, subagentEnabled, uploaderRegistered)
  */
-export function getSystemPrompt(connectionId?: string, locale?: string): string {
+export function getSystemPrompt(options?: SystemPromptOptions): string;
+/**
+ * @deprecated Use the options-object overload instead.
+ */
+export function getSystemPrompt(connectionId?: string, locale?: string): string;
+export function getSystemPrompt(
+  connectionIdOrOptions?: string | SystemPromptOptions,
+  localeArg?: string,
+): string {
+  // Support both old (positional) and new (options object) signatures
+  let connectionId: string | undefined;
+  let locale: string | undefined;
+  let subagentEnabled = false;
+  let uploaderRegistered = false;
+
+  if (typeof connectionIdOrOptions === "object" && connectionIdOrOptions !== null) {
+    connectionId = connectionIdOrOptions.connectionId;
+    locale = connectionIdOrOptions.locale;
+    subagentEnabled = connectionIdOrOptions.subagentEnabled === true;
+    uploaderRegistered = connectionIdOrOptions.uploaderRegistered === true;
+  } else {
+    connectionId = connectionIdOrOptions;
+    locale = localeArg;
+  }
+
+  // Resolve template variables
+  const templateVars: Record<string, string> = {
+    subagent_section: subagentEnabled ? SUBAGENT_PROMPT_SECTION : "",
+    upload_section: uploaderRegistered ? UPLOAD_PROMPT_SECTION : "",
+  };
+
+  const renderedPrompt = renderPromptTemplate(basePrompt, templateVars);
+
   // Server-side skills: file-based (global) + zip-loaded (per-connection)
   const fileSkills = discoveredSkills;
   const zipSkills = connectionManager.getZipSkills(connectionId);
@@ -130,7 +243,7 @@ export function getSystemPrompt(connectionId?: string, locale?: string): string 
     ),
   ];
 
-  let system = basePrompt + buildSkillsPrompt(allSkills);
+  let system = renderedPrompt + buildSkillsPrompt(allSkills);
 
   // Always encourage using the askUser tool over plain-text questions
   system += "\n\nWhen you need to ask the user a question, collect information, or have the user make a choice, " +

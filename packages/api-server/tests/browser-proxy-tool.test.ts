@@ -96,6 +96,10 @@ describe("isServerSideTool", () => {
     expect(isServerSideTool("executePlan", CONN_ID)).toBe(true);
   });
 
+  test("returns true for the subagent tool", () => {
+    expect(isServerSideTool("subagent", CONN_ID)).toBe(true);
+  });
+
   test("returns false for an unknown tool name", () => {
     expect(isServerSideTool("getOrderList", CONN_ID)).toBe(false);
     expect(isServerSideTool("randomTool", CONN_ID)).toBe(false);

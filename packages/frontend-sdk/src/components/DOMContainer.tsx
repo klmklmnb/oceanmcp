@@ -36,7 +36,7 @@ export function isDOMRenderDescriptor(val: unknown): val is DOMRenderDescriptor 
  */
 export function DOMContainer({ descriptor }: { descriptor: DOMRenderDescriptor }) {
   const containerRef = useRef<HTMLDivElement>(null);
-  const cleanupRef = useRef<(() => void) | undefined>();
+  const cleanupRef = useRef<(() => void) | undefined>(undefined);
 
   // Always keep the latest descriptor accessible without re-triggering the effect.
   const descriptorRef = useRef(descriptor);

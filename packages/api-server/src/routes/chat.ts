@@ -81,12 +81,20 @@ export async function handleChatRequest(req: Request): Promise<Response> {
       connectionId,
       locale,
       toolRetries,
+      subagentEnabled,
+      subagentModel,
+      subagentTimeoutMs,
+      uploaderRegistered,
     }: {
       messages: any[];
       modelConfig?: ModelConfig;
       connectionId?: string;
       locale?: string;
       toolRetries?: number;
+      subagentEnabled?: boolean;
+      subagentModel?: ModelConfig;
+      subagentTimeoutMs?: number;
+      uploaderRegistered?: boolean;
     } = body;
 
     if (!messages || !Array.isArray(messages)) {
@@ -118,14 +126,19 @@ export async function handleChatRequest(req: Request): Promise<Response> {
     // Scope tools to the requesting browser connection when available.
     const dynamicSchemas = connectionManager.getToolSchemas(connectionId);
     const retryTracker = new ToolRetryTracker(toolRetries ?? 5);
-    const mergedTools = getMergedTools(dynamicSchemas, connectionId, retryTracker);
+    const resolvedModel = getLanguageModel(modelConfig?.default);
+    const mergedTools = getMergedTools(dynamicSchemas, connectionId, retryTracker, {
+      subagentEnabled,
+      subagentModel,
+      subagentTimeoutMs,
+      model: resolvedModel,
+    });
 
     const normalizedMessages = materialiseFileAttachments(
       deduplicateAssistantParts(normalizeStaleInteractions(messages)),
     );
     const modelMessages = await convertToModelMessages(normalizedMessages);
 
-    const resolvedModel = getLanguageModel(modelConfig?.default);
     const thinkingConfig = resolveThinkingConfig(modelConfig);
 
     // Wrap in withThinkingConfig so the customFetch interceptor can read
@@ -137,7 +150,7 @@ export async function handleChatRequest(req: Request): Promise<Response> {
         // in — it will be consumed once task-level model routing is added
         // (e.g. using the fast model for intent classification or summaries).
         model: resolvedModel,
-        system: getSystemPrompt(connectionId, locale),
+        system: getSystemPrompt({ connectionId, locale, subagentEnabled, uploaderRegistered }),
         messages: modelMessages,
         tools: mergedTools,
         maxOutputTokens: resolveMaxTokens(modelConfig?.maxTokens),
