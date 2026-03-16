@@ -1,6 +1,6 @@
 # HoYowave API Skill
 
-Interact with the HoYowave (Wave) app native capabilities through its JS API bridge. This skill provides tools for device operations, UI interactions, chat, and file management within the Wave environment.
+Interact with the HoYowave (Wave) app native capabilities through its JS API bridge. This skill provides tools for UI interactions, navigation, chat, and device info within the Wave environment.
 
 ## Environment Requirement
 
@@ -39,36 +39,6 @@ Get device/system information.
 
 **Returns:** `{ language, deviceId, theme }` where `theme` is `"light"` or `"dark"`.
 
-### hywSetClipboardData (write, auto-approve)
-
-Copy text to the system clipboard.
-
-**Parameters:**
-
-| Name | Type | Required | Description |
-|------|------|----------|-------------|
-| `data` | string | yes | Text to copy |
-
-### hywGetClipboardData (read)
-
-Read the current clipboard content.
-
-**Parameters:** None.
-
-**Returns:** `{ data }` — the clipboard text string.
-
-### hywScanCode (read)
-
-Open the QR code scanner.
-
-**Parameters:**
-
-| Name | Type | Required | Description |
-|------|------|----------|-------------|
-| `needResult` | boolean | no | If `true` (default), returns the scan result. If `false`, Wave handles it internally. |
-
-**Returns:** `{ resultStr }` — the scanned content (when `needResult` is `true`).
-
 ### hywOpenWithWebview (write)
 
 Open a URL in a new webview within the Wave app.
@@ -88,12 +58,6 @@ Open a URL in the external system browser.
 | Name | Type | Required | Description |
 |------|------|----------|-------------|
 | `url` | string | yes | The URL to open |
-
-### hywCloseWindow (write)
-
-Close the current webview window.
-
-**Parameters:** None.
 
 ### hywSetNavigationBar (write)
 
@@ -122,21 +86,6 @@ Open a chat conversation in the Wave app. Can open a group chat or a direct mess
 | `userId` | string | no | Domain account (e.g. employee ID). Use to open a direct message by domain account. |
 
 Provide exactly one of `chatId`, `unionId`, or `userId`.
-
-### hywDownloadFile (write)
-
-Download a file to the local device.
-
-**Parameters:**
-
-| Name | Type | Required | Description |
-|------|------|----------|-------------|
-| `source` | string | yes | Business source identifier (e.g. `"km"`) |
-| `fileName` | string | yes | File name with extension (e.g. `"report.pdf"`) |
-| `fileSize` | number | yes | File size in bytes |
-| `fileType` | string | yes | File type/extension (e.g. `"pdf"`) |
-| `url` | string | yes | Download URL |
-| `fileIdentifyKey` | string | yes | Unique key to prevent duplicate downloads |
 
 ## Event Listeners (Reference Only)
 
@@ -171,8 +120,7 @@ Always verify the user is in the Wave app before calling any HoYowave tool. If n
 
 ### Open a chat conversation
 
-1. Call `hywEnterChat` with `chatId` to open a group chat
-2. Or call `hywEnterChat` with `unionId` or `userId` to open a direct message with a specific user
+Call `hywEnterChat` with `chatId` to open a group chat, or with `unionId`/`userId` to open a DM
 
 ## Usage
 
@@ -180,10 +128,6 @@ Use this skill when the user wants to:
 
 - Show toast notifications or messages in the Wave app
 - Get device/system information (language, device ID, theme)
-- Read or write the system clipboard
-- Scan QR codes
 - Open links in a webview or external browser
 - Customize the navigation bar
-- Close the current window
 - Open a chat conversation (group or direct message)
-- Download files to the device

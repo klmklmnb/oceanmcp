@@ -17,7 +17,7 @@ export const hoyowaveApiSkill: SkillDefinition = {
   name: "hoyowave-api",
   cnName: "HoYowave API",
   description:
-    "HoYowave JS API bridge for the Wave app environment. Provides device system info, clipboard read/write, toast notifications, QR code scanning, navigation bar customization, webview/browser URL opening, window management, chat conversations, and file downloads. Only available inside the HoYowave (Wave) app — detected by navigator.userAgent containing 'wave'.",
+    "HoYowave JS API bridge for the Wave app environment. Provides device system info, toast notifications, navigation bar customization, webview/browser URL opening, and chat conversations. Only available inside the HoYowave (Wave) app — detected by navigator.userAgent containing 'wave'.",
   instructions,
   tools: hoyowaveApiFunctions,
 };

@@ -8,6 +8,7 @@ import {
   type ToolResultResponse,
 } from "@ocean-mcp/shared";
 import { handleChatRequest } from "./routes/chat";
+import { handleWaveTicket } from "./routes/wave-ticket";
 import { connectionManager } from "./ws/connection-manager";
 import { initSkills, getSkillsContext } from "./ai/prompts";
 import { loadSkillsFromZip } from "./ai/skills";
@@ -51,6 +52,13 @@ const server = Bun.serve<{ connectionId: string }>({
     // ── Chat API ────────────────────────────────────────────────────────
     if (url.pathname === "/api/chat" && req.method === "POST") {
       const response = await handleChatRequest(req);
+      response.headers.set("Access-Control-Allow-Origin", "*");
+      return response;
+    }
+
+    // ── Wave JSSDK Ticket ───────────────────────────────────────────────
+    if (url.pathname === "/api/wave/ticket" && req.method === "GET") {
+      const response = await handleWaveTicket(req);
       response.headers.set("Access-Control-Allow-Origin", "*");
       return response;
     }

@@ -6,6 +6,7 @@ import {
   type FunctionDefinition,
   type JSONSchemaParameters,
 } from "@ocean-mcp/shared";
+import { ensureHywAuth } from "./hoyowave-api-auth";
 
 // ─── Wave Environment Detection ─────────────────────────────────────────────
 
@@ -35,6 +36,7 @@ function makeShowToast(): ExecutorFunctionDefinition {
     operationType: OPERATION_TYPE.WRITE,
     autoApprove: true,
     executor: async (args) => {
+      await ensureHywAuth(["showToast"]);
       const result = await hyw.showToast({
         content: args.content,
         ...(args.type && { type: args.type }),
@@ -85,86 +87,6 @@ function makeGetSystemInfo(): ExecutorFunctionDefinition {
   };
 }
 
-function makeSetClipboardData(): ExecutorFunctionDefinition {
-  return {
-    id: "hywSetClipboardData",
-    name: "HYW Set Clipboard",
-    cnName: "设置剪贴板",
-    description:
-      "Copy text data to the system clipboard via the Wave app bridge.",
-    type: FUNCTION_TYPE.EXECUTOR,
-    operationType: OPERATION_TYPE.WRITE,
-    autoApprove: true,
-    executor: async (args) => {
-      const result = await hyw.setClipboardData({ data: args.data });
-      return result;
-    },
-    parameters: {
-      type: "object",
-      required: ["data"],
-      properties: {
-        data: {
-          type: "string",
-          description: "The text to copy to the clipboard.",
-        },
-      },
-      additionalProperties: false,
-    } satisfies JSONSchemaParameters,
-  };
-}
-
-function makeGetClipboardData(): ExecutorFunctionDefinition {
-  return {
-    id: "hywGetClipboardData",
-    name: "HYW Get Clipboard",
-    cnName: "获取剪贴板",
-    description:
-      "Read the current text content from the system clipboard via the Wave app bridge.",
-    type: FUNCTION_TYPE.EXECUTOR,
-    operationType: OPERATION_TYPE.READ,
-    executor: async () => {
-      const result = await hyw.getClipboardData();
-      return { data: result.data };
-    },
-    parameters: {
-      type: "object",
-      properties: {},
-      additionalProperties: false,
-    } satisfies JSONSchemaParameters,
-  };
-}
-
-function makeScanCode(): ExecutorFunctionDefinition {
-  return {
-    id: "hywScanCode",
-    name: "HYW Scan QR Code",
-    cnName: "扫描二维码",
-    description:
-      "Open the QR code scanner in the Wave app and return the scan result. Set needResult to false to let HoYowave handle the result directly.",
-    type: FUNCTION_TYPE.EXECUTOR,
-    operationType: OPERATION_TYPE.READ,
-    executor: async (args) => {
-      const result = await hyw.scanCode({
-        scanType: ["qrCode"],
-        needResult: args.needResult !== false,
-      });
-      return { resultStr: result.resultStr };
-    },
-    parameters: {
-      type: "object",
-      properties: {
-        needResult: {
-          type: "boolean",
-          description:
-            "If true (default), the scan result is returned directly. If false, HoYowave handles the result internally.",
-          default: true,
-        },
-      },
-      additionalProperties: false,
-    } satisfies JSONSchemaParameters,
-  };
-}
-
 function makeOpenWithWebview(): ExecutorFunctionDefinition {
   return {
     id: "hywOpenWithWebview",
@@ -175,6 +97,7 @@ function makeOpenWithWebview(): ExecutorFunctionDefinition {
     type: FUNCTION_TYPE.EXECUTOR,
     operationType: OPERATION_TYPE.WRITE,
     executor: async (args) => {
+      await ensureHywAuth(["openWithWebview"]);
       const result = await hyw.openWithWebview({ url: args.url });
       return result;
     },
@@ -202,6 +125,7 @@ function makeOpenWithBrowser(): ExecutorFunctionDefinition {
     type: FUNCTION_TYPE.EXECUTOR,
     operationType: OPERATION_TYPE.WRITE,
     executor: async (args) => {
+      await ensureHywAuth(["openWithBrowser"]);
       const result = await hyw.openWithBrowser({ url: args.url });
       return result;
     },
@@ -219,26 +143,6 @@ function makeOpenWithBrowser(): ExecutorFunctionDefinition {
   };
 }
 
-function makeCloseWindow(): ExecutorFunctionDefinition {
-  return {
-    id: "hywCloseWindow",
-    name: "HYW Close Window",
-    cnName: "关闭当前窗口",
-    description: "Close the current webview window in the Wave app.",
-    type: FUNCTION_TYPE.EXECUTOR,
-    operationType: OPERATION_TYPE.WRITE,
-    executor: async () => {
-      const result = await hyw.closeWindow();
-      return result;
-    },
-    parameters: {
-      type: "object",
-      properties: {},
-      additionalProperties: false,
-    } satisfies JSONSchemaParameters,
-  };
-}
-
 function makeSetNavigationBar(): ExecutorFunctionDefinition {
   return {
     id: "hywSetNavigationBar",
@@ -249,6 +153,7 @@ function makeSetNavigationBar(): ExecutorFunctionDefinition {
     type: FUNCTION_TYPE.EXECUTOR,
     operationType: OPERATION_TYPE.WRITE,
     executor: async (args) => {
+      await ensureHywAuth(["setNavigationBar"]);
       const params: Record<string, any> = {};
       if (args.title) params.title = args.title;
       if (args.rightItems) {
@@ -338,6 +243,7 @@ function makeEnterChat(): ExecutorFunctionDefinition {
     type: FUNCTION_TYPE.EXECUTOR,
     operationType: OPERATION_TYPE.WRITE,
     executor: async (args) => {
+      await ensureHywAuth(["enterChat"]);
       const params: Record<string, string> = {};
       if (args.chatId) params.chatId = args.chatId;
       if (args.unionId) params.unionId = args.unionId;
@@ -369,82 +275,13 @@ function makeEnterChat(): ExecutorFunctionDefinition {
   };
 }
 
-function makeDownloadFile(): ExecutorFunctionDefinition {
-  return {
-    id: "hywDownloadFile",
-    name: "HYW Download File",
-    cnName: "下载文件",
-    description:
-      "Download a file to the local device via the Wave app. Requires file metadata (name, size, type) and a download URL.",
-    type: FUNCTION_TYPE.EXECUTOR,
-    operationType: OPERATION_TYPE.WRITE,
-    executor: async (args) => {
-      const result = await hyw.downloadFile({
-        source: args.source,
-        fileName: args.fileName,
-        fileSize: args.fileSize,
-        fileType: args.fileType,
-        url: args.url,
-        fileIdentifyKey: args.fileIdentifyKey,
-      });
-      return result;
-    },
-    parameters: {
-      type: "object",
-      required: [
-        "source",
-        "fileName",
-        "fileSize",
-        "fileType",
-        "url",
-        "fileIdentifyKey",
-      ],
-      properties: {
-        source: {
-          type: "string",
-          description:
-            'The business source identifier, e.g. "km" for knowledge management.',
-        },
-        fileName: {
-          type: "string",
-          description: 'File name with extension, e.g. "report.pdf".',
-        },
-        fileSize: {
-          type: "number",
-          description: "File size in bytes.",
-          minimum: 0,
-        },
-        fileType: {
-          type: "string",
-          description: 'File type/extension, e.g. "pdf", "xlsx", "docx".',
-        },
-        url: {
-          type: "string",
-          description: "The file download URL.",
-        },
-        fileIdentifyKey: {
-          type: "string",
-          description:
-            "A unique and immutable key to identify the file and prevent duplicate downloads.",
-        },
-      },
-      additionalProperties: false,
-    } satisfies JSONSchemaParameters,
-  };
-}
-
 // ─── Export all HoYowave API functions ────────────────────────────────────────
 
 export const hoyowaveApiFunctions: FunctionDefinition[] = [
   makeShowToast(),
   makeGetSystemInfo(),
-  makeSetClipboardData(),
-  makeGetClipboardData(),
-  makeScanCode(),
   makeOpenWithWebview(),
   makeOpenWithBrowser(),
-  makeCloseWindow(),
   makeSetNavigationBar(),
   makeEnterChat(),
-  makeDownloadFile(),
 ];
