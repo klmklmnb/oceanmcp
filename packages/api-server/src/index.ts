@@ -8,6 +8,7 @@ import {
   type ToolResultResponse,
 } from "@ocean-mcp/shared";
 import { handleChatRequest } from "./routes/chat";
+import { handleGenerateTitleRequest } from "./routes/generate-title";
 import { connectionManager } from "./ws/connection-manager";
 import { initSkills, getSkillsContext } from "./ai/prompts";
 import { loadSkillsFromZip } from "./ai/skills";
@@ -51,6 +52,13 @@ const server = Bun.serve<{ connectionId: string }>({
     // ── Chat API ────────────────────────────────────────────────────────
     if (url.pathname === "/api/chat" && req.method === "POST") {
       const response = await handleChatRequest(req);
+      response.headers.set("Access-Control-Allow-Origin", "*");
+      return response;
+    }
+
+    // ── Generate title API ───────────────────────────────────────────
+    if (url.pathname === "/api/generate-title" && req.method === "POST") {
+      const response = await handleGenerateTitleRequest(req);
       response.headers.set("Access-Control-Allow-Origin", "*");
       return response;
     }

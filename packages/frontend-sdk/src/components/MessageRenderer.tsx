@@ -1314,9 +1314,10 @@ export function MessageRenderer({
               metaToolName: isActiveTool && !isLoadSkillPart(part)
                 ? getToolDisplayNameFromPart(part)
                 : undefined,
-              metaSkillName: isActiveTool && isLoadSkillPart(part)
-                ? getSkillLabel(part.input?.name)
-                : undefined,
+              metaSkillName:
+                isActiveTool && isLoadSkillPart(part) && typeof part.input?.name === "string"
+                  ? getSkillLabel(part.input.name)
+                  : undefined,
             },
           );
         }

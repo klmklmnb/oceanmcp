@@ -1,20 +1,14 @@
-import {
-  MESSAGE_PART_TYPE,
-  MESSAGE_ROLE,
-} from "@ocean-mcp/shared";
 import type {
   SessionAdapter,
   SessionData,
-  SessionMessage,
   SessionMeta,
   SessionUpdateInput,
 } from "./session-adapter";
+import { DEFAULT_SESSION_TITLE, TITLE_MAX_LENGTH } from "./session-adapter";
 
 const DB_NAME_PREFIX = "ocean-mcp-sessions";
 const DB_VERSION = 1;
 const STORE_NAME = "sessions";
-const DEFAULT_SESSION_TITLE = "New Session";
-const TITLE_MAX_LENGTH = 50;
 const DEFAULT_MAX_SESSIONS = 1000;
 
 type StoredSessionRecord = SessionData;
@@ -31,27 +25,6 @@ function generateId(): string {
     return crypto.randomUUID();
   }
   return `${Date.now()}-${Math.random().toString(16).slice(2)}`;
-}
-
-function extractMessageText(message: SessionMessage): string {
-  if (!message || message.role !== MESSAGE_ROLE.USER || !Array.isArray(message.parts)) {
-    return "";
-  }
-  for (const part of message.parts) {
-    if (part?.type === MESSAGE_PART_TYPE.TEXT && typeof part.text === "string") {
-      return part.text.trim();
-    }
-  }
-  return "";
-}
-
-function deriveTitleFromMessages(messages?: SessionMessage[]): string | undefined {
-  if (!Array.isArray(messages)) return undefined;
-  for (const message of messages) {
-    const text = extractMessageText(message);
-    if (text) return normalizeTitle(text);
-  }
-  return undefined;
 }
 
 function normalizeMaxSessions(value?: number): number {
@@ -219,20 +192,10 @@ export class IndexedDBSessionAdapter implements SessionAdapter {
         throw new Error(`[OceanMCP] Session "${id}" does not exist.`);
       }
 
-      const nextMessages = data.messages ?? existing.messages;
-      const titleFromMessages = deriveTitleFromMessages(nextMessages);
-      const explicitTitle = data.title != null ? normalizeTitle(data.title) : undefined;
-      const shouldKeepExistingTitle =
-        existing.title != null && existing.title !== DEFAULT_SESSION_TITLE;
-
       const next: StoredSessionRecord = {
         ...existing,
-        title:
-          explicitTitle ??
-          (shouldKeepExistingTitle
-            ? existing.title
-            : titleFromMessages ?? existing.title),
-        messages: nextMessages,
+        ...(data.title != null && { title: normalizeTitle(data.title) }),
+        ...(data.messages != null && { messages: data.messages }),
         updatedAt: Date.now(),
       };
 

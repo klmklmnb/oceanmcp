@@ -695,6 +695,66 @@ export function ChatWidget({ avatar }: { avatar?: string }) {
     return () => window.clearTimeout(timer);
   }, [currentSessionId, messages, sessionsEnabled]);
 
+  // Generate AI title after first assistant response completes
+  const titleGeneratedSessions = useRef(new Set<string>());
+  const titleGeneratingSessions = useRef(new Set<string>());
+  useEffect(() => {
+    if (!sessionsEnabled || !currentSessionId) return;
+    if (status === "streaming" || status === "submitted") return;
+    if (titleGeneratedSessions.current.has(currentSessionId)) return;
+    if (titleGeneratingSessions.current.has(currentSessionId)) return;
+
+    const hasUserMsg = messages.some((m: any) => m.role === MESSAGE_ROLE.USER);
+    const hasAssistantMsg = messages.some(
+      (m: any) => m.role === MESSAGE_ROLE.ASSISTANT,
+    );
+    if (!hasUserMsg || !hasAssistantMsg) return;
+
+    const sessionId = currentSessionId;
+
+    const lightweight = messages
+      .slice(0, 2)
+      .map((m: any) => ({
+        role: m.role,
+        text: (
+          m.parts
+            ?.filter((p: any) => p.type === MESSAGE_PART_TYPE.TEXT)
+            .map((p: any) => p.text)
+            .join("") ?? ""
+        ).slice(0, 500),
+      }))
+      .filter((m: { text: string }) => m.text);
+
+    if (lightweight.length === 0) return;
+
+    titleGeneratingSessions.current.add(sessionId);
+    const controller = new AbortController();
+    fetch(`${API_URL}/api/generate-title`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ messages: lightweight }),
+      signal: controller.signal,
+    })
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        if (data?.title) {
+          sessionManager
+            .updateSessionTitle(sessionId, data.title)
+            .then(() => {
+              titleGeneratedSessions.current.add(sessionId);
+              return refreshSessionMetas();
+            })
+            .catch(() => {});
+        }
+      })
+      .catch(() => {})
+      .finally(() => {
+        titleGeneratingSessions.current.delete(sessionId);
+      });
+
+    return () => controller.abort();
+  }, [currentSessionId, messages, sessionsEnabled, status, refreshSessionMetas]);
+
   const handleCreateSession = useCallback(async () => {
     try {
       await sessionManager.createNewSession();

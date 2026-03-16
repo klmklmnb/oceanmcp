@@ -1,5 +1,8 @@
 export type SessionMessage = any;
 
+export const DEFAULT_SESSION_TITLE = "New Session";
+export const TITLE_MAX_LENGTH = 50;
+
 export interface SessionMeta {
   id: string;
   title: string;

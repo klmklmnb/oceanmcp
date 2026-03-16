@@ -1,6 +1,34 @@
+import {
+  MESSAGE_PART_TYPE,
+  MESSAGE_ROLE,
+} from "@ocean-mcp/shared";
 import { chatBridge } from "../runtime/chat-bridge";
 import { IndexedDBSessionAdapter } from "./indexeddb-adapter";
-import type { SessionAdapter, SessionData, SessionMeta } from "./session-adapter";
+import type { SessionAdapter, SessionData, SessionMeta, SessionMessage } from "./session-adapter";
+import { TITLE_MAX_LENGTH } from "./session-adapter";
+
+function extractMessageText(message: SessionMessage): string {
+  if (!message || message.role !== MESSAGE_ROLE.USER || !Array.isArray(message.parts)) {
+    return "";
+  }
+  for (const part of message.parts) {
+    if (part?.type === MESSAGE_PART_TYPE.TEXT && typeof part.text === "string") {
+      return part.text.trim();
+    }
+  }
+  return "";
+}
+
+function deriveTitleFromMessages(messages?: SessionMessage[]): string | undefined {
+  if (!Array.isArray(messages)) return undefined;
+  for (const message of messages) {
+    const text = extractMessageText(message);
+    if (!text) continue;
+    const trimmed = text.length <= TITLE_MAX_LENGTH ? text : text.slice(0, TITLE_MAX_LENGTH);
+    return trimmed;
+  }
+  return undefined;
+}
 
 type SessionChangeListener = (currentSessionId: string | null) => void;
 
@@ -9,6 +37,7 @@ export class SessionManager {
   private currentSessionId: string | null = null;
   private enabled = false;
   private listeners = new Set<SessionChangeListener>();
+  private titleDerivedSessions = new Set<string>();
 
   constructor(adapter?: SessionAdapter) {
     this.adapter = adapter ?? new IndexedDBSessionAdapter();
@@ -114,17 +143,29 @@ export class SessionManager {
     }
 
     let targetId = hasExplicitSession ? sessionId : this.currentSessionId;
+    let isNewSession = false;
     if (!targetId) {
       const created = await this.adapter.create();
       this.currentSessionId = created.id;
       targetId = created.id;
+      isNewSession = true;
       this.notify();
       await this.adapter.prune?.(this.currentSessionId);
     }
 
-    await this.adapter.update(targetId, {
+    const updatePayload: { messages: any[]; title?: string } = {
       messages: nextMessages,
-    });
+    };
+
+    if (isNewSession && !this.titleDerivedSessions.has(targetId)) {
+      const derived = deriveTitleFromMessages(nextMessages);
+      if (derived) {
+        updatePayload.title = derived;
+        this.titleDerivedSessions.add(targetId);
+      }
+    }
+
+    await this.adapter.update(targetId, updatePayload);
   }
 
   async switchSession(id: string): Promise<SessionData | null> {
@@ -160,6 +201,12 @@ export class SessionManager {
     await this.setBridgeMessages([]);
     this.notify();
     return null;
+  }
+
+  async updateSessionTitle(id: string, title: string): Promise<void> {
+    if (!this.enabled || !id) return;
+    await this.adapter.update(id, { title });
+    this.titleDerivedSessions.add(id);
   }
 
   async deleteSession(id: string): Promise<void> {
