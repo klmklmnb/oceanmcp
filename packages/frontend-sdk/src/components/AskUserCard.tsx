@@ -282,20 +282,24 @@ function CheckboxGroupField({
         const label = enumLabel(opt, field.enumLabels);
         const checked = value.includes(val);
         return (
-          <label
+          <div
             key={val}
-            className={`inline-flex items-center gap-1.5 px-3 py-1.5 text-sm rounded-lg border cursor-pointer transition-colors ${
+            role="checkbox"
+            aria-checked={checked}
+            tabIndex={0}
+            onClick={() => toggle(val)}
+            onKeyDown={(e) => {
+              if (e.key === " " || e.key === "Enter") {
+                e.preventDefault();
+                toggle(val);
+              }
+            }}
+            className={`inline-flex items-center gap-1.5 px-3 py-1.5 text-sm rounded-lg border cursor-pointer transition-colors select-none ${
               checked
                 ? "bg-ocean-50 border-ocean-400 text-ocean-700"
                 : "bg-surface-tertiary border-border text-text-primary hover:bg-surface"
             }`}
           >
-            <input
-              type="checkbox"
-              checked={checked}
-              onChange={() => toggle(val)}
-              className="sr-only"
-            />
             <span
               className={`w-4 h-4 rounded border flex items-center justify-center text-xs ${
                 checked
@@ -306,7 +310,7 @@ function CheckboxGroupField({
               {checked && "\u2713"}
             </span>
             {label}
-          </label>
+          </div>
         );
       })}
     </div>
