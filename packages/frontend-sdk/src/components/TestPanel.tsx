@@ -245,6 +245,7 @@ export function TestPanel() {
   const [locale, setLocale] = useState<SupportedLocale | "">(sdkConfig.locale ?? "zh-CN");
   const [theme, setTheme] = useState<Theme | undefined>(sdkConfig.theme);
   const [debug, setDebug] = useState<boolean>(sdkConfig.debug);
+  const [subagentEnabled, setSubagentEnabled] = useState<boolean>(sdkConfig.subagent?.enable === true);
   const [systemDark, setSystemDark] = useState(
     () => window.matchMedia?.("(prefers-color-scheme: dark)").matches ?? false,
   );
@@ -778,6 +779,53 @@ export function TestPanel() {
                 }}
               >
                 true (卡片)
+              </button>
+            </div>
+          </div>
+
+          {/* Subagent toggle */}
+          <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+            <p style={{ margin: 0, fontSize: 11, color: c.label, fontWeight: 500 }}>
+              <code style={{ background: c.codeBg, padding: "1px 4px", borderRadius: 3, fontSize: 10, color: c.label }}>subagent</code> 子智能体委派
+            </p>
+            <div style={{ display: "flex", gap: 6 }}>
+              <button
+                onClick={() => {
+                  setSubagentEnabled(false);
+                  sdkConfig.subagent = { enable: false };
+                }}
+                style={{
+                  flex: 1,
+                  padding: "6px 0",
+                  borderRadius: 8,
+                  border: !subagentEnabled ? `2px solid ${c.selectedBorder}` : `1px solid ${c.unselectedBorder}`,
+                  background: !subagentEnabled ? c.selectedBg : c.unselectedBg,
+                  color: !subagentEnabled ? c.selectedText : c.unselectedText,
+                  fontSize: 11,
+                  fontWeight: !subagentEnabled ? 600 : 400,
+                  cursor: "pointer",
+                }}
+              >
+                off (默认)
+              </button>
+              <button
+                onClick={() => {
+                  setSubagentEnabled(true);
+                  sdkConfig.subagent = { enable: true };
+                }}
+                style={{
+                  flex: 1,
+                  padding: "6px 0",
+                  borderRadius: 8,
+                  border: subagentEnabled ? `2px solid ${c.selectedBorder}` : `1px solid ${c.unselectedBorder}`,
+                  background: subagentEnabled ? c.selectedBg : c.unselectedBg,
+                  color: subagentEnabled ? c.selectedText : c.unselectedText,
+                  fontSize: 11,
+                  fontWeight: subagentEnabled ? 600 : 400,
+                  cursor: "pointer",
+                }}
+              >
+                on (启用)
               </button>
             </div>
           </div>

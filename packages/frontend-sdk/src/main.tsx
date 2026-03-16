@@ -128,6 +128,9 @@ function mountOceanMCP(target?: MountTarget | MountOptions) {
     if (options.session !== undefined) {
       sdkConfig.session = options.session;
     }
+    if (options.subagent !== undefined) {
+      sdkConfig.subagent = options.subagent;
+    }
     if (options.debug !== undefined) {
       sdkConfig.debug = options.debug;
     }
@@ -633,6 +636,7 @@ export type {
   FunctionType,
   OperationType,
   ParameterType,
+  SubagentConfig,
   SkillDefinition,
   UploadHandler,
   UploadResult,

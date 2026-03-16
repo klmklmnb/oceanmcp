@@ -82,19 +82,19 @@ function isPendingAskUser(part: any): boolean {
  * Pure-logic helper extracted from the `sendAutomaticallyWhen` callback so
  * it can be unit-tested without rendering the ChatWidget component.
  *
- * Returns `{ decision, approvalIds, askUserIds }` where:
+ * Returns `{ decision, approvalIds, userSelectIds }` where:
  *   - `decision` — whether `useChat` should automatically send a new request
  *   - `approvalIds` — approval IDs that should be marked as submitted
- *   - `askUserIds` — askUser toolCallIds that should be marked as submitted
+ *   - `userSelectIds` — userSelect toolCallIds that should be marked as submitted
  */
 export function evaluateSendAutomatically(
   messages: any[],
   submittedApprovalIds: Set<string>,
-  submittedAskUserIds: Set<string>,
-): { decision: boolean; approvalIds: string[]; askUserIds: string[] } {
+  submittedUserSelectIds: Set<string>,
+): { decision: boolean; approvalIds: string[]; userSelectIds: string[] } {
   const lastMsg = messages[messages.length - 1];
   if (!lastMsg || lastMsg.role !== MESSAGE_ROLE.ASSISTANT) {
-    return { decision: false, approvalIds: [], askUserIds: [] };
+    return { decision: false, approvalIds: [], userSelectIds: [] };
   }
 
   const toolParts = (lastMsg.parts || []).filter(isToolPart);
@@ -118,28 +118,28 @@ export function evaluateSendAutomatically(
       // APPROVAL_REQUESTED and INPUT_AVAILABLE are "settled enough"
       // for auto-send purposes — the stream has ended and these parts
       // will be resolved by their own interaction flows (approval
-       // buttons / askUser cards). Without this, a resolved
-      // askUser sitting next to an unresolved approval (or vice
+      // buttons / userSelect cards). Without this, a resolved
+      // userSelect sitting next to an unresolved approval (or vice
       // versa) would block the auto-send indefinitely.
       part.state === TOOL_PART_STATE.APPROVAL_REQUESTED ||
       part.state === TOOL_PART_STATE.INPUT_AVAILABLE
     );
   });
 
-  const settledAskUserParts = toolParts.filter((part: any) => {
-    if (getToolName(part) !== "askUser") return false;
+  const settledUserSelectParts = toolParts.filter((part: any) => {
+    if (getToolName(part) !== "userSelect") return false;
     if (!part.toolCallId) return false;
-    if (submittedAskUserIds.has(part.toolCallId)) return false;
+    if (submittedUserSelectIds.has(part.toolCallId)) return false;
     return (
       part.state === TOOL_PART_STATE.OUTPUT_AVAILABLE ||
       part.state === TOOL_PART_STATE.OUTPUT_ERROR
     );
   });
 
-  const hasAskUserResult = settledAskUserParts.length > 0;
+  const hasUserSelectResult = settledUserSelectParts.length > 0;
 
   const decision = Boolean(
-    allToolPartsSettled && (hasAnyApprovalResponse || hasAskUserResult),
+    allToolPartsSettled && (hasAnyApprovalResponse || hasUserSelectResult),
   );
 
   const approvalIds = decision
@@ -147,13 +147,13 @@ export function evaluateSendAutomatically(
         .map((p: any) => p.approval?.id)
         .filter(Boolean) as string[]
     : [];
-  const askUserIds = decision
-    ? settledAskUserParts
+  const userSelectIds = decision
+    ? settledUserSelectParts
         .map((p: any) => p.toolCallId)
         .filter(Boolean) as string[]
     : [];
 
-  return { decision, approvalIds, askUserIds };
+  return { decision, approvalIds, userSelectIds };
 }
 
 /**
@@ -378,8 +378,8 @@ export function ChatWidget({ avatar }: { avatar?: string }) {
   const dragCounterRef = useRef(0);
   /** Track approval IDs that have already triggered an auto-submit to prevent re-sends. */
   const submittedApprovalIdsRef = useRef<Set<string>>(new Set());
-  /** Track askUser toolCallIds that have already triggered an auto-submit to prevent re-sends. */
-  const submittedAskUserIdsRef = useRef<Set<string>>(new Set());
+  /** Track userSelect toolCallIds that have already triggered an auto-submit to prevent re-sends. */
+  const submittedUserSelectIdsRef = useRef<Set<string>>(new Set());
   const lastCapturedChatErrorRef = useRef<unknown>(null);
 
   const welcomeTitle = sdkConfig.welcomeTitle ?? t("chat.welcome.title");
@@ -405,34 +405,44 @@ export function ChatWidget({ avatar }: { avatar?: string }) {
     () =>
       new DefaultChatTransport({
         api: `${API_URL}/api/chat`,
-        body: () => ({
-          connectionId: wsClient.currentConnectionId ?? undefined,
-          modelConfig: sdkConfig.model ?? undefined,
-          toolRetries: sdkConfig.toolRetries ?? undefined,
-        }),
+        body: () => {
+          const subagent = sdkConfig.subagent;
+          return {
+            connectionId: wsClient.currentConnectionId ?? undefined,
+            modelConfig: sdkConfig.model ?? undefined,
+            toolRetries: sdkConfig.toolRetries ?? undefined,
+            subagentEnabled: subagent?.enable ?? undefined,
+            subagentModel: subagent?.enable
+              ? (subagent.model ?? sdkConfig.model ?? undefined)
+              : undefined,
+            subagentTimeoutMs: subagent?.enable && subagent.timeoutSeconds != null
+              ? subagent.timeoutSeconds * 1000
+              : undefined,
+          };
+        },
       }),
     [],
   );
 
   const sendAutomaticallyWhen = useCallback(
     ({ messages: msgs }: { messages: any[] }) => {
-      const { decision, approvalIds, askUserIds } =
+      const { decision, approvalIds, userSelectIds } =
         evaluateSendAutomatically(
           msgs,
           submittedApprovalIdsRef.current,
-          submittedAskUserIdsRef.current,
+          submittedUserSelectIdsRef.current,
         );
 
       if (decision) {
         console.log(
           "[OceanMCP] sendAutomaticallyWhen → true",
-          { approvalCount: approvalIds.length, askUserCount: askUserIds.length },
+          { approvalCount: approvalIds.length, userSelectCount: userSelectIds.length },
         );
         for (const id of approvalIds) {
           submittedApprovalIdsRef.current.add(id);
         }
-        for (const id of askUserIds) {
-          submittedAskUserIdsRef.current.add(id);
+        for (const id of userSelectIds) {
+          submittedUserSelectIdsRef.current.add(id);
         }
       }
 

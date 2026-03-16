@@ -679,6 +679,299 @@ should pass to \`askUser\`. Then call \`askUser\` with that schema verbatim.
       },
     ],
   },
+  {
+    name: "test-skill-subagent",
+    cnName: "测试技能-子智能体",
+    description:
+      "Mock skill with read-only tools designed for subagent delegation testing. " +
+      "Provides server metrics, log search, and user profile lookup — ideal for " +
+      "verifying parallel data-gathering via the subagent tool.",
+    instructions: `
+# Test Skill — Subagent Data Gathering
+
+This skill provides read-only data sources for testing the **subagent** delegation feature.
+The main agent should delegate research tasks to subagents using the \`subagent\` tool,
+and subagents can call these tools to gather information.
+
+## Available Tools
+
+| Tool | Description |
+|---|---|
+| test_subagent_server_metrics | Returns mock CPU, memory, and request metrics for a given server |
+| test_subagent_search_logs | Searches mock application logs by keyword and severity |
+| test_subagent_user_profile | Looks up a mock user profile by username |
+
+## Example Delegation Patterns
+
+### Single subagent
+Delegate one research task:
+> "Use a subagent to look up server metrics for web-01 and summarize the health status."
+
+### Parallel subagents
+Delegate multiple tasks concurrently:
+> "Use subagents in parallel to: (1) get server metrics for web-01, (2) search for ERROR logs from the payment service, (3) look up user profile for alice."
+`,
+    tools: [
+      {
+        id: "test_subagent_server_metrics",
+        name: "Test Subagent Server Metrics",
+        cnName: "测试子智能体-服务器指标",
+        description:
+          "Returns mock server metrics (CPU, memory, request rate, error rate) for a given hostname.",
+        type: FUNCTION_TYPE.EXECUTOR,
+        operationType: OPERATION_TYPE.READ,
+        parameters: [
+          {
+            name: "hostname",
+            type: PARAMETER_TYPE.STRING,
+            description:
+              'Server hostname to query, e.g. "web-01", "api-02", "db-primary".',
+            required: true,
+          },
+        ],
+        executor: async (args) => {
+          const hostname =
+            typeof args.hostname === "string" && args.hostname.trim()
+              ? args.hostname.trim()
+              : "unknown-host";
+          // Deterministic-ish mock data based on hostname hash
+          const hash = hostname
+            .split("")
+            .reduce((acc, ch) => acc + ch.charCodeAt(0), 0);
+          return {
+            hostname,
+            timestamp: new Date().toISOString(),
+            cpu: {
+              usagePercent: ((hash * 7) % 80) + 10, // 10-90%
+              cores: ((hash % 4) + 1) * 4,
+            },
+            memory: {
+              usedMB: ((hash * 13) % 8000) + 1024,
+              totalMB: 16384,
+              usagePercent: +(
+                (((hash * 13) % 8000) + 1024) /
+                163.84
+              ).toFixed(1),
+            },
+            requests: {
+              ratePerSecond: ((hash * 3) % 500) + 50,
+              errorRate: +((hash % 50) / 10).toFixed(2),
+              p99LatencyMs: ((hash * 11) % 300) + 20,
+            },
+            status:
+              (hash * 3) % 500 + 50 > 400 ? "degraded" : "healthy",
+          };
+        },
+      },
+      {
+        id: "test_subagent_search_logs",
+        name: "Test Subagent Search Logs",
+        cnName: "测试子智能体-搜索日志",
+        description:
+          "Searches mock application logs by keyword and optional severity filter. " +
+          "Returns up to 10 matching log entries.",
+        type: FUNCTION_TYPE.EXECUTOR,
+        operationType: OPERATION_TYPE.READ,
+        parameters: [
+          {
+            name: "keyword",
+            type: PARAMETER_TYPE.STRING,
+            description: "Search keyword to match in log messages.",
+            required: true,
+          },
+          {
+            name: "severity",
+            type: PARAMETER_TYPE.STRING,
+            description:
+              'Log severity filter. One of: "DEBUG", "INFO", "WARN", "ERROR". If omitted, all severities are returned.',
+            required: false,
+            enumMap: {
+              DEBUG: "Debug",
+              INFO: "Info",
+              WARN: "Warning",
+              ERROR: "Error",
+            },
+          },
+          {
+            name: "service",
+            type: PARAMETER_TYPE.STRING,
+            description:
+              'Service name filter, e.g. "payment", "auth", "gateway".',
+            required: false,
+          },
+        ],
+        executor: async (args) => {
+          const keyword =
+            typeof args.keyword === "string" ? args.keyword.trim() : "";
+          const severity =
+            typeof args.severity === "string"
+              ? args.severity.toUpperCase()
+              : null;
+          const service =
+            typeof args.service === "string" ? args.service.trim() : null;
+
+          const mockLogs = [
+            {
+              ts: "2026-03-16T10:01:12Z",
+              severity: "ERROR",
+              service: "payment",
+              message: "Payment gateway timeout after 30s for order ORD-5521",
+            },
+            {
+              ts: "2026-03-16T10:01:14Z",
+              severity: "WARN",
+              service: "payment",
+              message:
+                "Retry attempt 2/3 for payment processing on ORD-5521",
+            },
+            {
+              ts: "2026-03-16T10:02:00Z",
+              severity: "INFO",
+              service: "auth",
+              message: 'User "alice" logged in from 10.0.1.42',
+            },
+            {
+              ts: "2026-03-16T10:03:22Z",
+              severity: "ERROR",
+              service: "gateway",
+              message:
+                "Upstream connection refused: api-02:8080 (service: inventory)",
+            },
+            {
+              ts: "2026-03-16T10:04:05Z",
+              severity: "DEBUG",
+              service: "auth",
+              message: "Token refresh for session sess_abc123",
+            },
+            {
+              ts: "2026-03-16T10:05:30Z",
+              severity: "INFO",
+              service: "gateway",
+              message: "Route /api/v2/orders registered successfully",
+            },
+            {
+              ts: "2026-03-16T10:06:18Z",
+              severity: "WARN",
+              service: "inventory",
+              message:
+                "Low stock alert: SKU-9042 has 3 units remaining",
+            },
+            {
+              ts: "2026-03-16T10:07:00Z",
+              severity: "ERROR",
+              service: "payment",
+              message:
+                "Duplicate charge detected for customer cust_bob, amount $129.00",
+            },
+            {
+              ts: "2026-03-16T10:08:45Z",
+              severity: "INFO",
+              service: "payment",
+              message: "Refund processed for ORD-5488, amount $89.50",
+            },
+            {
+              ts: "2026-03-16T10:09:11Z",
+              severity: "DEBUG",
+              service: "gateway",
+              message: "Health check passed for all upstream targets",
+            },
+          ];
+
+          const filtered = mockLogs.filter((log) => {
+            if (
+              keyword &&
+              !log.message.toLowerCase().includes(keyword.toLowerCase())
+            )
+              return false;
+            if (severity && log.severity !== severity) return false;
+            if (service && log.service !== service) return false;
+            return true;
+          });
+
+          return {
+            query: { keyword, severity, service },
+            totalMatches: filtered.length,
+            logs: filtered.slice(0, 10),
+          };
+        },
+      },
+      {
+        id: "test_subagent_user_profile",
+        name: "Test Subagent User Profile",
+        cnName: "测试子智能体-用户资料",
+        description:
+          "Looks up a mock user profile by username. Returns profile details including role, department, and activity.",
+        type: FUNCTION_TYPE.EXECUTOR,
+        operationType: OPERATION_TYPE.READ,
+        parameters: [
+          {
+            name: "username",
+            type: PARAMETER_TYPE.STRING,
+            description: "Username to look up.",
+            required: true,
+          },
+        ],
+        executor: async (args) => {
+          const username =
+            typeof args.username === "string" && args.username.trim()
+              ? args.username.trim().toLowerCase()
+              : "unknown";
+
+          const profiles: Record<
+            string,
+            {
+              displayName: string;
+              email: string;
+              role: string;
+              department: string;
+              lastActive: string;
+              projectCount: number;
+            }
+          > = {
+            alice: {
+              displayName: "Alice Chen",
+              email: "alice@example.com",
+              role: "Senior Engineer",
+              department: "Platform Engineering",
+              lastActive: "2026-03-16T09:45:00Z",
+              projectCount: 12,
+            },
+            bob: {
+              displayName: "Bob Wang",
+              email: "bob@example.com",
+              role: "Product Manager",
+              department: "Product",
+              lastActive: "2026-03-15T18:30:00Z",
+              projectCount: 5,
+            },
+            charlie: {
+              displayName: "Charlie Li",
+              email: "charlie@example.com",
+              role: "DevOps Lead",
+              department: "Infrastructure",
+              lastActive: "2026-03-16T10:00:00Z",
+              projectCount: 8,
+            },
+          };
+
+          const profile = profiles[username];
+          if (!profile) {
+            return {
+              found: false,
+              username,
+              message: `No user found with username "${username}". Known users: ${Object.keys(profiles).join(", ")}`,
+            };
+          }
+
+          return {
+            found: true,
+            username,
+            ...profile,
+          };
+        },
+      },
+    ],
+  },
 ];
 
 export const TEST_STANDALONE_TOOL_IDS = standaloneToolFixtures.map((tool) => tool.id);
@@ -747,6 +1040,33 @@ export const TEST_FIXTURE_PROMPTS: FixturePromptPreset[] = [
     prompt:
       "请先调用 loadSkill 加载 test-skill-askuser-form，然后调用 test_askuser_get_schemas（formType='enum-select'），" +
       "再用返回的 message 和 schema 调用 askUser，最后把用户选择的结果告诉我。",
+  },
+  {
+    id: "subagent-single",
+    label: "subagent: 单任务",
+    prompt:
+      "请使用 subagent 工具委派一个子任务：查询 web-01 服务器的指标（使用 test_subagent_server_metrics），" +
+      "并根据结果总结该服务器的健康状态。",
+  },
+  {
+    id: "subagent-parallel",
+    label: "subagent: 并行任务",
+    prompt:
+      "请同时委派 3 个 subagent 并行执行以下任务：\n" +
+      "1. 查询 web-01 和 api-02 的服务器指标（test_subagent_server_metrics），对比两台服务器的负载\n" +
+      "2. 搜索 payment 服务的 ERROR 级别日志（test_subagent_search_logs），分析错误模式\n" +
+      "3. 查询用户 alice 的资料（test_subagent_user_profile），并查看她最近的活跃时间\n" +
+      "最后请综合所有子任务的结果给我一份简要报告。",
+  },
+  {
+    id: "subagent-research",
+    label: "subagent: 深度调研",
+    prompt:
+      "我怀疑 payment 服务最近有问题。请用 subagent 帮我做一次全面调研：\n" +
+      "- 查询 payment 相关的所有日志（不限严重级别）\n" +
+      "- 查询 gateway 服务的 ERROR 日志，看看是否有上游连接问题\n" +
+      "- 查询 api-02 服务器的指标\n" +
+      "请让 subagent 自行决定调用哪些工具，最后给我一份分析报告。",
   },
 ];
 

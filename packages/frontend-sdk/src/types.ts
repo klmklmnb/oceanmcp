@@ -49,7 +49,7 @@ export type {
 
 export type { SkillDefinition } from "./registry/skill-registry";
 export type { UploadHandler, UploadResult } from "./runtime/upload-registry";
-export type { SupportedLocale, SuggestionItem, Theme } from "./runtime/sdk-config";
+export type { SupportedLocale, SuggestionItem, SubagentConfig, Theme } from "./runtime/sdk-config";
 export type { SlashCommand } from "./command/command-registry";
 
 // ─── SDK-specific types ──────────────────────────────────────────────────────
@@ -147,6 +147,35 @@ export interface MountOptions {
     * - `/sessions`: open session history list
     */
   session?: SessionOptions;
+  /**
+   * Subagent delegation configuration.
+   *
+   * When enabled, the main agent can delegate parallel research subtasks to
+   * autonomous subagents that run in isolated context windows with read-only
+   * tool access. Each subagent's progress streams into a collapsible UI card.
+   *
+   * Both this frontend config AND the server's `SUBAGENT_ENABLED` env var
+   * must be truthy for the subagent tool to be active.
+   *
+   * @default { enable: false }
+   *
+   * @example
+   * ```ts
+   * OceanMCPSDK.mount({
+   *   subagent: { enable: true },
+   * });
+   *
+   * // With custom model and timeout:
+   * OceanMCPSDK.mount({
+   *   subagent: {
+   *     enable: true,
+   *     model: { default: "gpt-4o-mini" },
+   *     timeoutSeconds: 60,
+   *   },
+   * });
+   * ```
+   */
+  subagent?: import("./runtime/sdk-config").SubagentConfig;
   /** Whether to show verbose tool debug cards. Default is false. */
   debug?: boolean;
 }
