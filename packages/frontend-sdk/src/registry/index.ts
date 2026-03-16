@@ -6,4 +6,5 @@ export { miFoodSkill } from "./mi-food";
 export { vacationSkill } from "./vacation";
 export { legalCaseSkill, initLegalCase, configureLegalCase } from "./legal-case";
 export { eamReceiveSkill, eamReceiveConfig } from "./eam-receive";
+export { samSoftwareApplySkill, samApplyConfig } from "./sam-software-apply";
 
