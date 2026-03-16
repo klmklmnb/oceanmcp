@@ -27,6 +27,7 @@ import { legalCaseSkill } from "./registry/legal-case";
 import { eamReceiveSkill } from "./registry/eam-receive";
 import { samSoftwareApplySkill } from "./registry/sam-software-apply";
 import { hoyowaveApiSkill, isWaveEnv } from "./registry/hoyowave-api";
+import { registerSkillFixtures } from "./test/tool-skill-fixtures";
 
 const preregisteredSkills = [devopsSkill, miCoffeeSkill, miFoodSkill, reimburseSkill, vacationSkill, legalCaseSkill, eamReceiveSkill, samSoftwareApplySkill];
 for (const skill of preregisteredSkills) {
@@ -36,6 +37,11 @@ for (const skill of preregisteredSkills) {
 // Register HoYowave API skill only inside the Wave app environment
 if (isWaveEnv()) {
   OceanMCPSDK.registerSkill(hoyowaveApiSkill);
+}
+
+// Register test fixture skills (including askUser form tests) in dev mode only
+if (import.meta.env.DEV) {
+  registerSkillFixtures(OceanMCPSDK);
 }
 
 reimburseFormService.initializeUserData()
