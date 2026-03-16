@@ -224,34 +224,33 @@ export const searchCaseLedgerBatchTool: ExecutorFunctionDefinition = {
       };
     }
 
-    try {
-      const result = await batchSearchCaseLedger(tabType, batchQueries, { filterType });
+    const result = await batchSearchCaseLedger(tabType, batchQueries, { filterType });
 
-      const listWithUrl = result.list.slice(0, MAX_DISPLAY_COUNT).map((item: any) => ({
+    const listWithUrl = result.list.slice(0, MAX_DISPLAY_COUNT).map((item: any) => ({
+      caseName: item.caseName,
+      caseNumber: item.caseNumber,
+      detailUrl: `/case-detail?caseNo=${item.caseNo}&from=case-ledger`,
+    }));
+
+    const querySummaries = result.querySummaries.map((summary) => ({
+      total: summary.total,
+      ...(summary.error ? { error: summary.error } : {}),
+      list: summary.list.slice(0, MAX_DISPLAY_COUNT).map((item: any) => ({
         caseName: item.caseName,
         caseNumber: item.caseNumber,
         detailUrl: `/case-detail?caseNo=${item.caseNo}&from=case-ledger`,
-      }));
+      })),
+    }));
 
-      const querySummaries = result.querySummaries.map((summary) => ({
-        total: summary.total,
-        list: summary.list.slice(0, MAX_DISPLAY_COUNT).map((item: any) => ({
-          caseName: item.caseName,
-          caseNumber: item.caseNumber,
-          detailUrl: `/case-detail?caseNo=${item.caseNo}&from=case-ledger`,
-        })),
-      }));
+    const hasErrors = result.querySummaries.some((s) => s.error);
 
-      return {
-        success: true,
-        total: result.total,
-        list: listWithUrl,
-        querySummaries,
-      };
-    } catch (error) {
-      captureError(error, 'skill_batch_search_ledger');
-      return { success: false, message: `批量搜索失败: ${(error as Error).message}` };
-    }
+    return {
+      success: !hasErrors || result.list.length > 0,
+      total: result.total,
+      list: listWithUrl,
+      querySummaries,
+      ...(hasErrors ? { partialFailure: true } : {}),
+    };
   },
   parameters: [
     {

@@ -125,10 +125,16 @@ export interface BatchQuery {
   filters: Record<string, unknown>;
 }
 
+export interface QuerySummary {
+  total: number;
+  list: any[];
+  error?: string;
+}
+
 export interface BatchSearchResult {
   total: number;
   list: any[];
-  querySummaries: { total: number; list: any[] }[];
+  querySummaries: QuerySummary[];
 }
 
 export async function batchSearchCaseLedger(
@@ -136,29 +142,29 @@ export async function batchSearchCaseLedger(
   queries: BatchQuery[],
   options?: { filterType?: string },
 ): Promise<BatchSearchResult> {
-  try {
-    const tasks = queries.map(
-      (query) => () => {
-        const effectiveTabType = query.tabType || defaultTabType;
-        if (!effectiveTabType) {
-          throw new Error('每组查询必须指定 tabType，或提供默认 tabType');
-        }
-        return executeSearch(effectiveTabType, query.filters, {
+  const tasks = queries.map(
+    (query) => async (): Promise<QuerySummary> => {
+      const effectiveTabType = query.tabType || defaultTabType;
+      if (!effectiveTabType) {
+        return { total: 0, list: [], error: '每组查询必须指定 tabType，或提供默认 tabType' };
+      }
+      try {
+        return await executeSearch(effectiveTabType, query.filters, {
           filterType: options?.filterType,
           pageSize: 0,
         });
-      },
-    );
-    const results = await runWithConcurrency(tasks, 5);
-    const allItems = results.flatMap((r) => r.list);
+      } catch (err) {
+        captureError(err, 'skill_batch_case_ledger');
+        return { total: 0, list: [], error: (err as Error).message };
+      }
+    },
+  );
+  const results = await runWithConcurrency(tasks, 5);
+  const successItems = results.filter((r) => !r.error).flatMap((r) => r.list);
 
-    return {
-      total: allItems.length,
-      list: allItems,
-      querySummaries: results.map((r) => ({ total: r.total, list: r.list })),
-    };
-  } catch (error) {
-    captureError(error, 'skill_batch_case_ledger');
-    throw error;
-  }
+  return {
+    total: successItems.length,
+    list: successItems,
+    querySummaries: results,
+  };
 }
