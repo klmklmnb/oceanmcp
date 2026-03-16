@@ -40,6 +40,9 @@ const API_BASE =
 const GET_DETAIL_URL = `${API_BASE}/initiate/center/get_detail_encrypt`;
 const START_PROCESS_URL = `${API_BASE}/detail/process/start_encrypt`;
 
+const USERINFO_URL =
+  "https://api-test.agw.mihoyo.com/ssoapi/portal/web/userinfo/detail/query";
+
 const HEADERS: Record<string, string> = {
   "accept": "application/json, text/plain, */*",
   "accept-language": "zh-CN",
@@ -56,6 +59,24 @@ const HEADERS: Record<string, string> = {
 // ---------------------------------------------------------------------------
 // Shared helpers
 // ---------------------------------------------------------------------------
+
+async function fetchUserInfo(): Promise<Record<string, any>> {
+  const res = await fetch(USERINFO_URL, {
+    method: "POST",
+    headers: {
+      "accept": "application/json, text/plain, */*",
+      "accept-language": "zh-CN",
+      "cache-control": "no-cache",
+      "content-type": "application/json",
+      "pragma": "no-cache",
+      "x-mi-clientid": "015505129022b2db",
+    },
+    credentials: "include",
+  }).then((r) => r.json());
+
+  if (res.code !== 0) throw new Error(res.message ?? "userinfo query failed");
+  return res.data ?? {};
+}
 
 async function fetchFormDetail(): Promise<{
   formData: Record<string, any>;
@@ -189,7 +210,13 @@ function makeGetVacationFormDetail(): ExecutorFunctionDefinition {
     autoApprove: true,
     parameters: [],
     executor: async () => {
-      const { formData } = await fetchFormDetail();
+      const [{ formData }, userInfo] = await Promise.all([
+        fetchFormDetail(),
+        fetchUserInfo().catch((): Record<string, any> => ({})),
+      ]);
+      if (userInfo.annualLeaveInfo) {
+        formData.annualLeaveInfo = userInfo.annualLeaveInfo;
+      }
       return formData;
     },
   };
@@ -213,7 +240,7 @@ function makeSubmitVacationRequest(): ExecutorFunctionDefinition {
         name: "leaveType",
         type: PARAMETER_TYPE.STRING,
         description:
-          'Leave type code. Currently fixed to "AnnL" (年假). Pass "AnnL".',
+          'Leave type code from leaveTypeList. Supported: "AnnL" (年假), "SicLM" (带薪病假), "SicL" (普通病假). Default to "AnnL" if user does not specify.',
         required: true,
       },
       {
