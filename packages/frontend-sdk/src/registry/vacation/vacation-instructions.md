@@ -40,7 +40,6 @@
 | `leaveStartDate` | string | yes | 请假开始时间，格式 `YYYY-MM-DD HH:mm`，只能选 10:00 / 15:00 / 19:00 |
 | `leaveEndDate` | string | yes | 请假结束时间，格式 `YYYY-MM-DD HH:mm`，只能选 10:00 / 15:00 / 19:00，必须晚于开始时间 |
 | `leaveReason` | string | yes | 请假原因（最多 400 字） |
-| `informedPerson` | string | 视情况 | 通知人域账号，逗号分隔。若 `getVacationFormDetail` 返回的 `informedPerson` 非空则无需传入，为空时必须询问用户并传入 |
 
 ## Leave Type Codes
 
@@ -91,7 +90,7 @@ submitVacationRequest(leaveType, leaveStartDate, leaveEndDate, leaveReason)
 
 以下字段自动填充，不需要询问用户：
 - **假期类型** — 固定为年假（`AnnL`）
-- **通知人** — 优先从 `getVacationFormDetail` 返回的 `informedPerson` 字段获取；如果该字段为空，则在对话中询问用户要通知谁
+- **通知人** — 自动填充，优先取 `informedPerson`，为空时取 `parentDomain`（直属上级），不需要询问用户
 
 #### 时间段与天数计算规则
 
@@ -133,7 +132,7 @@ submitVacationRequest(leaveType, leaveStartDate, leaveEndDate, leaveReason)
 
 1. **必须先调用 `getVacationFormDetail`**，再调用 `submitVacationRequest`。需要先获取假期余额和可选类型。
 2. **假期类型固定为 `AnnL`（年假）**，直接传入即可，无需询问用户。
-3. **通过对话文字直接询问用户日期和原因，不要渲染表单组件**。假期类型固定为 `AnnL`，通知人优先从表单详情的 `informedPerson` 自动填充，只有该字段为空时才在对话中询问用户。
+3. **通过对话文字直接询问用户日期和原因，不要渲染表单组件**。假期类型固定为 `AnnL`，通知人自动填充（`informedPerson` 或 `parentDomain`），不需要询问用户。
 4. **日期时间只有三个可选时间点**：10:00、15:00、19:00。10:00~15:00 为上午（0.5天），15:00~19:00 为下午（0.5天）。提交前需向用户确认请假天数。
 5. **余额校验**：计算请假天数后，必须与对应假期类型的剩余余额对比。超出时警告用户并确认是否继续。
 5. 假期类型代码需要翻译为中文展示给用户，参考上方 Leave Type Codes 表格。

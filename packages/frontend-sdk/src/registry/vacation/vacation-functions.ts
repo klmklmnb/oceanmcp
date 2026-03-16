@@ -236,25 +236,13 @@ function makeSubmitVacationRequest(): ExecutorFunctionDefinition {
         description: "Reason for the leave request (max 400 characters).",
         required: true,
       },
-      {
-        name: "informedPerson",
-        type: PARAMETER_TYPE.STRING,
-        description:
-          'Comma-separated domain names of people to notify (e.g. "alice.wang,bob.li"). Only required if getVacationFormDetail returned an empty informedPerson list.',
-        required: false,
-      },
     ],
     executor: async (args: Record<string, any>) => {
       const { formData } = await fetchFormDetail();
 
-      let informed: string[];
-      if (args.informedPerson) {
-        informed = (args.informedPerson as string).split(",").map((s: string) => s.trim());
-      } else if (Array.isArray(formData.informedPerson) && formData.informedPerson.length > 0) {
-        informed = formData.informedPerson;
-      } else {
-        informed = formData.nextApprover ? [formData.nextApprover] : [];
-      }
+      const informed: string[] = Array.isArray(formData.informedPerson) && formData.informedPerson.length > 0
+        ? formData.informedPerson
+        : formData.parentDomain ? [formData.parentDomain] : [];
 
       const { weekday, naturalDay } = calcLeaveDays(args.leaveStartDate, args.leaveEndDate);
       const now = new Date().toISOString().replace("T", " ").slice(0, 19);
