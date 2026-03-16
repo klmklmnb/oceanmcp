@@ -23,8 +23,9 @@ import { miCoffeeSkill } from "./registry/mi-coffee";
 import { miFoodSkill } from "./registry/mi-food";
 import { reimburseSkill } from "./registry/reimburse";
 import { vacationSkill } from "./registry/vacation";
+import { legalCaseSkill } from "./registry/legal-case";
 
-const preregisteredSkills = [devopsSkill, miCoffeeSkill, miFoodSkill, reimburseSkill, vacationSkill];
+const preregisteredSkills = [devopsSkill, miCoffeeSkill, miFoodSkill, reimburseSkill, vacationSkill, legalCaseSkill];
 for (const skill of preregisteredSkills) {
   OceanMCPSDK.registerSkill(skill);
 }
