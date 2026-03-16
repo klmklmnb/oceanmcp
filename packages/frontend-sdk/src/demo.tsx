@@ -25,8 +25,9 @@ import { reimburseSkill } from "./registry/reimburse";
 import { vacationSkill } from "./registry/vacation";
 import { legalCaseSkill } from "./registry/legal-case";
 import { eamReceiveSkill } from "./registry/eam-receive";
+import { samSoftwareApplySkill } from "./registry/sam-software-apply";
 
-const preregisteredSkills = [devopsSkill, miCoffeeSkill, miFoodSkill, reimburseSkill, vacationSkill, legalCaseSkill, eamReceiveSkill];
+const preregisteredSkills = [devopsSkill, miCoffeeSkill, miFoodSkill, reimburseSkill, vacationSkill, legalCaseSkill, eamReceiveSkill, samSoftwareApplySkill];
 for (const skill of preregisteredSkills) {
   OceanMCPSDK.registerSkill(skill);
 }
@@ -104,6 +105,7 @@ OceanMCPSDK.mount({
     { label: "帮我填写报销单" },
     { label: "帮我在米咖点一杯拿铁" },
     { label: "帮我申请一台显示器" },
+    { label: "帮我申请 GitLab" },
     { label: "米饭上今天的晚餐是什么？" },
     { label: "你能做什么？" },
     { label: "这个页面有什么？", text: "详细分析当前页面内容" },
