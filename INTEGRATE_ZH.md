@@ -142,6 +142,8 @@ OceanMCPSDK.mount({
     enable: true, // 可选：开启会话持久化与内置斜杠命令
     namespace: "my-app", // 可选：同源多应用下的存储隔离命名空间
     maxSessions: 1000, // 可选：每个命名空间最多保留的会话数量，0 表示无限制
+    injectBuiltinSlashCommands: true, // 可选：注入内置 /new 和 /sessions 命令
+    showBottomEntryButton: true, // 可选：展示底部会话历史按钮入口
   },
 });
 ```
@@ -155,7 +157,7 @@ OceanMCPSDK.mount({
 | `avatar`      | `string`                      | `undefined`      | AI 助手在聊天中显示的头像图片 URL。                                                                                                                                                 |
 | `theme`       | `"light" \| "dark" \| "auto"` | `undefined`      | UI 主题偏好。可设置为 `"light"`、`"dark"` 或 `"auto"`（跟随系统偏好）。未设置（`undefined`）时默认使用浅色主题。**响应式** —— 可通过 `sdkConfig.theme` 运行时动态修改。              |
 | `model`       | `ModelConfig`                 | `undefined`      | LLM 模型配置。控制聊天请求使用的模型和参数。详见下方[模型配置](#模型配置)。                                                                                                         |
-| `session`     | `SessionOptions`              | `{ enable: true }` | 会话持久化选项。默认开启；如需关闭请设置 `session: { enable: false }`。`enable: true` 时开启本地会话存储，并启用内置斜杠命令（`/new`、`/sessions`）。`namespace` 用于同源多应用的数据隔离。`maxSessions` 为软限制（默认 1000，0 表示无限制），仅在新建会话时裁剪历史记录。 |
+| `session`     | `SessionOptions`              | `{ enable: true, injectBuiltinSlashCommands: true, showBottomEntryButton: true }` | 会话持久化选项。默认开启；如需关闭请设置 `session: { enable: false }`。`enable: true` 时开启本地会话存储。`injectBuiltinSlashCommands` 控制是否注入内置斜杠命令（`/new`、`/sessions`）。`showBottomEntryButton` 控制是否展示底部会话历史按钮入口。`namespace` 用于同源多应用的数据隔离。`maxSessions` 为软限制（默认 1000，0 表示无限制），仅在新建会话时裁剪历史记录。 |
 | `shadowDOM`   | `boolean`                     | `true`           | 为 `true` 时，组件在 Shadow DOM 内渲染，实现完全的 CSS 隔离——你的应用样式不会影响组件，组件样式也不会影响你的应用。设为 `false` 可用于调试，但要注意样式可能会互相影响。            |
 | `suggestions` | `SuggestionItem[]`            | `undefined`      | 自定义欢迎页建议问题。每个条目包含 `label`（按钮显示文本）和可选的 `text`（点击时实际发送的消息）。设置后会完全替换默认的建议问题。如果省略 `text`，则 `label` 同时用于显示和发送。 |
 
@@ -237,6 +239,8 @@ OceanMCPSDK.mount({
     enable: true,
     namespace: "my-app",
     maxSessions: 1000,
+    injectBuiltinSlashCommands: true,
+    showBottomEntryButton: true,
   },
 });
 ```
@@ -246,6 +250,8 @@ OceanMCPSDK.mount({
 - `enable`（`boolean`）：开启或关闭会话持久化
 - `namespace?`（`string`）：可选命名空间，用于同源下多应用数据隔离
 - `maxSessions?`（`number`）：每个命名空间最多保留的会话数量。默认 1000；`0` 表示无限制。为软限制，仅在新建会话时进行裁剪。
+- `injectBuiltinSlashCommands?`（`boolean`）：是否注入内置斜杠命令（`/new`、`/sessions`）。默认 `true`。
+- `showBottomEntryButton?`（`boolean`）：是否展示底部会话历史按钮入口。默认 `true`。
 
 开启后的行为：
 
@@ -762,6 +768,9 @@ const messages = await OceanMCPSDK.getMessages();
 
 // 清空所有聊天消息
 await OceanMCPSDK.clearMessages();
+
+// 打开内置的会话历史弹窗
+await OceanMCPSDK.openSessions();
 ```
 
 适用场景：
@@ -772,7 +781,7 @@ await OceanMCPSDK.clearMessages();
 
 ### 斜杠命令
 
-当 `session.enable` 为 `true` 时，内置斜杠命令可用：
+当 `session.enable` 为 `true` 且 `session.injectBuiltinSlashCommands !== false` 时，内置斜杠命令可用：
 
 - `/new`：开始一个新的草稿会话
 - `/sessions`：打开历史会话面板并切换会话
@@ -846,6 +855,7 @@ const connectionId = OceanMCPSDK.wsClient.currentConnectionId;
 | `setInput(text)`            | `Promise<void>`            | 设置输入框文本，不发送。                                |
 | `getMessages()`             | `Promise<any[]>`           | 获取当前所有聊天消息。                                  |
 | `clearMessages()`           | `Promise<void>`            | 清空所有聊天消息。                                      |
+| `openSessions()`            | `Promise<void>`            | 打开内置的会话历史弹窗。                                |
 | `registerCommand(command)`  | `void`                     | 注册自定义斜杠命令。                                    |
 | `unregisterCommand(name)`   | `void`                     | 按名称注销斜杠命令。                                    |
 
@@ -1007,6 +1017,9 @@ interface SuggestionItem {
 interface SessionOptions {
   enable: boolean;
   namespace?: string;
+  maxSessions?: number;
+  injectBuiltinSlashCommands?: boolean;
+  showBottomEntryButton?: boolean;
 }
 ```
 

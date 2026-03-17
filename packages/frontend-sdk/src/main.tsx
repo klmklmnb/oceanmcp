@@ -24,6 +24,7 @@ import {
 } from "./shadow-dom";
 import { commandRegistry } from "./command/command-registry";
 import {
+  OPEN_SESSIONS_EVENT,
   registerSessionBuiltinCommands,
   unregisterSessionBuiltinCommands,
 } from "./command/builtin-commands";
@@ -66,10 +67,12 @@ let _cleanupMonacoObserver: (() => void) | null = null;
 function syncSessionFeatures(): void {
   const sessionOptions = sdkConfig.session;
   const enabled = sessionOptions?.enable === true;
+  const injectBuiltinSlashCommands =
+    enabled && sessionOptions?.injectBuiltinSlashCommands !== false;
   const namespace = sessionOptions?.namespace?.trim();
   sessionManager.setAdapter(new IndexedDBSessionAdapter(namespace, sessionOptions?.maxSessions));
   sessionManager.setEnabled(enabled);
-  if (enabled) {
+  if (injectBuiltinSlashCommands) {
     registerSessionBuiltinCommands();
   } else {
     unregisterSessionBuiltinCommands();
@@ -503,6 +506,18 @@ const sdk: OceanMCPSDKType = {
    */
   async clearMessages() {
     return chatBridge.call("clearMessages");
+  },
+
+  /**
+   * Open the built-in session history dialog.
+   *
+   * This API is intended for host applications that use custom UI triggers.
+   * It does not depend on built-in slash commands or bottom-entry visibility.
+   */
+  async openSessions() {
+    if (sdkConfig.session?.enable !== true) return;
+    if (typeof window === "undefined") return;
+    window.dispatchEvent(new CustomEvent(OPEN_SESSIONS_EVENT));
   },
 
   /**

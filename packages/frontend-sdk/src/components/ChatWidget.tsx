@@ -409,6 +409,8 @@ function SessionIcon() {
  */
 export function ChatWidget({ avatar }: { avatar?: string }) {
   const sessionsEnabled = sdkConfig.session?.enable === true;
+  const showSessionBottomEntry =
+    sessionsEnabled && sdkConfig.session?.showBottomEntryButton !== false;
   const currentLocale = useLocale();
   const scrollRef = useRef<HTMLDivElement>(null);
   /** Whether the scroll container is currently at (or near) the bottom. */
@@ -898,6 +900,9 @@ export function ChatWidget({ avatar }: { avatar?: string }) {
         await sessionManager.switchSession(sessionId);
         await refreshSessionMetas();
         setShowSessionList(false);
+        window.setTimeout(() => {
+          inputRef.current?.focus();
+        }, 0);
       } catch (error) {
         captureException(error, {
           tags: {
@@ -1193,6 +1198,7 @@ export function ChatWidget({ avatar }: { avatar?: string }) {
       if (
         (e.key === "Enter" || e.key === "Tab") &&
         !e.shiftKey &&
+        !e.repeat &&
         !e.nativeEvent.isComposing
       ) {
         e.preventDefault();
@@ -1204,7 +1210,7 @@ export function ChatWidget({ avatar }: { avatar?: string }) {
       }
     }
 
-    if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) {
+    if (e.key === "Enter" && !e.shiftKey && !e.repeat && !e.nativeEvent.isComposing) {
       e.preventDefault();
       handleSubmit(e as any);
     }
@@ -1414,7 +1420,7 @@ export function ChatWidget({ avatar }: { avatar?: string }) {
             />
             <div className="absolute bottom-2 left-2 right-2 flex items-center justify-between px-2">
               <div className="flex items-center gap-2 text-text-tertiary">
-                {sessionsEnabled && (
+                {showSessionBottomEntry && (
                   <button
                     type="button"
                     onClick={() => {

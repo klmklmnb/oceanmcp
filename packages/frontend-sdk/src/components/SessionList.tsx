@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import type { SessionMeta } from "../session/session-adapter";
 import { t } from "../locale";
 
@@ -78,6 +78,14 @@ export function SessionList({
 }: SessionListProps) {
   const [mounted, setMounted] = useState(open);
   const [visible, setVisible] = useState(open);
+  const [selectedIndex, setSelectedIndex] = useState(0);
+  const panelRef = useRef<HTMLDivElement | null>(null);
+
+  const initialSelectedIndex = useMemo(() => {
+    if (sessions.length === 0) return -1;
+    const currentIndex = sessions.findIndex((session) => session.id === currentSessionId);
+    return currentIndex >= 0 ? currentIndex : 0;
+  }, [sessions, currentSessionId]);
 
   useEffect(() => {
     if (open) {
@@ -91,6 +99,73 @@ export function SessionList({
     return () => window.clearTimeout(timer);
   }, [open]);
 
+  useEffect(() => {
+    if (!open) return;
+    setSelectedIndex(initialSelectedIndex);
+  }, [open, initialSelectedIndex]);
+
+  useEffect(() => {
+    if (selectedIndex < sessions.length) return;
+    setSelectedIndex(sessions.length === 0 ? -1 : sessions.length - 1);
+  }, [selectedIndex, sessions.length]);
+
+  useEffect(() => {
+    if (!open || !mounted) return;
+    const timer = window.setTimeout(() => {
+      panelRef.current?.focus();
+    }, 0);
+    return () => window.clearTimeout(timer);
+  }, [open, mounted]);
+
+  useEffect(() => {
+    if (!open || !mounted) return;
+    if (selectedIndex < 0 || selectedIndex >= sessions.length) return;
+    const selectedItem = panelRef.current?.querySelector<HTMLElement>(
+      `[data-session-item-index="${selectedIndex}"]`,
+    );
+    selectedItem?.scrollIntoView({
+      block: "nearest",
+      inline: "nearest",
+    });
+  }, [mounted, open, selectedIndex, sessions.length]);
+
+  const handlePanelKeyDown = (event: React.KeyboardEvent<HTMLDivElement>) => {
+    if (event.key === "Escape") {
+      event.preventDefault();
+      onClose();
+      return;
+    }
+
+    if (sessions.length === 0) return;
+
+    if (event.key === "ArrowDown") {
+      event.preventDefault();
+      setSelectedIndex((prev) => {
+        const current = prev < 0 ? initialSelectedIndex : prev;
+        return current + 1 >= sessions.length ? 0 : current + 1;
+      });
+      return;
+    }
+
+    if (event.key === "ArrowUp") {
+      event.preventDefault();
+      setSelectedIndex((prev) => {
+        const current = prev < 0 ? initialSelectedIndex : prev;
+        return current - 1 < 0 ? sessions.length - 1 : current - 1;
+      });
+      return;
+    }
+
+    if (event.key === "Enter") {
+      if (event.repeat) return;
+      event.preventDefault();
+      const target = sessions[selectedIndex] ?? sessions[0];
+      if (target) {
+        void onSwitch(target.id);
+      }
+    }
+  };
+
   if (!mounted) return null;
 
   return (
@@ -101,6 +176,9 @@ export function SessionList({
       onClick={onClose}
     >
       <div
+        ref={panelRef}
+        tabIndex={-1}
+        onKeyDown={handlePanelKeyDown}
         className={`w-full max-w-[520px] max-h-[72vh] rounded-2xl border border-border bg-surface shadow-float flex flex-col transition-all duration-180 ease-out ${
           visible
             ? "opacity-100 translate-y-0 scale-100"
@@ -137,23 +215,28 @@ export function SessionList({
           </div>
         </div>
 
-        <div className="flex-1 overflow-y-auto ocean-scrollbar p-2.5 space-y-1.5">
+        <div
+          className="flex-1 overflow-y-auto ocean-scrollbar p-2.5 space-y-1.5"
+          data-session-list-scroll="true"
+        >
           {sessions.length === 0 && (
             <div className="text-xs text-text-tertiary px-1.5 py-3">
               {t("chat.session.empty")}
             </div>
           )}
 
-          {sessions.map((session) => {
+          {sessions.map((session, index) => {
             const active = session.id === currentSessionId;
+            const keyboardSelected = index === selectedIndex;
             return (
               <div
                 key={session.id}
+                data-session-item-index={index}
                 className={`rounded-lg border px-2.5 py-2 transition-colors ${
                   active
                     ? "border-ocean-300 bg-ocean-50"
                     : "border-border bg-surface-secondary/60"
-                }`}
+                } ${keyboardSelected ? "ring-2 ring-ocean-300/80" : ""}`}
               >
                 <div className="flex items-start justify-between gap-3">
                   <button

@@ -27,9 +27,13 @@ export type SuggestionItem = {
 };
 
 export type SessionConfig = {
-  enable: boolean;
+  enable?: boolean;
   namespace?: string;
   maxSessions?: number;
+  /** Whether to inject built-in slash commands `/new` and `/sessions`. Default: true. */
+  injectBuiltinSlashCommands?: boolean;
+  /** Whether to show the bottom session-entry button. Default: true. */
+  showBottomEntryButton?: boolean;
 };
 
 export type SubagentConfig = {
@@ -87,8 +91,23 @@ export function resolveTheme(theme: Theme | undefined): "light" | "dark" {
   return THEME.LIGHT;
 }
 
+const DEFAULT_SESSION_CONFIG: SessionConfig = {
+  enable: true,
+  maxSessions: 1000,
+  injectBuiltinSlashCommands: true,
+  showBottomEntryButton: true,
+};
+
+function normalizeSessionConfig(value: SessionConfig | undefined): SessionConfig | undefined {
+  if (value == null) return value;
+  return {
+    ...DEFAULT_SESSION_CONFIG,
+    ...value,
+  };
+}
+
 const config: SDKConfig = {
-  session: { enable: true, maxSessions: 1000 },
+  session: { ...DEFAULT_SESSION_CONFIG },
 };
 
 export const sdkConfig = {
@@ -183,7 +202,7 @@ export const sdkConfig = {
   },
 
   set session(value: SessionConfig | undefined) {
-    config.session = value;
+    config.session = normalizeSessionConfig(value);
   },
 
   get subagent(): SubagentConfig | undefined {
