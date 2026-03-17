@@ -769,6 +769,9 @@ const messages = await OceanMCPSDK.getMessages();
 
 // 清空所有聊天消息
 await OceanMCPSDK.clearMessages();
+
+// 打开内置的会话历史弹窗
+await OceanMCPSDK.openSessions();
 ```
 
 适用场景：
@@ -853,6 +856,7 @@ const connectionId = OceanMCPSDK.wsClient.currentConnectionId;
 | `setInput(text)`            | `Promise<void>`            | 设置输入框文本，不发送。                                |
 | `getMessages()`             | `Promise<any[]>`           | 获取当前所有聊天消息。                                  |
 | `clearMessages()`           | `Promise<void>`            | 清空所有聊天消息。                                      |
+| `openSessions()`            | `Promise<void>`            | 打开内置的会话历史弹窗。                                |
 | `registerCommand(command)`  | `void`                     | 注册自定义斜杠命令。                                    |
 | `unregisterCommand(name)`   | `void`                     | 按名称注销斜杠命令。                                    |
 

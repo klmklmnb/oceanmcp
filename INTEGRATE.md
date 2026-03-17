@@ -888,6 +888,9 @@ const messages = await OceanMCPSDK.getMessages();
 
 // Clear all chat messages
 await OceanMCPSDK.clearMessages();
+
+// Open the built-in session history dialog
+await OceanMCPSDK.openSessions();
 ```
 
 This is useful for:
@@ -972,6 +975,7 @@ const connectionId = OceanMCPSDK.wsClient.currentConnectionId;
 | `setInput(text)`            | `Promise<void>`            | Set the input box text without sending.                                        |
 | `getMessages()`             | `Promise<any[]>`           | Get all current chat messages.                                                 |
 | `clearMessages()`           | `Promise<void>`            | Clear all chat messages.                                                       |
+| `openSessions()`            | `Promise<void>`            | Open the built-in session history dialog.                                      |
 | `registerCommand(command)`  | `void`                     | Register a custom slash command.                                               |
 | `unregisterCommand(name)`   | `void`                     | Unregister a slash command by name.                                            |
 

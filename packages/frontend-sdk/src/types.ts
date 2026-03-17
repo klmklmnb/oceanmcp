@@ -272,6 +272,14 @@ export interface OceanMCPSDKType {
   clearMessages(): Promise<void>;
 
   /**
+   * Open the built-in session history dialog.
+   *
+   * Useful when host applications want to trigger the session dialog from
+   * custom UI (buttons, menus, shortcuts) instead of using built-in entries.
+   */
+  openSessions(): Promise<void>;
+
+  /**
    * Register a file upload handler.
    *
    * When registered, a paperclip button appears in the input area.

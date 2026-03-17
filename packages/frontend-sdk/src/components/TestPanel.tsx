@@ -1073,6 +1073,24 @@ export function TestPanel() {
             </button>
           </div>
 
+          {/* openSessions() */}
+          <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+            <p style={{ margin: 0, fontSize: 11, color: c.label, fontWeight: 500 }}>
+              <code style={{ background: c.codeBg, padding: "1px 4px", borderRadius: 3, fontSize: 10, color: c.label }}>openSessions()</code> 打开会话历史弹窗
+            </p>
+            <button
+              onClick={() => run("openSessions", () => OceanMCPSDK.openSessions())}
+              disabled={loading !== null}
+              style={{
+                ...btnBase,
+                background: loading !== null ? (isDark ? "#4b5563" : "#d1d5db") : "#f59e0b",
+                cursor: loading !== null ? "not-allowed" : "pointer",
+              }}
+            >
+              {loading === "openSessions" ? "Opening..." : "openSessions()"}
+            </button>
+          </div>
+
           {/* Result area */}
           {result && (
             <div>
