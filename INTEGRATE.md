@@ -38,7 +38,7 @@ This guide walks you through integrating the OceanMCP frontend SDK into your own
 The fastest way to get OceanMCP running in your app — just add two lines:
 
 ```html
-<script src="https://cdn.jsdelivr.net/npm/oceanmcp/sdk.umd.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/oceanmcp@latest/dist/sdk.umd.js"></script>
 <script>
   OceanMCPSDK.mount();
 </script>
@@ -60,7 +60,7 @@ The UMD build (`sdk.umd.js`) is a single self-contained file — CSS is embedded
 
 ```html
 <!-- Load the SDK -->
-<script src="https://cdn.jsdelivr.net/npm/oceanmcp/sdk.umd.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/oceanmcp@latest/dist/sdk.umd.js"></script>
 
 <script>
   // Register your custom tools (optional)
@@ -327,7 +327,7 @@ Set `window.__OCEAN_MCP_SERVER_URL__` **before** loading the SDK script. This is
 </script>
 
 <!-- Then load and mount the SDK -->
-<script src="https://cdn.jsdelivr.net/npm/oceanmcp/sdk.umd.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/oceanmcp@latest/dist/sdk.umd.js"></script>
 <script>
   OceanMCPSDK.mount();
 </script>

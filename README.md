@@ -79,7 +79,7 @@ OceanMCP is an embeddable AI chat assistant SDK that executes tools **inside the
 ### Two-Line Integration (UMD)
 
 ```html
-<script src="https://cdn.example.com/ocean-mcp/sdk.umd.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/oceanmcp@latest/dist/sdk.umd.js"></script>
 <script>
   OceanMCPSDK.mount();
 </script>

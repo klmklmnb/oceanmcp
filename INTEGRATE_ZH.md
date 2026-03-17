@@ -38,7 +38,7 @@ OceanMCP 是一个 **Browser-in-the-Loop**（浏览器参与的）AI 智能体 S
 把 OceanMCP 跑起来最快只需要两行代码：
 
 ```html
-<script src="https://cdn.jsdelivr.net/npm/oceanmcp/sdk.umd.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/oceanmcp@latest/dist/sdk.umd.js"></script>
 <script>
   OceanMCPSDK.mount();
 </script>
@@ -60,7 +60,7 @@ UMD 构建产物 (`sdk.umd.js`) 是一个独立文件 —— CSS 已嵌入 JS �
 
 ```html
 <!-- 加载 SDK -->
-<script src="https://cdn.jsdelivr.net/npm/oceanmcp/sdk.umd.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/oceanmcp@latest/dist/sdk.umd.js"></script>
 
 <script>
   // 注册你的自定义工具（可选）
@@ -315,7 +315,7 @@ import { sdkConfig } from "@ocean-mcp/frontend-sdk";
 </script>
 
 <!-- 然后加载并挂载 SDK -->
-<script src="https://cdn.jsdelivr.net/npm/oceanmcp/sdk.umd.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/oceanmcp@latest/dist/sdk.umd.js"></script>
 <script>
   OceanMCPSDK.mount();
 </script>
