@@ -147,6 +147,8 @@ OceanMCPSDK.mount({
     enable: true, // Optional: enable session persistence and slash commands
     namespace: "my-app", // Optional: isolate storage by app namespace on same origin
     maxSessions: 1000, // Optional: max sessions per namespace, 0 means unlimited
+    injectBuiltinSlashCommands: true, // Optional: inject built-in /new and /sessions commands
+    showBottomEntryButton: true, // Optional: show the bottom session-history button
   },
 });
 ```
@@ -160,7 +162,7 @@ OceanMCPSDK.mount({
 | `avatar`      | `string`                      | `undefined`               | URL for the AI assistant's avatar image in the chat.                                                                                                                                                                                                                                              |
 | `theme`       | `"light" \| "dark" \| "auto"` | `undefined`               | UI theme preference. Set to `"light"`, `"dark"`, or `"auto"` (follows system preference). When not set (`undefined`), defaults to light theme. **Reactive** — can be changed at runtime via `sdkConfig.theme`.                                                                                    |
 | `model`       | `ModelConfig`                 | `undefined`               | LLM model configuration. Controls which model and parameters are used for chat requests. See [Model Configuration](#model-configuration) below.                                                                                                                                                   |
-| `session`     | `SessionOptions`              | `{ enable: true }`        | Session persistence options. Enabled by default; set `session: { enable: false }` to disable. `enable: true` turns on local session storage and built-in slash commands (`/new`, `/sessions`). `namespace` isolates IndexedDB data between apps on the same origin. `maxSessions` is a soft limit (default 1000, `0` means unlimited) and is only enforced when creating new sessions. |
+| `session`     | `SessionOptions`              | `{ enable: true, injectBuiltinSlashCommands: true, showBottomEntryButton: true }` | Session persistence options. Enabled by default; set `session: { enable: false }` to disable. `enable: true` turns on local session storage. `injectBuiltinSlashCommands` controls built-in slash commands (`/new`, `/sessions`). `showBottomEntryButton` controls the bottom session-history entry button. `namespace` isolates IndexedDB data between apps on the same origin. `maxSessions` is a soft limit (default 1000, `0` means unlimited) and is only enforced when creating new sessions. |
 | `shadowDOM`   | `boolean`                     | `true`                    | When `true`, the widget renders inside a Shadow DOM for full CSS isolation — your app's styles won't affect the widget and vice versa. Set to `false` for debugging or in environments where Shadow DOM causes issues.                                                                            |
 | `suggestions` | `SuggestionItem[]`            | `undefined`               | Custom suggestion questions displayed on the welcome screen. Each item has a `label` (button display text) and an optional `text` (the message sent when clicked). When provided, replaces the default suggestions entirely. If `text` is omitted, `label` is used as both display and send text. |
 
@@ -248,6 +250,8 @@ OceanMCPSDK.mount({
     enable: true,
     namespace: "my-app",
     maxSessions: 1000,
+    injectBuiltinSlashCommands: true,
+    showBottomEntryButton: true,
   },
 });
 ```
@@ -257,6 +261,8 @@ OceanMCPSDK.mount({
 - `enable` (`boolean`): turn session persistence on or off
 - `namespace?` (`string`): optional storage namespace for isolating multiple apps on the same origin
 - `maxSessions?` (`number`): max sessions per namespace. Default 1000; `0` means unlimited. This is a soft limit enforced only when creating new sessions.
+- `injectBuiltinSlashCommands?` (`boolean`): whether to inject built-in slash commands (`/new`, `/sessions`). Default: `true`.
+- `showBottomEntryButton?` (`boolean`): whether to show the bottom session-history button. Default: `true`.
 
 Behavior when enabled:
 
@@ -892,7 +898,7 @@ This is useful for:
 
 ### Slash Commands
 
-When `session.enable` is `true`, built-in slash commands are available:
+When `session.enable` is `true` and `session.injectBuiltinSlashCommands !== false`, built-in slash commands are available:
 
 - `/new`: start a new draft session
 - `/sessions`: open session history list and switch sessions
@@ -1127,6 +1133,9 @@ interface SuggestionItem {
 interface SessionOptions {
   enable: boolean;
   namespace?: string;
+  maxSessions?: number;
+  injectBuiltinSlashCommands?: boolean;
+  showBottomEntryButton?: boolean;
 }
 ```
 

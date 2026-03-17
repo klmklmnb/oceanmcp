@@ -60,11 +60,15 @@ export type MountTarget = string | HTMLElement;
 /** Session behavior options for frontend persistence. */
 export interface SessionOptions {
   /** Enable session persistence and session UI/commands. */
-  enable: boolean;
+  enable?: boolean;
   /** Optional namespace to isolate storage across apps on same origin. */
   namespace?: string;
   /** Max number of sessions stored per namespace. 0 means unlimited. Default: 1000. */
   maxSessions?: number;
+  /** Whether to inject built-in slash commands `/new` and `/sessions`. Default: true. */
+  injectBuiltinSlashCommands?: boolean;
+  /** Whether to show the bottom session-entry button. Default: true. */
+  showBottomEntryButton?: boolean;
 }
 
 /** Options accepted by `OceanMCPSDK.mount()`. */
@@ -142,9 +146,9 @@ export interface MountOptions {
    *
     * Enabled by default; set `session: { enable: false }` to disable.
     * When `enable` is true, the SDK stores conversations in IndexedDB and
-    * activates built-in slash commands:
-    * - `/new`: create and switch to a new session
-    * - `/sessions`: open session history list
+    * supports two UI/command toggles (both default to true):
+    * - `injectBuiltinSlashCommands`: inject `/new` and `/sessions`
+    * - `showBottomEntryButton`: show the bottom session-history button
     */
   session?: SessionOptions;
   /**

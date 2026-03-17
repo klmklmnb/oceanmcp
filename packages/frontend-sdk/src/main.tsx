@@ -66,10 +66,12 @@ let _cleanupMonacoObserver: (() => void) | null = null;
 function syncSessionFeatures(): void {
   const sessionOptions = sdkConfig.session;
   const enabled = sessionOptions?.enable === true;
+  const injectBuiltinSlashCommands =
+    enabled && sessionOptions?.injectBuiltinSlashCommands !== false;
   const namespace = sessionOptions?.namespace?.trim();
   sessionManager.setAdapter(new IndexedDBSessionAdapter(namespace, sessionOptions?.maxSessions));
   sessionManager.setEnabled(enabled);
-  if (enabled) {
+  if (injectBuiltinSlashCommands) {
     registerSessionBuiltinCommands();
   } else {
     unregisterSessionBuiltinCommands();

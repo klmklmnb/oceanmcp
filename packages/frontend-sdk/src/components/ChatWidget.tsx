@@ -409,6 +409,8 @@ function SessionIcon() {
  */
 export function ChatWidget({ avatar }: { avatar?: string }) {
   const sessionsEnabled = sdkConfig.session?.enable === true;
+  const showSessionBottomEntry =
+    sessionsEnabled && sdkConfig.session?.showBottomEntryButton !== false;
   const currentLocale = useLocale();
   const scrollRef = useRef<HTMLDivElement>(null);
   /** Whether the scroll container is currently at (or near) the bottom. */
@@ -1418,7 +1420,7 @@ export function ChatWidget({ avatar }: { avatar?: string }) {
             />
             <div className="absolute bottom-2 left-2 right-2 flex items-center justify-between px-2">
               <div className="flex items-center gap-2 text-text-tertiary">
-                {sessionsEnabled && (
+                {showSessionBottomEntry && (
                   <button
                     type="button"
                     onClick={() => {
