@@ -1,8 +1,6 @@
 <p align="center">
-  <img src="https://pub-46b4307a6ac249dda431cdfd7f715021.r2.dev/uploads/oceanmcp_icon.png" width="80" alt="OceanMCP Logo" />
+  <img src="https://pub-46b4307a6ac249dda431cdfd7f715021.r2.dev/uploads/oceanmcp.png" width="80" alt="OceanMCP Logo" />
 </p>
-
-<h1 align="center">OceanMCP</h1>
 
 <p align="center">
   <strong>Browser-in-the-Loop AI Agent SDK</strong>
