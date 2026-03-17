@@ -16,9 +16,6 @@ import { TestPanel } from "../components/TestPanel";
 
 // ─── Constants ───────────────────────────────────────────────────────────────
 
-const ICON_URL =
-  "https://pub-46b4307a6ac249dda431cdfd7f715021.r2.dev/uploads/oceanmcp_icon.png";
-
 const CHAT_WIDTH_DEFAULT = 420;
 const CHAT_WIDTH_MIN = 320;
 const CHAT_WIDTH_MAX = 700;
@@ -147,7 +144,6 @@ export function DemoApp() {
       root: container,
       locale: locale === "zh" ? "zh-CN" : "en-US",
       theme: "auto",
-      avatar: ICON_URL,
       subagent: { enable: true },
       suggestions: buildSuggestions(strings),
       session: { enable: true, namespace: "demo" },
