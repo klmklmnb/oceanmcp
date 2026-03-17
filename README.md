@@ -153,7 +153,7 @@ cd packages/api-server && bun run dev
 cd packages/frontend-sdk && bun run dev
 ```
 
-The demo page will be available at `http://localhost:3000` with interactive examples for Form Building, TODO List management, and React Flow diagram editing &mdash; all driven by the AI through browser-side tools.
+The demo page will be available at `http://localhost:3001` with interactive examples for Form Building, TODO List management, and React Flow diagram editing &mdash; all driven by the AI through browser-side tools.
 
 ## Project Structure
 

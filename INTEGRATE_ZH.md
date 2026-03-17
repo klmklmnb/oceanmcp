@@ -342,7 +342,7 @@ ES Module 方式：
 VITE_API_URL=https://ocean-mcp-api.example.com
 
 # .env.development（本地开发默认值）
-VITE_API_URL=http://localhost:4000
+VITE_API_URL=http://localhost:4001
 ```
 
 构建时的值会写入到打包产物中，在没有运行时覆盖的情况下使用。

@@ -308,13 +308,13 @@ Under the hood, changing `theme` or `locale` dispatches a custom event (`ocean-m
 
 ## Server URL Configuration
 
-By default, the SDK connects to the OceanMCP API server at `http://localhost:4000`. In production or staging environments, you need to point the SDK to your actual server.
+By default, the SDK connects to the OceanMCP API server at `http://localhost:4001`. In production or staging environments, you need to point the SDK to your actual server.
 
 The server URL is resolved in the following order:
 
 1. **Runtime override** — `window.__OCEAN_MCP_SERVER_URL__` (highest priority)
 2. **Build-time env** — `VITE_API_URL` (baked in during the Vite build)
-3. **Fallback** — `http://localhost:4000`
+3. **Fallback** — `http://localhost:4001`
 
 ### Setting the Server URL at Runtime
 
@@ -354,7 +354,7 @@ If you are building the SDK from source (e.g., during development or a custom bu
 VITE_API_URL=https://ocean-mcp-api.example.com
 
 # .env.development (default for local dev)
-VITE_API_URL=http://localhost:4000
+VITE_API_URL=http://localhost:4001
 ```
 
 The build-time value is baked into the bundle and used when no runtime override is present.

@@ -14,7 +14,7 @@ import { initSkills, getSkillsContext } from "./ai/prompts";
 import { loadSkillsFromZip } from "./ai/skills";
 import { logger } from "./logger";
 
-const PORT = Number(process.env.PORT) || 4000;
+const PORT = Number(process.env.PORT) || 4001;
 
 // ── Initialize the skills system before starting the server ──────────────────
 // Skills are discovered from configured directories (e.g. packages/api-server/skills/).

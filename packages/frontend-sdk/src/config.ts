@@ -20,7 +20,7 @@ const runtimeOverride =
  * Resolution order:
  * 1. Runtime override: `window.__OCEAN_MCP_SERVER_URL__`
  * 2. Build-time env:   `VITE_API_URL`
- * 3. Fallback:         `http://localhost:4000`
+ * 3. Fallback:         `http://localhost:4001`
  */
 export const API_URL: string =
-  runtimeOverride || import.meta.env.VITE_API_URL || "http://localhost:4000";
+  runtimeOverride || import.meta.env.VITE_API_URL || "http://localhost:4001";

@@ -238,7 +238,7 @@ import { DefaultChatTransport } from "ai";
 
 const { messages, sendMessage, status, addToolApprovalResponse } = useChat({
   transport: new DefaultChatTransport({
-    api: "http://localhost:4000/api/chat",
+    api: "http://localhost:4001/api/chat",
   }),
 });
 ```
@@ -499,7 +499,7 @@ The frontend SDK includes a built-in Sentry monitoring layer, but this is an **i
   - zip skill registration timeout/failure
   - browser tool execution failure
 - Development / local failure mode:
-  - when `API_URL` falls back to `http://localhost:4000` and no local server is listening, repeated reconnect attempts can produce repeated `ws_error` exception uploads
+  - when `API_URL` falls back to `http://localhost:4001` and no local server is listening, repeated reconnect attempts can produce repeated `ws_error` exception uploads
 - High-signal interaction breadcrumbs:
   - SDK initialization
   - successful mount
@@ -573,20 +573,20 @@ Start API Server:
 
 ```bash
 # Root
-bun --filter api-server run dev   # Starts Bun HTTP+WS server on 4000
+bun --filter api-server run dev   # Starts Bun HTTP+WS server on 4001
 ```
 
 Start SDK:
 
 ```bash
 # Root
-bun --filter frontend-sdk run dev  # Vite dev server on 3000
+bun --filter frontend-sdk run dev  # Vite dev server on 3001
 ```
 
 Integration:
 
 1. Open existing ItrPlatform (or a test HTML page).
-2. Inject: `<script type="module" src="http://localhost:3000/src/main.tsx"></script>` (or the built SDK).
+2. Inject: `<script type="module" src="http://localhost:3001/src/main.tsx"></script>` (or the built SDK).
 3. Optionally register tools from host app JS:
    ```html
    <script>
