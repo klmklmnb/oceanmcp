@@ -898,6 +898,9 @@ export function ChatWidget({ avatar }: { avatar?: string }) {
         await sessionManager.switchSession(sessionId);
         await refreshSessionMetas();
         setShowSessionList(false);
+        window.setTimeout(() => {
+          inputRef.current?.focus();
+        }, 0);
       } catch (error) {
         captureException(error, {
           tags: {
@@ -1193,6 +1196,7 @@ export function ChatWidget({ avatar }: { avatar?: string }) {
       if (
         (e.key === "Enter" || e.key === "Tab") &&
         !e.shiftKey &&
+        !e.repeat &&
         !e.nativeEvent.isComposing
       ) {
         e.preventDefault();
@@ -1204,7 +1208,7 @@ export function ChatWidget({ avatar }: { avatar?: string }) {
       }
     }
 
-    if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) {
+    if (e.key === "Enter" && !e.shiftKey && !e.repeat && !e.nativeEvent.isComposing) {
       e.preventDefault();
       handleSubmit(e as any);
     }
