@@ -1,0 +1,244 @@
+@import "tailwindcss";
+
+/* ─── OceanMCP SDK Custom Styles ──────────────────────────────────────────── */
+
+@theme {
+  --color-ocean-50: var(--ui-ocean-50);
+  --color-ocean-100: var(--ui-ocean-100);
+  --color-ocean-200: var(--ui-ocean-200);
+  --color-ocean-300: var(--ui-ocean-300);
+  --color-ocean-400: var(--ui-ocean-400);
+  --color-ocean-500: var(--ui-ocean-500);
+  --color-ocean-600: var(--ui-ocean-600);
+  --color-ocean-700: var(--ui-ocean-700);
+  --color-ocean-800: var(--ui-ocean-800);
+  --color-ocean-900: var(--ui-ocean-900);
+
+  --color-surface: var(--ui-surface);
+  --color-surface-secondary: var(--ui-surface-secondary);
+  --color-surface-tertiary: var(--ui-surface-tertiary);
+  --color-border: var(--ui-border);
+  --color-text-primary: var(--ui-text-primary);
+  --color-text-secondary: var(--ui-text-secondary);
+  --color-text-tertiary: var(--ui-text-tertiary);
+
+  --font-sans: "Inter", ui-sans-serif, system-ui, -apple-system, sans-serif;
+  --radius-lg: 1rem;
+  --radius-xl: 1.25rem;
+  --radius-2xl: 1.5rem;
+
+  --shadow-card: var(--ui-shadow-card);
+  --shadow-float: var(--ui-shadow-float);
+  --shadow-glow: var(--ui-shadow-glow);
+}
+
+:root, :host, .light {
+  --ui-ocean-50: #eff6ff;
+  --ui-ocean-100: #dbeafe;
+  --ui-ocean-200: #bfdbfe;
+  --ui-ocean-300: #93c5fd;
+  --ui-ocean-400: #60a5fa;
+  --ui-ocean-500: #3b82f6;
+  --ui-ocean-600: #2563eb;
+  --ui-ocean-700: #1d4ed8;
+  --ui-ocean-800: #1e40af;
+  --ui-ocean-900: #1e3a8a;
+
+  --ui-surface: #ffffff;
+  --ui-surface-secondary: #f9fafb;
+  --ui-surface-tertiary: #f3f4f6;
+  --ui-border: #e5e7eb;
+  --ui-text-primary: #111827;
+  --ui-text-secondary: #6b7280;
+  --ui-text-tertiary: #9ca3af;
+  --ui-tool-inline-base: #707a89;
+  --ui-tool-inline-highlight: #bcc4cf;
+
+  --ui-shadow-card: 0 1px 3px 0 rgba(0, 0, 0, 0.06), 0 1px 2px -1px rgba(0, 0, 0, 0.06);
+  --ui-shadow-float: 0 4px 24px -4px rgba(0, 0, 0, 0.1), 0 2px 8px -2px rgba(0, 0, 0, 0.06);
+  --ui-shadow-glow: 0 0 0 3px rgba(59, 130, 246, 0.15);
+}
+
+.dark, :host(.dark) {
+  --ui-ocean-50: #0a101b;
+  --ui-ocean-100: #111d31;
+  --ui-ocean-200: #1b2e4b;
+  --ui-ocean-300: #26436f;
+  --ui-ocean-400: #315b94;
+  --ui-ocean-500: #3b82f6;
+  --ui-ocean-600: #60a5fa;
+  --ui-ocean-700: #93c5fd;
+  --ui-ocean-800: #bfdbfe;
+  --ui-ocean-900: #dbeafe;
+
+  --ui-surface: #111827;
+  --ui-surface-secondary: #1f2937;
+  --ui-surface-tertiary: #374151;
+  --ui-border: #374151;
+  --ui-text-primary: #f9fafb;
+  --ui-text-secondary: #9ca3af;
+  --ui-text-tertiary: #6b7280;
+  --ui-tool-inline-base: #9ca6b5;
+  --ui-tool-inline-highlight: rgba(236, 241, 248, 0.92);
+
+  --ui-shadow-card: 0 1px 3px 0 rgba(0, 0, 0, 0.3), 0 1px 2px -1px rgba(0, 0, 0, 0.2);
+  --ui-shadow-float: 0 4px 24px -4px rgba(0, 0, 0, 0.5), 0 2px 8px -2px rgba(0, 0, 0, 0.4);
+  --ui-shadow-glow: 0 0 0 3px rgba(96, 165, 250, 0.25);
+}
+
+/* ─── Base ────────────────────────────────────────────────────────────────── */
+/* :host targets the shadow host element from within the shadow root.        */
+/* #ocean-mcp-inner is the React mount point created by shadow-dom.ts.       */
+:host {
+  /* Ensure the shadow host fills its container */
+  display: block;
+  height: 100%;
+}
+
+#ocean-mcp-inner {
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  height: 100%;
+}
+
+/* ─── Animations ──────────────────────────────────────────────────────────── */
+@keyframes ocean-fade-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes ocean-slide-up {
+  from {
+    opacity: 0;
+    transform: translateY(100%);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes ocean-pulse-dot {
+  0%,
+  80%,
+  100% {
+    transform: scale(0.6);
+    opacity: 0.4;
+  }
+  40% {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+
+@keyframes ocean-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes ocean-text-shimmer-sweep {
+  0% {
+    background-position: 0 0;
+  }
+  100% {
+    background-position: -220% 0;
+  }
+}
+
+.ocean-fade-in {
+  animation: ocean-fade-in 0.3s ease-out;
+}
+
+.ocean-slide-up {
+  animation: ocean-slide-up 0.35s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+/* ─── Scrollbar ───────────────────────────────────────────────────────────── */
+.ocean-scrollbar::-webkit-scrollbar {
+  width: 6px;
+}
+.ocean-scrollbar::-webkit-scrollbar-track {
+  background: transparent;
+}
+.ocean-scrollbar::-webkit-scrollbar-thumb {
+  background: var(--color-border);
+  border-radius: 3px;
+}
+.ocean-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: var(--color-text-tertiary);
+}
+
+/* ─── Typing Dots ─────────────────────────────────────────────────────────── */
+.ocean-typing-dot {
+  animation: ocean-pulse-dot 1.4s ease-in-out infinite;
+}
+.ocean-typing-dot:nth-child(2) {
+  animation-delay: 0.2s;
+}
+.ocean-typing-dot:nth-child(3) {
+  animation-delay: 0.4s;
+}
+
+.ocean-tool-inline-text-shimmer {
+  color: var(--ui-tool-inline-base);
+  background-image: linear-gradient(
+    90deg,
+    var(--ui-tool-inline-base) 0%,
+    var(--ui-tool-inline-base) 42%,
+    var(--ui-tool-inline-highlight) 50%,
+    var(--ui-tool-inline-base) 58%,
+    var(--ui-tool-inline-base) 100%
+  );
+  background-size: 235% 100%;
+  background-repeat: repeat;
+  background-position: 0 0;
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  animation: ocean-text-shimmer-sweep 2.4s linear infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ocean-tool-inline-text-shimmer {
+    animation: none;
+    background-image: none;
+    color: var(--color-text-tertiary);
+  }
+}
+
+/* ─── Markdown ────────────────────────────────────────────────────────────── */
+.ocean-markdown > :first-child {
+  margin-top: 0;
+}
+.ocean-markdown > :last-child {
+  margin-bottom: 0;
+}
+
+/* Strikethrough */
+.ocean-markdown del {
+  text-decoration: line-through;
+  opacity: 0.7;
+}
+
+/* Task list checkboxes (GFM) */
+.ocean-markdown input[type="checkbox"] {
+  margin-right: 0.5rem;
+  accent-color: var(--color-ocean-600);
+}
+
+/* Nested list spacing */
+.ocean-markdown ul ul,
+.ocean-markdown ol ol,
+.ocean-markdown ul ol,
+.ocean-markdown ol ul {
+  margin-top: 0.25rem;
+  margin-bottom: 0.25rem;
+}

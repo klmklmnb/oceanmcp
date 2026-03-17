@@ -1,0 +1,14 @@
+{
+  "name": "ocean-mcp",
+  "private": true,
+  "workspaces": [
+    "packages/*"
+  ],
+  "scripts": {
+    "postinstall": "cd packages/shared && bun run build"
+  },
+  "devDependencies": {},
+  "dependencies": {
+    "@rollup/rollup-darwin-x64": "^4.59.0"
+  }
+}

@@ -1,0 +1,69 @@
+{
+  "name": "oceanmcp",
+  "version": "0.1.1",
+  "type": "module",
+  "main": "./dist/sdk.umd.js",
+  "module": "./dist/sdk.esm.js",
+  "types": "./dist/sdk.esm.d.ts",
+  "exports": {
+    ".": {
+      "import": {
+        "types": "./dist/sdk.esm.d.ts",
+        "default": "./dist/sdk.esm.js"
+      },
+      "require": {
+        "types": "./dist/sdk.umd.d.ts",
+        "default": "./dist/sdk.umd.js"
+      }
+    },
+    "./sdk.umd": {
+      "types": "./dist/sdk.umd.d.ts"
+    }
+  },
+  "files": [
+    "dist/",
+    "sdk.umd.d.ts"
+  ],
+  "scripts": {
+    "dev": "vite --port 3000 --host",
+    "build": "vite build && vite build --config vite.config.lib.ts && vite build --config vite.config.umd.ts",
+    "build:test": "vite build --mode test && vite build --config vite.config.lib.ts --mode test && vite build --config vite.config.umd.ts --mode test",
+    "build:prod": "vite build && vite build --config vite.config.lib.ts && vite build --config vite.config.umd.ts",
+    "build:lib": "vite build --config vite.config.lib.ts",
+    "build:watch": "vite build --watch",
+    "serve:local": "bun run build:watch & bun run serve:dist",
+    "serve:dist": "bunx serve dist -l 3001 --cors --no-clipboard",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "typecheck": "tsc --noEmit",
+    "prepublishOnly": "bun run build"
+  },
+  "dependencies": {
+    "@ai-sdk/react": "3.0.39",
+    "@monaco-editor/react": "^4.7.0",
+    "oceanmcp-shared": "workspace:*",
+    "ai": "6.0.37",
+    "axios": "^1.13.6",
+    "crypto-js": "^4.2.0",
+    "dayjs": "^1.11.20",
+    "react": "19.0.1",
+    "react-dom": "19.0.1",
+    "react-markdown": "^10.1.0",
+    "remark-gfm": "^4.0.1"
+  },
+  "devDependencies": {
+    "@tailwindcss/vite": "^4.0.0",
+    "@types/crypto-js": "^4.2.2",
+    "@types/react": "^19.0.0",
+    "@types/react-dom": "^19.0.0",
+    "@vitejs/plugin-react": "^4.3.0",
+    "@xyflow/react": "^12.10.1",
+    "jsdom": "^28.1.0",
+    "tailwindcss": "^4.1.13",
+    "typescript": "^5.6.3",
+    "vite": "^6.1.0",
+    "vite-plugin-css-injected-by-js": "^4.0.1",
+    "vite-plugin-dts": "^4.5.4",
+    "vitest": "^4.0.18"
+  }
+}

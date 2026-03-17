@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>OceanMCP — Browser-in-the-Loop AI Agent SDK</title>
+    <meta name="description" content="OceanMCP is an embeddable AI chat assistant SDK that executes tools inside the user's browser. Explore interactive demos for Form Building, TODO Management, and Flow Diagram editing." />
+
+    <!-- Open Graph -->
+    <meta property="og:title" content="OceanMCP — Browser-in-the-Loop AI Agent SDK" />
+    <meta property="og:description" content="Embeddable AI assistant that runs tools in your browser. See live demos of form building, TODO management, and flow diagram editing." />
+    <meta property="og:type" content="website" />
+
+    <link
+      rel="shortcut icon"
+      href="https://pub-46b4307a6ac249dda431cdfd7f715021.r2.dev/uploads/oceanmcp_icon.png"
+      type="image/x-icon"
+    />
+
+    <style>
+      * { margin: 0; padding: 0; box-sizing: border-box; }
+      html, body { height: 100%; overflow: hidden; }
+      body {
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+        -webkit-font-smoothing: antialiased;
+        -moz-osx-font-smoothing: grayscale;
+      }
+      #ocean-mcp-root { height: 100%; }
+    </style>
+  </head>
+  <body>
+    <div id="ocean-mcp-root"></div>
+    <script type="module" src="/src/demo.tsx"></script>
+  </body>
+</html>
