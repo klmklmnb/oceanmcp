@@ -12,8 +12,9 @@ import instructions from "./mi-coffee-instructions.md?raw";
  */
 export const miCoffeeSkill: SkillDefinition = {
   name: "mi-coffee",
+  cnName: "米咖",
   description:
-    "miHoYo coffee shop operations. Browse the drink menu, view drink details and customization options, manage the shopping cart, and add drinks to cart. Use when the user wants to see available drinks, check drink options, or order from the coffee shop.",
+    "miHoYo coffee shop operations(米咖). Browse the drink menu, view drink details and customization options, manage the shopping cart, and add drinks to cart. Use when the user wants to see available drinks, check drink options, or order from the coffee shop.",
   instructions,
   tools: miCoffeeFunctions,
 };

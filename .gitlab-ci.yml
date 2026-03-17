@@ -20,11 +20,12 @@ test-api-server:
       - 'packages/shared/**/*'
       - '.gitlab-ci.yml'
 
-build-frontend-sdk-test:
+ci-frontend-test:
   stage: 构建
   variables:
     LANGUAGE: vue
   script:
+    - cd packages/shared && bun run build && cd ../..
     - cd packages/frontend-sdk
     - bun run build:test
     - DIST_PATH=$CI_PROJECT_DIR/packages/frontend-sdk/dist typhon-ng pack
@@ -40,11 +41,12 @@ build-frontend-sdk-test:
       - 'packages/shared/**/*'
       - '.gitlab-ci.yml'
 
-build-frontend-sdk-prod:
+ci-frontend-prod:
   stage: 构建
   variables:
     LANGUAGE: vue
   script:
+    - cd packages/shared && bun run build && cd ../..
     - export APP_VERSION="${CI_COMMIT_TAG:-dev}"
     - cd packages/frontend-sdk
     - bun run build:prod
@@ -56,11 +58,6 @@ build-frontend-sdk-prod:
   only:
     refs:
       - tags
-      - main
-    changes:
-      - 'packages/frontend-sdk/**/*'
-      - 'packages/shared/**/*'
-      - '.gitlab-ci.yml'
 
 .build-api-template:
   stage: 构建
@@ -82,7 +79,7 @@ build-frontend-sdk-prod:
     - push_archive
   timeout: 6000s
 
-ci_test_api:
+ci-api-test:
   extends: .build-api-template
   only:
     refs:
@@ -90,8 +87,9 @@ ci_test_api:
     changes:
       - 'packages/api-server/**/*'
       - 'packages/shared/**/*'
+      - '.gitlab-ci.yml'
 
-ci_prod_api:
+ci-api-prod:
   extends: .build-api-template
   needs:
     - test-api-server

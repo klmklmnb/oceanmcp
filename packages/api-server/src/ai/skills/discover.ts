@@ -31,6 +31,7 @@
 
 import type { Sandbox, SkillMetadata } from "@ocean-mcp/shared";
 import type { Tool } from "ai";
+import { wrapCodeFunctionDefinitions } from "./code-tool-adapter";
 
 // ─── Extended Skill Metadata ─────────────────────────────────────────────────
 
@@ -200,15 +201,19 @@ export async function discoverSkills(
         // These tools are dynamically imported and merged into the
         // LLM's available tools alongside server and browser-proxy tools.
         //
+        // Supports two tool formats in the same export map:
+        //   - Vercel AI SDK Tool objects (passed through as-is)
+        //   - CodeFunctionDefinition objects (auto-wrapped into Tool via new Function())
+        //
         // Expected tools.ts export shape:
-        //   export default { myTool: tool({ ... }) }
+        //   export default { myTool: tool({ ... }), myCodeTool: { type: "code", ... } }
         //   // or
-        //   export const tools = { myTool: tool({ ... }) }
+        //   export const tools = { myTool: tool({ ... }), myCodeTool: { type: "code", ... } }
         try {
           const toolsModule = await import(`${skillDir}/tools.ts`);
           const exportedTools = toolsModule.default ?? toolsModule.tools;
           if (exportedTools && typeof exportedTools === "object") {
-            skill.tools = exportedTools as Record<string, Tool<any, any>>;
+            skill.tools = wrapCodeFunctionDefinitions(exportedTools);
           }
         } catch {
           // No tools file or import failed — that's fine, tools are optional.

@@ -1,3 +1,4 @@
+import React from "react";
 import {
   FUNCTION_TYPE,
   OPERATION_TYPE,
@@ -52,6 +53,7 @@ function makeGetDrinkings(): CodeFunctionDefinition {
   return {
     id: "getDrinkings",
     name: "Get Drinkings",
+    cnName: "获取饮品列表",
     description:
       "Fetch the list of available drinks from the miHoYo coffee shop. Returns the product page with all current drink offerings.",
     type: FUNCTION_TYPE.CODE,
@@ -77,6 +79,7 @@ function makeGetDrinkInfo(): CodeFunctionDefinition {
   return {
     id: "getDrinkInfo",
     name: "Get Drink Info",
+    cnName: "获取饮品详情",
     description:
       "Fetch detailed information for a specific drink by product number. Returns the product detail including available attribute options (e.g. temperature, sweetness) that the user must choose from when ordering.",
     type: FUNCTION_TYPE.CODE,
@@ -110,6 +113,7 @@ function makeGetShoppingCart(): CodeFunctionDefinition {
   return {
     id: "getShoppingCart",
     name: "Get Shopping Cart",
+    cnName: "获取购物车",
     description:
       "Fetch the current shopping cart contents. Returns the list of items currently in the cart. Use this before updating the cart to know the existing items.",
     type: FUNCTION_TYPE.CODE,
@@ -135,6 +139,7 @@ function makeUpdateShoppingCart(): CodeFunctionDefinition {
   return {
     id: "updateShoppingCart",
     name: "Update Shopping Cart",
+    cnName: "更新购物车",
     description:
       "Update the shopping cart with a new full cart array. The items parameter must be a JSON string representing the complete cart array. Each item in the array should have: no (product number), name, imageUrl, categoryId, num (quantity), specialCardVoucher (null if none), and attributes (array of {id, name, itemId, itemName} representing selected options like temperature and sweetness). Always call getShoppingCart first, append the new item to the existing array, then pass the full array here.",
     type: FUNCTION_TYPE.CODE,
@@ -156,9 +161,31 @@ function makeUpdateShoppingCart(): CodeFunctionDefinition {
       {
         name: "items",
         type: PARAMETER_TYPE.STRING,
+        showName: "购物车商品",
         description:
           'JSON string of the full cart array. Each element: { "no": string, "name": string, "imageUrl": string, "categoryId": string, "num": number, "specialCardVoucher": null, "attributes": [{ "id": string, "name": string, "itemId": string, "itemName": string }] }. Must include all existing cart items plus the newly added item.',
         required: true,
+        columns: {
+          no: { label: "商品编号" },
+          name: { label: "商品名称" },
+          num: { label: "数量" },
+          categoryId: { label: "分类" },
+          attributes: {
+            label: "属性选项",
+            render: (value: any) => {
+              if (!Array.isArray(value) || value.length === 0) return "-";
+              return React.createElement("span", { className: "flex flex-wrap gap-1" },
+                value.map((attr: any, i: number) =>
+                  React.createElement("span", {
+                    key: i,
+                    className: "inline-block px-1.5 py-0.5 rounded bg-ocean-50 text-ocean-700 text-xs",
+                  }, attr.itemName ?? attr.name ?? JSON.stringify(attr))
+                )
+              );
+            },
+          },
+          specialCardVoucher: { label: "优惠券" },
+        },
       },
     ],
   };

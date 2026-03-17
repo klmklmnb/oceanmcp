@@ -11,7 +11,7 @@ function isToolPart(part: any): boolean {
  * Deduplicate assistant message parts.
  *
  * When the frontend auto-submits after a client-side tool result (e.g.
- * userSelect), the server runs a new streamText call whose output is appended
+ * askUser), the server runs a new streamText call whose output is appended
  * to the *same* assistant message by the AI SDK. The LLM may regenerate
  * identical tool calls and text it already emitted in an earlier step, causing
  * the user to see the same selection cards / text blocks multiple times.

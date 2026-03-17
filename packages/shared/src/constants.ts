@@ -17,7 +17,17 @@ export const PARAMETER_TYPE = {
   NUMBER: "number",
   BOOLEAN: "boolean",
   OBJECT: "object",
+  /**
+   * @deprecated Use `STRING_ARRAY`, `NUMBER_ARRAY`, or `OBJECT_ARRAY` instead.
+   * Kept for backward compatibility — treated as `STRING_ARRAY` at runtime.
+   */
   ARRAY: "array",
+  /** Array of strings (`{ type: "array", items: { type: "string" } }`) */
+  STRING_ARRAY: "string_array",
+  /** Array of numbers (`{ type: "array", items: { type: "number" } }`) */
+  NUMBER_ARRAY: "number_array",
+  /** Array of objects (`{ type: "array", items: { type: "object" } }`) */
+  OBJECT_ARRAY: "object_array",
 } as const;
 export type ParameterType = ValueOf<typeof PARAMETER_TYPE> | (string & {});
 
@@ -39,6 +49,7 @@ export const MESSAGE_PART_TYPE = {
   TEXT: "text",
   REASONING: "reasoning",
   STEP_START: "step-start",
+  FILE_ATTACHMENT: "data-file-attachment",
 } as const;
 export type MessagePartType = ValueOf<typeof MESSAGE_PART_TYPE>;
 
@@ -61,3 +72,30 @@ export const TOOL_PART_STATE = {
 export type ToolPartState = ValueOf<typeof TOOL_PART_STATE>;
 
 export const TOOL_PART_TYPE_PREFIX = "tool-" as const;
+
+/**
+ * Safely extract a human-readable error message from any thrown value.
+ *
+ * Handles:
+ * - `Error` instances → `.message`
+ * - Strings → returned directly
+ * - Objects with `.message` or `.error` string fields → that field
+ * - Other objects → `JSON.stringify`
+ * - Primitives → `String()`
+ */
+export function getErrorMessage(error: unknown): string {
+  if (error instanceof Error) return error.message;
+  if (typeof error === "string") return error;
+  if (error != null && typeof error === "object") {
+    // Common patterns: { message: "..." } or { error: "..." }
+    const obj = error as Record<string, unknown>;
+    if (typeof obj.message === "string" && obj.message) return obj.message;
+    if (typeof obj.error === "string" && obj.error) return obj.error;
+    try {
+      return JSON.stringify(error);
+    } catch {
+      return "[object Object]";
+    }
+  }
+  return String(error);
+}

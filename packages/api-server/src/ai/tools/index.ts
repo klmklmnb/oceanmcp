@@ -1,13 +1,21 @@
 import { getServerStatus, echo } from "./server-tools";
 import { createBrowserExecuteTool } from "./browser-proxy-tool";
 import { createExecutePlanTool } from "./execute-plan-tool";
-import { userSelect } from "./user-select-tool";
+import { createSubagentTool, SUBAGENT_SERVER_ENABLED } from "./subagent-tool";
+import { askUser } from "./ask-user-tool";
+import { imageOcr } from "./image-ocr-tool";
+import { readPdf } from "./read-pdf-tool";
+import type { ToolRetryTracker } from "./retry-tracker";
 import {
+  OPERATION_TYPE,
   PARAMETER_TYPE,
+  isJSONSchemaParameters,
+  getErrorMessage,
   type FunctionSchema,
+  type FunctionParameters,
   type ParameterDefinition,
 } from "@ocean-mcp/shared";
-import { tool, type Tool } from "ai";
+import { tool, jsonSchema, type Tool, type FlexibleSchema, type LanguageModel } from "ai";
 import { z } from "zod";
 import { connectionManager } from "../../ws/connection-manager";
 import { createLoadSkillTool } from "../skills/loader";
@@ -15,9 +23,11 @@ import { getSkillsContext } from "../prompts";
 
 /** Static tools that are always available */
 export const serverTools = {
-  userSelect,
+  askUser,
   getServerStatus,
   echo,
+  imageOcr,
+  readPdf,
 };
 
 function dedupeStrings(values: string[]): string[] {
@@ -67,14 +77,15 @@ function deriveCandidateValuesFromDescription(description?: string): string[] {
 
 function getBrowserTools(
   connectionId?: string,
+  retryTracker?: ToolRetryTracker,
 ): Record<string, Tool<any, any>> {
   return {
-    browserExecute: createBrowserExecuteTool(connectionId),
-    executePlan: createExecutePlanTool(connectionId),
+    browserExecute: createBrowserExecuteTool(connectionId, retryTracker),
+    executePlan: createExecutePlanTool(connectionId, retryTracker),
   };
 }
 
-// Helper to convert parameter definitions to Zod schema
+// Helper to convert legacy ParameterDefinition[] to Zod schema
 export function createZodSchema(parameters: ParameterDefinition[]) {
   const shape: Record<string, z.ZodTypeAny> = {};
 
@@ -103,8 +114,15 @@ export function createZodSchema(parameters: ParameterDefinition[]) {
       case PARAMETER_TYPE.OBJECT:
         schema = z.any();
         break;
-      case PARAMETER_TYPE.ARRAY:
-        schema = z.array(z.any());
+      case PARAMETER_TYPE.ARRAY: // deprecated — falls through to STRING_ARRAY
+      case PARAMETER_TYPE.STRING_ARRAY:
+        schema = z.array(z.string());
+        break;
+      case PARAMETER_TYPE.NUMBER_ARRAY:
+        schema = z.array(z.number());
+        break;
+      case PARAMETER_TYPE.OBJECT_ARRAY:
+        schema = z.array(z.record(z.any()));
         break;
       default:
         schema = z.any();
@@ -122,8 +140,8 @@ export function createZodSchema(parameters: ParameterDefinition[]) {
     const uncertainSelectionHint =
       param.type === PARAMETER_TYPE.STRING
         ? inferredValues.length > 0
-          ? `Inferred candidate values: ${inferredValues.join(", ")}. If user intent is ambiguous, call userSelect with options derived from these values before setting this parameter.`
-          : "If user intent is ambiguous, reason candidate options from context and this description, then call userSelect with explicit options before setting this parameter."
+          ? `Inferred candidate values: ${inferredValues.join(", ")}. If user intent is ambiguous, call askUser with a schema containing an enum field derived from these values before setting this parameter.`
+          : "If user intent is ambiguous, reason candidate options from context and this description, then call askUser with a schema containing an enum field before setting this parameter."
         : "";
 
     const description = [param.description, enumDescription, uncertainSelectionHint]
@@ -145,53 +163,138 @@ export function createZodSchema(parameters: ParameterDefinition[]) {
 }
 
 /**
+ * Create an input schema for the Vercel AI SDK `tool()` function.
+ *
+ * Supports two parameter formats:
+ * - `ParameterDefinition[]` (legacy) → builds a Zod schema via `createZodSchema()`
+ * - `JSONSchemaParameters` (JSON Schema object) → wraps with the AI SDK's
+ *   `jsonSchema()` function for native JSON Schema support
+ *
+ * @param parameters - Either a legacy ParameterDefinition array or a JSON Schema object
+ * @returns A schema suitable for passing to `tool({ inputSchema: ... })`
+ */
+export function createInputSchema(parameters: FunctionParameters): FlexibleSchema<Record<string, any>> {
+  if (isJSONSchemaParameters(parameters)) {
+    // Use the AI SDK's native JSON Schema support.
+    // Cast to Record<string, any> to satisfy the FlexibleSchema generic.
+    return jsonSchema<Record<string, any>>(parameters as any);
+  }
+  // Legacy format — build Zod schema
+  return createZodSchema(parameters);
+}
+
+/**
  * Create a browser-proxy tool wrapper for a given tool schema.
  * The tool's `execute` sends the call to the browser via WebSocket.
+ *
+ * For WRITE tools without `autoApprove`, the tool is created with
+ * `needsApproval: true` so the Vercel AI SDK pauses for user approval
+ * before executing. This prevents the LLM from directly invoking
+ * write/mutation operations when the tool is registered as a native
+ * tool (bypassing the `browserExecute` write guard).
  */
-function createBrowserProxyToolFromSchema(
+export function createBrowserProxyToolFromSchema(
   schema: FunctionSchema,
   connectionId?: string,
+  retryTracker?: ToolRetryTracker,
 ): Tool<any, any> {
+  const requiresApproval =
+    schema.operationType === OPERATION_TYPE.WRITE && !schema.autoApprove;
+
   return tool({
     description: schema.description,
-    inputSchema: createZodSchema(schema.parameters),
-    execute: async (args) => {
-      return connectionManager.executeBrowserTool(
-        schema.id,
-        args,
-        30_000,
-        connectionId,
-      );
+    inputSchema: createInputSchema(schema.parameters),
+    ...(requiresApproval && { needsApproval: true }),
+    execute: async (args: Record<string, any>) => {
+      try {
+        return await connectionManager.executeBrowserTool(
+          schema.id,
+          args,
+          30_000,
+          connectionId,
+        );
+      } catch (error) {
+        const msg = getErrorMessage(error);
+
+        if (retryTracker) {
+          const canRetry = retryTracker.recordFailure(schema.id);
+          if (canRetry) {
+            return {
+              error: msg,
+              functionId: schema.id,
+              _retryHint: `Tool execution failed (attempt ${retryTracker.getAttempt(schema.id) - 1}/${retryTracker.max}). Analyze the error and retry with corrected parameters.`,
+            };
+          }
+          return {
+            error: msg,
+            functionId: schema.id,
+            _retryExhausted: true,
+            _retryHint: `Tool execution failed and retry limit (${retryTracker.max}) reached. Report this error to the user and do NOT retry this tool.`,
+          };
+        }
+
+        throw error;
+      }
     },
   });
+}
+
+/**
+ * Options for getMergedTools beyond the original positional parameters.
+ */
+export interface MergedToolsOptions {
+  /** Whether the frontend SDK has the subagent feature enabled. Default: undefined (treated as disabled). */
+  subagentEnabled?: boolean;
+  /** The resolved language model for the current request (needed to create the subagent tool). */
+  model?: LanguageModel;
+  /**
+   * LLM model configuration for subagents from the frontend.
+   * When provided, the subagent uses this model config instead of `SUBAGENT_MODEL` env var.
+   */
+  subagentModel?: import("@ocean-mcp/shared").ModelConfig;
+  /**
+   * Maximum execution time per subagent invocation in milliseconds, from the frontend.
+   * When provided, overrides the server's `SUBAGENT_TIMEOUT_MS` env var.
+   */
+  subagentTimeoutMs?: number;
+  /**
+   * Maximum number of concurrent subagent invocations per chat request, from the frontend.
+   * When provided, overrides the server's `SUBAGENT_MAX_PARALLEL` env var.
+   */
+  subagentMaxParallel?: number;
 }
 
 /**
  * Merge all tools for a streamText call.
  * Combines server tools + browser proxy tools + dynamic tools from the frontend
  * registry + the loadSkill tool + skill-bundled tools from both file-based and
- * frontend-registered skills.
+ * frontend-registered skills + the subagent tool (when enabled).
  *
  * Tool priority (collision avoidance — first defined wins):
- *   1. Built-in server tools (userSelect, etc.)
+ *   1. Built-in server tools (askUser, etc.)
  *   2. Browser proxy tools (browserExecute, executePlan)
  *   3. loadSkill tool (when any skills exist)
  *   4. File-based skill-bundled tools (from skills' tools.ts exports)
  *   5. Frontend skill-bundled tools (from SkillSchema.tools)
  *   6. Standalone dynamic tools from frontend registry (via WebSocket)
+ *   7. Subagent tool (when enabled on both server and frontend)
  */
 export function getMergedTools(
   dynamicToolSchemas?: FunctionSchema[],
   connectionId?: string,
+  retryTracker?: ToolRetryTracker,
+  options?: MergedToolsOptions,
 ): Record<string, Tool<any, any>> {
   const tools: Record<string, Tool<any, any>> = {
-    userSelect,
+    askUser,
+    imageOcr,
+    readPdf,
     // ...serverTools,
-    ...getBrowserTools(connectionId),
+    ...getBrowserTools(connectionId, retryTracker),
   };
 
   // ── Skills integration ─────────────────────────────────────────────────
-  const { sandbox, skills: fileSkills } = getSkillsContext();
+  const { sandbox, skills: fileSkills } = getSkillsContext(connectionId);
   const frontendSkillSchemas = connectionManager.getSkillSchemas(connectionId);
 
   const hasAnySkills = fileSkills.length > 0 || frontendSkillSchemas.length > 0;
@@ -226,6 +329,7 @@ export function getMergedTools(
         tools[toolSchema.id] = createBrowserProxyToolFromSchema(
           toolSchema,
           connectionId,
+          retryTracker,
         );
       }
     }
@@ -241,8 +345,29 @@ export function getMergedTools(
       tools[schema.id] = createBrowserProxyToolFromSchema(
         schema,
         connectionId,
+        retryTracker,
       );
     }
+  }
+
+  // ── Subagent tool (gated by server env + frontend config) ──────────────
+  // Both SUBAGENT_SERVER_ENABLED (env var) and the frontend's subagentEnabled
+  // flag must be true for the tool to be registered. Default is disabled.
+  const frontendSubagentEnabled = options?.subagentEnabled === true;
+  if (SUBAGENT_SERVER_ENABLED && frontendSubagentEnabled && options?.model) {
+    const toolSchemas = dynamicToolSchemas ?? [];
+    const skillSchemas = connectionManager.getSkillSchemas(connectionId);
+    tools.subagent = createSubagentTool(
+      options.model,
+      tools,
+      toolSchemas,
+      skillSchemas,
+      {
+        subagentModel: options.subagentModel,
+        subagentTimeoutMs: options.subagentTimeoutMs,
+        maxParallel: options.subagentMaxParallel,
+      },
+    );
   }
 
   return tools;

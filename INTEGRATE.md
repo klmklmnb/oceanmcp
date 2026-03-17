@@ -1,0 +1,1267 @@
+# OceanMCP SDK Integration Guide
+
+OceanMCP is a **Browser-in-the-Loop** AI agent SDK that can be injected into any existing web application. It provides a chat-based AI assistant that can read data from and perform actions on your web app — using the user's authenticated browser session.
+
+This guide walks you through integrating the OceanMCP frontend SDK into your own project.
+
+---
+
+## Table of Contents
+
+- [Quick Start](#quick-start)
+- [Installation Methods](#installation-methods)
+  - [UMD Script Tag (Easiest)](#1-umd-script-tag-easiest)
+  - [ES Module Import](#2-es-module-import)
+- [Mount Options](#mount-options)
+- [Server URL Configuration](#server-url-configuration)
+- [Registering Skills](#registering-skills)
+- [Registering Standalone Tools](#registering-standalone-tools)
+  - [Executor Type (Recommended)](#executor-type-recommended)
+  - [Code Type](#code-type)
+  - [Parameter Definitions](#parameter-definitions)
+- [Registering Skills from a ZIP File](#registering-skills-from-a-zip-file)
+- [File Upload](#file-upload)
+- [Programmatic Chat Control](#programmatic-chat-control)
+- [Unregistering & Cleanup](#unregistering--cleanup)
+- [Advanced Usage](#advanced-usage)
+- [API Reference](#api-reference)
+- [Type Reference](#type-reference)
+- [TypeScript Support](#typescript-support)
+  - [ESM (Bundler Projects)](#esm-bundler-projects)
+  - [UMD (Script Tag Projects)](#umd-script-tag-projects)
+- [FAQ](#faq)
+
+---
+
+## Quick Start
+
+The fastest way to get OceanMCP running in your app — just add two lines:
+
+```html
+<script src="https://wb-cdn-test.mihoyo.com/ocean-mcp/sdk.umd.js"></script>
+<script>
+  OceanMCPSDK.mount();
+</script>
+```
+
+That's it! A floating chat widget will appear in the bottom-right corner of your page. The SDK connects to the OceanMCP backend automatically and comes with built-in tools like reading page info and content.
+
+Want to teach the AI about your app's domain? Keep reading to learn how to register custom skills and tools.
+
+---
+
+## Installation Methods
+
+### 1. UMD Script Tag (Easiest)
+
+Best for: legacy projects, quick prototyping, or apps without a JS bundler.
+
+The UMD build (`sdk.umd.js`) is a single self-contained file — CSS is embedded in the JS and injected automatically at mount time. No external stylesheet needed.
+
+```html
+<!-- Load the SDK -->
+<script src="https://wb-cdn-test.mihoyo.com/ocean-mcp/sdk.umd.js"></script>
+
+<script>
+  // Register your custom tools (optional)
+  OceanMCPSDK.registerTool({
+    id: "getOrderList",
+    name: "Get Order List",
+    description: "Fetch the list of orders for the current user",
+    operationType: "read",
+    executor: async (args) => {
+      const res = await fetch("/api/orders");
+      return res.json();
+    },
+    parameters: [],
+  });
+
+  // Mount the chat widget
+  OceanMCPSDK.mount();
+</script>
+```
+
+### 2. ES Module Import
+
+Best for: modern apps using Vite, Webpack, or other bundlers. TypeScript types are included automatically — see [TypeScript Support](#typescript-support).
+
+```html
+<script type="module">
+  import OceanMCPSDK from "https://wb-cdn-test.mihoyo.com/ocean-mcp/sdk.esm.js";
+
+  OceanMCPSDK.mount({ locale: "en-US" });
+</script>
+```
+
+Or if you host the SDK files locally:
+
+```js
+// In your app's entry file
+import OceanMCPSDK from "./lib/ocean-mcp/sdk.esm.js";
+
+OceanMCPSDK.registerSkill(mySkill);
+OceanMCPSDK.mount({ root: "#chat-container" });
+```
+
+---
+
+## Mount Options
+
+The `mount()` method accepts several forms:
+
+```ts
+// Auto-create a floating overlay (bottom-right corner)
+OceanMCPSDK.mount();
+
+// Mount into a specific element by CSS selector
+OceanMCPSDK.mount("#my-chat-container");
+
+// Mount into a specific DOM element
+OceanMCPSDK.mount(document.getElementById("chat"));
+
+// Mount with options
+OceanMCPSDK.mount({
+  root: "#my-chat", // Optional: mount target (string selector or HTMLElement)
+  locale: "zh-CN", // Optional: "zh-CN" or "en-US"
+  avatar: "/img/bot.png", // Optional: custom avatar URL for the AI
+  model: {
+    // Optional: LLM model configuration
+    default: "gpt-4o",
+    maxTokens: 8192,
+  },
+  theme: "auto", // Optional: UI Theme preference ("light", "dark", or "auto")
+  shadowDOM: true, // Optional: style isolation (default: true)
+  suggestions: [
+    // Optional: custom welcome-screen suggestion questions
+    {
+      label: "What's on this page?",
+      text: "Analyze the current page content in detail",
+    },
+    {
+      label: "Help me debug",
+      text: "Look at the console errors and help me fix them",
+    },
+    { label: "What can you do?" }, // text omitted → sends "What can you do?"
+  ],
+  session: {
+    enable: true, // Optional: enable session persistence and slash commands
+    namespace: "my-app", // Optional: isolate storage by app namespace on same origin
+    maxSessions: 1000, // Optional: max sessions per namespace, 0 means unlimited
+    injectBuiltinSlashCommands: true, // Optional: inject built-in /new and /sessions commands
+    showBottomEntryButton: true, // Optional: show the bottom session-history button
+  },
+});
+```
+
+### Option Details
+
+| Option        | Type                          | Default                   | Description                                                                                                                                                                                                                                                                                       |
+| ------------- | ----------------------------- | ------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `root`        | `string \| HTMLElement`       | Auto-created floating div | Where to render the widget. If omitted, creates a `420x600px` floating overlay. If `#ocean-mcp-root` exists in the DOM, it will be used automatically.                                                                                                                                            |
+| `locale`      | `"zh-CN" \| "en-US"`          | `undefined`               | UI language. When set to `zh-CN`, skill and tool names will display their `cnName` if available. **Reactive** — can be changed at runtime via `sdkConfig.locale`.                                                                                                                                 |
+| `avatar`      | `string`                      | `undefined`               | URL for the AI assistant's avatar image in the chat.                                                                                                                                                                                                                                              |
+| `theme`       | `"light" \| "dark" \| "auto"` | `undefined`               | UI theme preference. Set to `"light"`, `"dark"`, or `"auto"` (follows system preference). When not set (`undefined`), defaults to light theme. **Reactive** — can be changed at runtime via `sdkConfig.theme`.                                                                                    |
+| `model`       | `ModelConfig`                 | `undefined`               | LLM model configuration. Controls which model and parameters are used for chat requests. See [Model Configuration](#model-configuration) below.                                                                                                                                                   |
+| `session`     | `SessionOptions`              | `{ enable: true, injectBuiltinSlashCommands: true, showBottomEntryButton: true }` | Session persistence options. Enabled by default; set `session: { enable: false }` to disable. `enable: true` turns on local session storage. `injectBuiltinSlashCommands` controls built-in slash commands (`/new`, `/sessions`). `showBottomEntryButton` controls the bottom session-history entry button. `namespace` isolates IndexedDB data between apps on the same origin. `maxSessions` is a soft limit (default 1000, `0` means unlimited) and is only enforced when creating new sessions. |
+| `shadowDOM`   | `boolean`                     | `true`                    | When `true`, the widget renders inside a Shadow DOM for full CSS isolation — your app's styles won't affect the widget and vice versa. Set to `false` for debugging or in environments where Shadow DOM causes issues.                                                                            |
+| `suggestions` | `SuggestionItem[]`            | `undefined`               | Custom suggestion questions displayed on the welcome screen. Each item has a `label` (button display text) and an optional `text` (the message sent when clicked). When provided, replaces the default suggestions entirely. If `text` is omitted, `label` is used as both display and send text. |
+
+**Tip:** If you want the widget to fill a specific area of your page (like a sidebar), create a container with your desired dimensions and pass it as `root`:
+
+```html
+<div id="ai-sidebar" style="width: 400px; height: 100vh;"></div>
+<script>
+  OceanMCPSDK.mount({ root: "#ai-sidebar", locale: "zh-CN" });
+</script>
+```
+
+### Model Configuration
+
+The `model` option lets your app control which LLM model and parameters are used for chat. This is sent to the API server with every chat request.
+
+```ts
+OceanMCPSDK.mount({
+  model: {
+    default: "gpt-4o", // Primary model for complex tasks
+    fast: "gpt-4o-mini", // Lightweight model for simple tasks
+    maxTokens: 16384, // Maximum output tokens per response
+  },
+});
+```
+
+All fields are optional. When omitted, the server falls back to its own environment variable defaults, then to built-in defaults.
+
+| Field       | Type     | Default                           | Description                                                                          |
+| ----------- | -------- | --------------------------------- | ------------------------------------------------------------------------------------ |
+| `default`   | `string` | Server's `LLM_MODEL` env var      | Primary model ID (e.g., `"gpt-4o"`, `"claude-sonnet-4-20250514"`, `"mihoyo-glm-4.6"`). |
+| `fast`      | `string` | Server's `LLM_FAST_MODEL` env var | Lightweight model for simpler tasks. Falls back to the default model if not set.     |
+| `maxTokens` | `number` | Server's `LLM_MAX_TOKENS` env var | Maximum number of output tokens per response.                                        |
+
+**Examples:**
+
+```ts
+// Use a specific model with a token limit
+OceanMCPSDK.mount({
+  model: { default: "mihoyo-glm-4.6", maxTokens: 104800 },
+});
+
+// Use different models for different task complexities
+OceanMCPSDK.mount({
+  model: { default: "gpt-4o", fast: "gpt-4o-mini", maxTokens: 8192 },
+});
+
+// Only override the default model, let server handle everything else
+OceanMCPSDK.mount({
+  model: { default: "claude-sonnet-4-20250514" },
+});
+```
+
+### Suggestion Configuration
+
+The `suggestions` option lets you customise the welcome-screen suggestion buttons. Each item specifies a `label` (the text shown on the button) and an optional `text` (the actual message sent to the AI when clicked). If `text` is omitted, `label` is used as both the display text and the sent message.
+
+When provided, custom suggestions **replace** the default i18n suggestions entirely. If not provided, the built-in defaults are shown (based on the current `locale`).
+
+```ts
+OceanMCPSDK.mount({
+  suggestions: [
+    {
+      label: "What's on this page?",
+      text: "Analyze the current page content in detail",
+    },
+    {
+      label: "Help me debug",
+      text: "Look at the console errors and help me fix them",
+    },
+    { label: "What can you do?" }, // text omitted → sends "What can you do?"
+  ],
+});
+```
+
+This is useful when you want the suggestion buttons to show short, user-friendly labels while sending more detailed or structured prompts to the AI behind the scenes.
+
+### Session Configuration
+
+Session support is configured through the `session` option:
+
+```ts
+OceanMCPSDK.mount({
+  session: {
+    enable: true,
+    namespace: "my-app",
+    maxSessions: 1000,
+    injectBuiltinSlashCommands: true,
+    showBottomEntryButton: true,
+  },
+});
+```
+
+`SessionOptions` fields:
+
+- `enable` (`boolean`): turn session persistence on or off
+- `namespace?` (`string`): optional storage namespace for isolating multiple apps on the same origin
+- `maxSessions?` (`number`): max sessions per namespace. Default 1000; `0` means unlimited. This is a soft limit enforced only when creating new sessions.
+- `injectBuiltinSlashCommands?` (`boolean`): whether to inject built-in slash commands (`/new`, `/sessions`). Default: `true`.
+- `showBottomEntryButton?` (`boolean`): whether to show the bottom session-history button. Default: `true`.
+
+Behavior when enabled:
+
+- Sessions are stored in IndexedDB (`ocean-mcp-sessions` + optional `:${namespace}`)
+- Built-in slash commands `/new` and `/sessions` are enabled
+- Sessions are lazily created: empty draft state is not persisted
+- A new persisted session is created only when there are messages to save
+- Session cap is a soft limit enforced only when creating new sessions
+
+### Runtime Configuration Changes
+
+The `theme` and `locale` options are **reactive** — you can change them at any time after mounting, and the chat widget will update immediately without needing to re-mount.
+
+```ts
+// Initial mount
+OceanMCPSDK.mount({ root: "#chat", locale: "en-US", theme: "light" });
+
+// Later: switch to Chinese — the entire UI updates instantly
+sdkConfig.locale = "zh-CN";
+
+// Later: switch to dark mode — the widget theme changes instantly
+sdkConfig.theme = "dark";
+
+// Switch to system-preference-following mode
+sdkConfig.theme = "auto";
+```
+
+To access `sdkConfig`, import it from the SDK module or use the global reference:
+
+```ts
+// ES Module
+import { sdkConfig } from "@ocean-mcp/frontend-sdk";
+
+// Or via the global SDK (UMD)
+// sdkConfig is exposed as part of the internal API
+```
+
+Under the hood, changing `theme` or `locale` dispatches a custom event (`ocean-mcp:theme-change` / `ocean-mcp:locale-change`) on `window`. The chat widget listens for these events and re-renders automatically. This means the update works even when the SDK runs inside a Shadow DOM with a separate module instance.
+
+> **Note:** Other mount options (such as `avatar`, `welcomeTitle`, `welcomeDescription`, `suggestions`) are currently read only at mount time. Changing them on `sdkConfig` after mounting will not update the UI until the next mount. The `model` option takes effect on the next chat request since it is read lazily.
+
+---
+
+## Server URL Configuration
+
+By default, the SDK connects to the OceanMCP API server at `http://localhost:4000`. In production or staging environments, you need to point the SDK to your actual server.
+
+The server URL is resolved in the following order:
+
+1. **Runtime override** — `window.__OCEAN_MCP_SERVER_URL__` (highest priority)
+2. **Build-time env** — `VITE_API_URL` (baked in during the Vite build)
+3. **Fallback** — `http://localhost:4000`
+
+### Setting the Server URL at Runtime
+
+Set `window.__OCEAN_MCP_SERVER_URL__` **before** loading the SDK script. This is the recommended approach for host applications, since it doesn't require rebuilding the SDK:
+
+```html
+<script>
+  // Point the SDK to your OceanMCP API server (no trailing slash)
+  window.__OCEAN_MCP_SERVER_URL__ = "https://ocean-mcp-api.example.com";
+</script>
+
+<!-- Then load and mount the SDK -->
+<script src="https://wb-cdn-test.mihoyo.com/ocean-mcp/sdk.umd.js"></script>
+<script>
+  OceanMCPSDK.mount();
+</script>
+```
+
+For ES Module usage:
+
+```html
+<script>
+  window.__OCEAN_MCP_SERVER_URL__ = "https://ocean-mcp-api.example.com";
+</script>
+<script type="module">
+  import OceanMCPSDK from "https://wb-cdn-test.mihoyo.com/ocean-mcp/sdk.esm.js";
+  OceanMCPSDK.mount();
+</script>
+```
+
+### Setting the Server URL at Build Time
+
+If you are building the SDK from source (e.g., during development or a custom build), you can set the `VITE_API_URL` environment variable instead. This is typically done via `.env` files:
+
+```bash
+# .env.production
+VITE_API_URL=https://ocean-mcp-api.example.com
+
+# .env.development (default for local dev)
+VITE_API_URL=http://localhost:4000
+```
+
+The build-time value is baked into the bundle and used when no runtime override is present.
+
+### How It Works
+
+The SDK uses the resolved URL for both HTTP API requests (e.g., `/api/chat`) and WebSocket connections (the `http(s)://` scheme is automatically converted to `ws(s)://` for the `/connect` endpoint). This means a single URL configuration covers both communication channels.
+
+> **Important:** Always omit the trailing slash. For example, use `https://ocean-mcp-api.example.com` instead of `https://ocean-mcp-api.example.com/`.
+
+---
+
+## Registering Skills
+
+A **skill** is a bundle of related tools + context instructions. It's the recommended way to teach the AI about a specific domain of your application.
+
+When you register a skill:
+
+- Its `name` and `description` appear in the AI's system prompt catalog
+- Its `instructions` are loaded on-demand when the AI decides to use the skill (keeping the context window efficient)
+- Its bundled `tools` are registered for browser-side execution and made available to the AI
+
+```ts
+OceanMCPSDK.registerSkill({
+  // Required fields
+  name: "inventory-ops", // Unique identifier
+  description:
+    "Manage product inventory: " + // When should the AI use this skill?
+    "stock levels, transfers, and audits.",
+  instructions: `
+# Inventory Operations
+
+When handling inventory tasks, follow these guidelines:
+
+## Reading Stock
+- Always use \`getStockLevel\` to check current stock before any mutations.
+- Stock levels are per-warehouse. Ask the user which warehouse if not specified.
+
+## Updating Stock
+- Use \`updateStock\` for manual adjustments.
+- Always confirm the quantity change with the user before executing.
+`,
+
+  // Optional fields
+  cnName: "库存管理", // Chinese display name (used when locale is zh-CN)
+  tools: [
+    // Tools bundled with this skill
+    {
+      id: "getStockLevel",
+      name: "Get Stock Level",
+      cnName: "获取库存",
+      description:
+        "Get current stock level for a product in a specific warehouse",
+      type: "executor",
+      operationType: "read",
+      executor: async (args) => {
+        const res = await fetch(
+          `/api/warehouses/${args.warehouseId}/stock/${args.productId}`,
+        );
+        return res.json();
+      },
+      parameters: [
+        {
+          name: "warehouseId",
+          type: "string",
+          description: "Warehouse ID",
+          required: true,
+        },
+        {
+          name: "productId",
+          type: "string",
+          description: "Product SKU",
+          required: true,
+        },
+      ],
+    },
+    {
+      id: "updateStock",
+      name: "Update Stock",
+      cnName: "更新库存",
+      description:
+        "Adjust stock level for a product (write operation, requires approval)",
+      type: "executor",
+      operationType: "write", // Write operations trigger user approval before execution
+      executor: async (args) => {
+        const res = await fetch(
+          `/api/warehouses/${args.warehouseId}/stock/${args.productId}`,
+          {
+            method: "PUT",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ quantity: args.quantity }),
+          },
+        );
+        return res.json();
+      },
+      parameters: [
+        { name: "warehouseId", type: "string", required: true },
+        { name: "productId", type: "string", required: true },
+        {
+          name: "quantity",
+          type: "number",
+          description: "New stock quantity",
+          required: true,
+        },
+      ],
+    },
+  ],
+});
+```
+
+### Writing Good Instructions
+
+The `instructions` field is a Markdown document that tells the AI _how_ to use the skill's tools. Tips:
+
+- Explain the domain context and any business rules
+- Describe the correct order of operations (e.g., "always read before write")
+- Mention edge cases or constraints
+- Keep it concise — the AI loads instructions on-demand, so you don't need to worry about bloating the initial prompt
+
+---
+
+## Registering Standalone Tools
+
+If you just need to add a single tool without the overhead of a full skill, use `registerTool()`.
+
+### Executor Type (Recommended)
+
+The `executor` type lets you register a real JavaScript function. This is the most common and flexible approach:
+
+```ts
+OceanMCPSDK.registerTool({
+  id: "getUserProfile",
+  name: "Get User Profile",
+  description: "Fetches the profile of the currently logged-in user",
+  type: "executor", // Optional, defaults to "executor"
+  operationType: "read", // Optional, defaults to "read"
+  executor: async (args) => {
+    const res = await fetch("/api/me");
+    return res.json();
+  },
+  parameters: [],
+});
+```
+
+The executor runs **in the user's browser context**, meaning it has access to:
+
+- The user's cookies and authenticated session
+- The full DOM
+- Any JavaScript APIs available on the page
+- Your app's global state
+
+### Code Type
+
+The `code` type stores the function logic as a string, which is executed via `new Function()`. This is useful for tools that are defined in configuration or fetched from a server:
+
+```ts
+OceanMCPSDK.registerTool({
+  id: "getClusterList",
+  name: "Get Cluster List",
+  description: "Fetch the list of Kubernetes clusters",
+  type: "code",
+  operationType: "read",
+  code: `
+    return fetch("/api/clusters", {
+      headers: { "Accept": "application/json" },
+      credentials: "include",
+    })
+    .then(response => response.json())
+    .then(res => res.data);
+  `,
+  parameters: [],
+});
+```
+
+Inside `code` strings, you have access to:
+
+- `args` — the arguments object passed by the AI
+- `window`, `document`, `fetch` — standard browser globals
+
+### Read vs. Write Operations
+
+- **`operationType: "read"`** — The tool only reads data. It runs immediately when the AI calls it.
+- **`operationType: "write"`** — The tool modifies data. The AI will present a plan to the user for approval before executing. The user sees an "Approve" / "Deny" button in the chat.
+
+#### Auto-Approve for Write Operations
+
+If you want a write tool to execute immediately without user confirmation (like a read tool), set `autoApprove: true`:
+
+```ts
+OceanMCPSDK.registerTool({
+  id: "addLogEntry",
+  name: "Add Log Entry",
+  description: "Append an entry to the audit log",
+  type: "executor",
+  operationType: "write",
+  autoApprove: true,   // Skips the approval flow — executes directly
+  executor: async (args) => {
+    const res = await fetch("/api/logs", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ message: args.message }),
+    });
+    return res.json();
+  },
+  parameters: [
+    { name: "message", type: "string", description: "Log message", required: true },
+  ],
+});
+```
+
+> **Use with caution:** `autoApprove` bypasses the safety gate that normally lets users review write operations before they run. Only enable it for low-risk mutations where user confirmation adds no value.
+
+### Parameter Definitions
+
+Each tool declares the parameters it accepts. The AI uses these definitions to construct the correct arguments. Two formats are supported:
+
+#### Format 1: Legacy Array (Simple)
+
+The flat array format is the simplest way to define parameters:
+
+```ts
+parameters: [
+  {
+    name: "userId",
+    type: "string", // "string" | "number" | "boolean" | "object" | "array"
+    description: "The user's unique ID",
+    required: true,
+  },
+  {
+    name: "includeHistory",
+    type: "boolean",
+    description: "Whether to include order history in the response",
+    required: false,
+  },
+];
+```
+
+**Legacy parameter options:**
+
+| Field         | Type                           | Description                                                               |
+| ------------- | ------------------------------ | ------------------------------------------------------------------------- |
+| `name`        | `string`                       | Parameter name (matches the key in `args`)                                |
+| `type`        | `string`                       | `"string"`, `"number"`, `"boolean"`, `"object"`, `"array"`                |
+| `description` | `string`                       | Tells the AI what this parameter is for                                   |
+| `required`    | `boolean`                      | Whether the AI must provide this parameter                                |
+| `showName`    | `string`                       | Display name override in the UI (e.g., "User ID" instead of "userId")     |
+| `enumMap`     | `Record<string, any>`          | Maps raw values to display labels (e.g., `{ "prod": "Production" }`)      |
+| `columns`     | `Record<string, ColumnConfig>` | Column config for array/object params; triggers table rendering in the UI |
+
+#### Format 2: JSON Schema (Advanced)
+
+For richer type definitions — including nested objects, number constraints, string patterns, array item schemas, enums, and default values — you can use standard [JSON Schema](https://json-schema.org/) (Draft 7) format:
+
+```ts
+OceanMCPSDK.registerTool({
+  id: "calculateShipping",
+  name: "Calculate Shipping Cost",
+  description: "Calculate shipping cost based on weight and destination",
+  operationType: "read",
+  executor: async (args) => {
+    const { weight, destination, express, insurance } = args;
+    const baseCost = weight * (express ? 8 : 5) + 10;
+    const insuranceFee = insurance?.enabled ? (insurance.value || 0) * 0.02 : 0;
+    return { cost: Math.round((baseCost + insuranceFee) * 100) / 100, currency: "USD" };
+  },
+  // JSON Schema format — an object with type: "object" and properties
+  parameters: {
+    type: "object",
+    required: ["weight", "destination"],
+    properties: {
+      weight: {
+        type: "number",
+        description: "Package weight in kilograms",
+        minimum: 0.1,
+        maximum: 50,
+      },
+      destination: {
+        type: "string",
+        description: "Destination country or city",
+      },
+      express: {
+        type: "boolean",
+        description: "Whether to use express shipping",
+        default: false,
+      },
+      insurance: {
+        type: "object",
+        description: "Insurance options",
+        properties: {
+          enabled: {
+            type: "boolean",
+            description: "Whether to add insurance",
+            default: false,
+          },
+          value: {
+            type: "number",
+            description: "Declared value of package contents (USD)",
+            minimum: 0,
+          },
+        },
+        additionalProperties: false,
+      },
+    },
+    additionalProperties: false,
+  },
+});
+```
+
+**JSON Schema advantages over the legacy format:**
+
+| Feature                  | Legacy Array | JSON Schema |
+| ------------------------ | ------------ | ----------- |
+| Basic types              | Yes          | Yes         |
+| Required/optional        | Yes          | Yes         |
+| Enum values              | Via `enumMap`| Native `enum` |
+| Nested object properties | No (uses `z.any()`) | Yes |
+| Number constraints (min/max) | No       | Yes         |
+| String constraints (pattern, format, minLength) | No | Yes |
+| Array item schemas       | Limited      | Yes         |
+| Default values           | No           | Yes         |
+| Union types (oneOf/anyOf)| No           | Yes         |
+
+Both formats are fully backward compatible. The SDK detects the format at runtime: if `parameters` is an array, it uses the legacy format; if it's an object with `type: "object"` and `properties`, it uses JSON Schema.
+
+---
+
+## Custom Tool Rendering (`showRender`)
+
+Tools can provide a `showRender` callback to customise their UI inside the chat. The callback receives a `FlowStep` object and can return either:
+
+- **A React node** — for SDK-internal tools that share the same React instance.
+- **A `DOMRenderDescriptor`** — for host applications that may use a different React version or a different framework entirely (Vue, Angular, vanilla JS, etc.).
+
+### DOMRenderDescriptor
+
+`DOMRenderDescriptor` is a framework-agnostic container callback pattern. The SDK creates a `<div>`, mounts it in the chat UI, then passes the raw DOM element to the host's `render` callback. On unmount it calls `cleanup()` to release resources.
+
+```ts
+interface DOMRenderDescriptor {
+  type: "dom";
+  render: (container: HTMLElement) => void;
+  cleanup?: () => void;
+}
+```
+
+### Example: Chart rendering with @antv/g2
+
+```ts
+import { Chart } from "@antv/g2";
+
+OceanMCPSDK.registerTool({
+  id: "renderChart",
+  name: "Render Chart",
+  description: "Visualise query results as a chart",
+  operationType: "read",
+  executor: async (args) => args,
+  parameters: [
+    { name: "data", type: "array", required: true, description: "Chart data" },
+    { name: "xField", type: "string", required: true },
+    { name: "yField", type: "string", required: true },
+  ],
+  showRender: (step) => {
+    let chart: Chart | null = null;
+    return {
+      type: "dom",
+      render: (container) => {
+        chart = new Chart({ container, autoFit: true, height: 300 });
+        chart.data(step.arguments.data);
+        chart
+          .interval()
+          .encode("x", step.arguments.xField)
+          .encode("y", step.arguments.yField);
+        chart.render();
+      },
+      cleanup: () => {
+        chart?.destroy();
+        chart = null;
+      },
+    };
+  },
+});
+```
+
+### Example: Using host React + Ant Design Charts
+
+```ts
+import React from "react";
+import ReactDOM from "react-dom";
+import { Line } from "@ant-design/charts";
+
+showRender: (step) => ({
+  type: "dom",
+  render: (container) => {
+    ReactDOM.render(
+      React.createElement(Line, {
+        data: step.arguments.data,
+        xField: step.arguments.xField,
+        yField: step.arguments.yField,
+      }),
+      container,
+    );
+  },
+  cleanup: () => {
+    ReactDOM.unmountComponentAtNode(container);
+  },
+})
+```
+
+### Example: Vue 3
+
+```ts
+import { createApp } from "vue";
+import ChartView from "./ChartView.vue";
+
+showRender: (step) => {
+  let app = null;
+  return {
+    type: "dom",
+    render: (container) => {
+      app = createApp(ChartView, { data: step.arguments.data });
+      app.mount(container);
+    },
+    cleanup: () => {
+      app?.unmount();
+      app = null;
+    },
+  };
+}
+```
+
+> **Why DOMRenderDescriptor?** The SDK bundles its own React instance (React 19). When the host application uses a different React version, returning React elements from `showRender` causes reconciler incompatibility errors (e.g. React error #525). `DOMRenderDescriptor` avoids this by letting the SDK create the container element with its own React, then handing a raw DOM node to the host — the two React instances never cross paths.
+
+---
+
+## Registering Skills from a ZIP File
+
+For skills that are maintained separately or distributed via CDN, you can register them from a `.zip` file:
+
+```ts
+const skills = await OceanMCPSDK.registerSkillFromZip(
+  "https://cdn.example.com/skills/my-skill-pack.zip",
+);
+console.log(
+  "Registered:",
+  skills.map((s) => s.name),
+);
+```
+
+### ZIP Format
+
+The ZIP is downloaded and processed by the server. Skill discovery follows these rules:
+
+- **Single skill:** If the ZIP root contains a `SKILL.md` file, it's treated as one skill. Subdirectories are treated as resources (scripts, references, etc.), not as separate skills.
+- **Multi-skill pack:** If there's no root `SKILL.md`, each subdirectory containing a `SKILL.md` is registered as a separate skill.
+
+### SKILL.md Format
+
+Each `SKILL.md` file should have YAML frontmatter with `name` and `description`, followed by the full instructions in the body:
+
+```markdown
+---
+name: pdf-processing
+description: Extract text and tables from PDF files, fill forms, merge documents.
+---
+
+# PDF Processing
+
+When the user asks to work with PDF files, use these tools:
+
+## Extracting Text
+
+...
+```
+
+---
+
+## File Upload
+
+You can enable file uploads in the chat by registering an upload handler. When registered, a paperclip button appears in the input area.
+
+```ts
+OceanMCPSDK.registerUploader(async (files) => {
+  // files is a File[] array from the browser's file picker
+  const formData = new FormData();
+  files.forEach((file) => formData.append("files", file));
+
+  const res = await fetch("/api/upload", {
+    method: "POST",
+    body: formData,
+  });
+  const data = await res.json();
+
+  // Must return an array of UploadResult objects
+  return data.map((item, i) => ({
+    url: item.url, // Required: URL where the file can be accessed
+    name: files[i].name, // Required: file name
+    size: files[i].size, // Optional: file size in bytes
+    type: files[i].type, // Optional: MIME type
+  }));
+});
+```
+
+The upload results are automatically sent as a user message in the chat, so the AI can reference the uploaded files.
+
+To remove the upload handler (and hide the upload button):
+
+```ts
+// Option 1: Use the returned cleanup function
+const cleanup = OceanMCPSDK.registerUploader(handler);
+cleanup();
+
+// Option 2: Call unregister directly
+OceanMCPSDK.unregisterUploader();
+```
+
+---
+
+## Programmatic Chat Control
+
+You can control the chat widget from your application code:
+
+```ts
+// Send a message as if the user typed it
+await OceanMCPSDK.chat("What's on this page?");
+
+// Set the input box text without sending
+await OceanMCPSDK.setInput("draft message...");
+
+// Get all current chat messages
+const messages = await OceanMCPSDK.getMessages();
+
+// Clear all chat messages
+await OceanMCPSDK.clearMessages();
+
+// Open the built-in session history dialog
+await OceanMCPSDK.openSessions();
+```
+
+This is useful for:
+
+- Creating shortcut buttons that trigger specific AI queries
+- Pre-filling the chat input based on user context
+- Building custom chat UI that wraps the SDK
+
+### Slash Commands
+
+When `session.enable` is `true` and `session.injectBuiltinSlashCommands !== false`, built-in slash commands are available:
+
+- `/new`: start a new draft session
+- `/sessions`: open session history list and switch sessions
+
+You can also register your own slash commands:
+
+```ts
+OceanMCPSDK.registerCommand({
+  name: "helpdesk",
+  description: "Open helpdesk workflow",
+  execute: async (args) => {
+    await OceanMCPSDK.chat(`Helpdesk workflow: ${args ?? "default"}`);
+  },
+});
+
+OceanMCPSDK.unregisterCommand("helpdesk");
+```
+
+---
+
+## Unregistering & Cleanup
+
+```ts
+// Unregister a specific tool
+OceanMCPSDK.unregisterTool("getOrderList");
+
+// Unregister a skill and all its bundled tools
+OceanMCPSDK.unregisterSkill("inventory-ops");
+
+// Remove upload handler
+OceanMCPSDK.unregisterUploader();
+```
+
+---
+
+## Advanced Usage
+
+For advanced scenarios, the SDK exposes internal registries and the WebSocket client:
+
+```ts
+// Direct access to the function registry
+const allTools = OceanMCPSDK.functionRegistry.getAll();
+const tool = OceanMCPSDK.functionRegistry.get("myToolId");
+
+// Direct access to the skill registry
+const allSkills = OceanMCPSDK.skillRegistry.getAll();
+const skill = OceanMCPSDK.skillRegistry.get("my-skill");
+
+// WebSocket client status
+const isConnected = OceanMCPSDK.wsClient.isConnected;
+const connectionId = OceanMCPSDK.wsClient.currentConnectionId;
+```
+
+---
+
+## API Reference
+
+| Method                      | Returns                    | Description                                                                    |
+| --------------------------- | -------------------------- | ------------------------------------------------------------------------------ |
+| `mount(target?)`            | `void`                     | Mount the chat widget. Accepts a CSS selector, HTMLElement, or options object. |
+| `registerSkill(definition)` | `void`                     | Register a skill with metadata, instructions, and bundled tools.               |
+| `unregisterSkill(name)`     | `void`                     | Remove a skill and its bundled tools.                                          |
+| `registerSkillFromZip(url)` | `Promise<SkillMetadata[]>` | Register skill(s) from a CDN-hosted ZIP file.                                  |
+| `registerTool(definition)`  | `void`                     | Register a standalone tool.                                                    |
+| `unregisterTool(id)`        | `void`                     | Remove a standalone tool.                                                      |
+| `getTools()`                | `FunctionDefinition[]`     | Get all registered tools.                                                      |
+| `getSkills()`               | `SkillDefinition[]`        | Get all registered skills.                                                     |
+| `registerUploader(handler)` | `() => void`               | Register a file upload handler. Returns a cleanup function.                    |
+| `unregisterUploader()`      | `void`                     | Remove the file upload handler.                                                |
+| `chat(text)`                | `Promise<void>`            | Send a chat message programmatically.                                          |
+| `setInput(text)`            | `Promise<void>`            | Set the input box text without sending.                                        |
+| `getMessages()`             | `Promise<any[]>`           | Get all current chat messages.                                                 |
+| `clearMessages()`           | `Promise<void>`            | Clear all chat messages.                                                       |
+| `openSessions()`            | `Promise<void>`            | Open the built-in session history dialog.                                      |
+| `registerCommand(command)`  | `void`                     | Register a custom slash command.                                               |
+| `unregisterCommand(name)`   | `void`                     | Unregister a slash command by name.                                            |
+
+---
+
+## Type Reference
+
+### SkillDefinition
+
+```ts
+interface SkillDefinition {
+  name: string; // Unique skill identifier
+  cnName?: string; // Chinese display name (for zh-CN locale)
+  description: string; // When to use this skill (shown in AI catalog)
+  instructions: string; // Full Markdown instructions (loaded on-demand)
+  tools?: FunctionDefinition[]; // Bundled tool definitions
+}
+```
+
+### FunctionDefinition
+
+```ts
+// Executor type — a real JS function
+interface ExecutorFunctionDefinition {
+  id: string;
+  name: string;
+  cnName?: string;
+  description: string;
+  type: "executor";
+  operationType: "read" | "write";
+  autoApprove?: boolean;          // When true, write tools execute without user approval
+  executor: (args: Record<string, any>) => Promise<any>;
+  parameters: FunctionParameters; // ParameterDefinition[] or JSONSchemaParameters
+}
+
+// Code type — a code string executed via new Function()
+interface CodeFunctionDefinition {
+  id: string;
+  name: string;
+  cnName?: string;
+  description: string;
+  type: "code";
+  operationType: "read" | "write";
+  autoApprove?: boolean;          // When true, write tools execute without user approval
+  code: string;
+  parameters: FunctionParameters; // ParameterDefinition[] or JSONSchemaParameters
+}
+```
+
+### FunctionParameters
+
+The `parameters` field accepts two formats:
+
+```ts
+// Union type — either format is accepted
+type FunctionParameters = ParameterDefinition[] | JSONSchemaParameters;
+```
+
+### ParameterDefinition (Legacy Format)
+
+```ts
+interface ParameterDefinition {
+  name: string;
+  type: "string" | "number" | "boolean" | "object" | "array";
+  description?: string;
+  required: boolean;
+  showName?: string; // Display name in UI
+  enumMap?: Record<string, any>; // Value → display label mapping
+  columns?: Record<string, ColumnConfig>; // Table rendering config for array params
+}
+
+interface ColumnConfig {
+  label?: string; // Column header label
+  render?: (value: any, row: Record<string, any>) => any; // Custom cell renderer
+}
+```
+
+### JSONSchemaParameters (JSON Schema Format)
+
+```ts
+interface JSONSchemaParameters {
+  type: "object";
+  properties: Record<string, JSONSchemaProperty>;
+  required?: string[];
+  additionalProperties?: boolean | JSONSchemaProperty;
+  description?: string;
+  [key: string]: unknown; // Additional JSON Schema keywords
+}
+
+interface JSONSchemaProperty {
+  type?: string | string[];
+  description?: string;
+  enum?: (string | number | boolean | null)[];
+  default?: unknown;
+
+  // String constraints
+  minLength?: number;
+  maxLength?: number;
+  pattern?: string;
+  format?: string;
+
+  // Number constraints
+  minimum?: number;
+  maximum?: number;
+  exclusiveMinimum?: number;
+  exclusiveMaximum?: number;
+
+  // Array constraints
+  items?: JSONSchemaProperty;
+  minItems?: number;
+  maxItems?: number;
+  uniqueItems?: boolean;
+
+  // Nested object
+  properties?: Record<string, JSONSchemaProperty>;
+  required?: string[];
+  additionalProperties?: boolean | JSONSchemaProperty;
+
+  // Composition
+  oneOf?: JSONSchemaProperty[];
+  anyOf?: JSONSchemaProperty[];
+  allOf?: JSONSchemaProperty[];
+}
+```
+
+### UploadResult
+
+```ts
+interface UploadResult {
+  url: string; // Required: accessible URL for the uploaded file
+  name: string; // Required: file name
+  size?: number; // Optional: size in bytes
+  type?: string; // Optional: MIME type
+}
+```
+
+### ModelConfig
+
+```ts
+interface ModelConfig {
+  default?: string; // Primary model ID (e.g. "gpt-4o", "claude-sonnet-4-20250514")
+  fast?: string; // Lightweight model ID for simple tasks
+  maxTokens?: number; // Maximum output tokens per response
+}
+```
+
+### SuggestionItem
+
+```ts
+interface SuggestionItem {
+  label: string; // Text displayed on the suggestion button
+  text?: string; // Message sent to the AI when clicked (defaults to label if omitted)
+}
+```
+
+### SessionOptions
+
+```ts
+interface SessionOptions {
+  enable: boolean;
+  namespace?: string;
+  maxSessions?: number;
+  injectBuiltinSlashCommands?: boolean;
+  showBottomEntryButton?: boolean;
+}
+```
+
+### SlashCommand
+
+```ts
+interface SlashCommand {
+  name: string; // Command name without "/" prefix
+  description: string;
+  execute: (args?: string) => void | Promise<void>;
+}
+```
+
+---
+
+## TypeScript Support
+
+The SDK ships with built-in TypeScript declarations — no `@types/` package needed.
+
+### ESM (Bundler Projects)
+
+If you import the SDK as an ES module, TypeScript picks up types automatically via the `types` field in `package.json`:
+
+```ts
+import OceanMCPSDK from "@ocean-mcp/frontend-sdk";
+
+// Full IntelliSense — mount options, tool definitions, etc.
+OceanMCPSDK.mount({ locale: "zh-CN", theme: "dark" });
+OceanMCPSDK.registerTool({
+  id: "getOrders",
+  name: "Get Orders",
+  description: "Fetch orders",
+  operationType: "read",
+  executor: async () => fetch("/api/orders").then((r) => r.json()),
+  parameters: [],
+});
+```
+
+You can also import individual types for use in your own code:
+
+```ts
+import type {
+  MountOptions,
+  FunctionDefinition,
+  FunctionParameters,
+  JSONSchemaParameters,
+  JSONSchemaProperty,
+  SkillDefinition,
+  SessionOptions,
+  SlashCommand,
+  ParameterDefinition,
+  UploadResult,
+  ModelConfig,
+} from "@ocean-mcp/frontend-sdk";
+
+const myTool: FunctionDefinition = {
+  id: "myTool",
+  name: "My Tool",
+  description: "Does things",
+  type: "executor",
+  operationType: "read",
+  executor: async (args) => ({ result: args.input }),
+  parameters: [
+    { name: "input", type: "string", description: "Input value", required: true },
+  ],
+};
+```
+
+> **Note:** The ESM `.d.ts` imports types from `@ocean-mcp/shared`. If you install `@ocean-mcp/frontend-sdk` via npm/pnpm, the shared package is pulled in as a dependency automatically — no extra steps needed.
+
+### UMD (Script Tag Projects)
+
+When loading the SDK via a `<script>` tag, `OceanMCPSDK` is attached to `window`. To get type safety for the global variable, add a triple-slash reference in any `.ts` or `.d.ts` file (e.g., your project's `typings.d.ts`):
+
+```ts
+/// <reference types="@ocean-mcp/frontend-sdk/sdk.umd" />
+
+// Now TypeScript knows about the global `OceanMCPSDK`
+OceanMCPSDK.mount(); // ✓ typed
+window.OceanMCPSDK.registerTool({ ... }); // ✓ typed
+```
+
+Or add it to your `tsconfig.json`:
+
+```jsonc
+{
+  "compilerOptions": {
+    "types": ["@ocean-mcp/frontend-sdk/sdk.umd"]
+  }
+}
+```
+
+
+The UMD declaration file also re-exports all public types, so you can reference them in JSDoc or type annotations without an ESM import:
+
+```ts
+/** @type {import("@ocean-mcp/frontend-sdk/sdk.umd").MountOptions} */
+const options = { locale: "en-US", theme: "auto" };
+```
+
+---
+
+## FAQ
+
+### My app uses an iframe. Will OceanMCP work?
+
+The SDK mounts into the page where the script is loaded. If your app runs inside an iframe, load the SDK script inside that iframe. Cross-origin iframes will need their own SDK instance.
+
+### Will the SDK's CSS affect my app?
+
+By default, no. The SDK renders inside a **Shadow DOM**, which provides complete CSS isolation in both directions. If you need to disable this (e.g., for debugging), set `shadowDOM: false` in the mount options — but be aware that styles may then interact.
+
+### How does authentication work?
+
+Tools run in the user's browser with full access to cookies and the authenticated session. When a tool calls `fetch("/api/something", { credentials: "include" })`, it uses the user's existing auth. No additional auth setup is needed.
+
+### Can I use this with React / Vue / Angular?
+
+Yes. The SDK is framework-agnostic at the integration level. It mounts its own React root inside a Shadow DOM, so it won't conflict with your app's framework. Just load the UMD script or ES module and call `mount()`.
+
+### What's the difference between a skill and a tool?
+
+A **tool** is a single function the AI can call (e.g., "Get Order List"). A **skill** is a higher-level concept that bundles related tools together with context instructions and metadata. Skills help the AI understand _when_ and _how_ to use a group of tools.
+
+For simple integrations, standalone tools are fine. For complex domains with multiple related operations, use skills.

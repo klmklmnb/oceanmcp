@@ -13,8 +13,11 @@
   "dependencies": {
     "@ai-sdk/openai-compatible": "^2.0.27",
     "@ai-sdk/provider": "^3.0.3",
+    "@mihoyo/wave-opensdk": "file:vendor/mihoyo-wave-opensdk-0.9.0.tgz",
     "@ocean-mcp/shared": "workspace:*",
     "ai": "6.0.37",
+    "pdfjs-dist": "^5.5.207",
+    "winston": "^3.17.0",
     "zod": "^3.25.76"
   },
   "devDependencies": {

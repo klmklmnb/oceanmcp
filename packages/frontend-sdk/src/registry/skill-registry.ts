@@ -1,7 +1,8 @@
-import type {
-  FunctionDefinition,
-  FunctionSchema,
-  SkillSchema,
+import {
+  isJSONSchemaParameters,
+  type FunctionDefinition,
+  type FunctionSchema,
+  type SkillSchema,
 } from "@ocean-mcp/shared";
 
 // ─── Frontend-Local Skill Definition ─────────────────────────────────────────
@@ -16,6 +17,8 @@ import type {
 export interface SkillDefinition {
   /** Unique skill identifier (used by loadSkill) */
   name: string;
+  /** Localized Chinese display name; shown when locale is zh-CN */
+  cnName?: string;
   /** When to use this skill (shown in system prompt catalog) */
   description: string;
   /** Full markdown instructions (returned by loadSkill on-demand) */
@@ -75,7 +78,19 @@ class SkillRegistry {
           description: fn.description,
           type: fn.type,
           operationType: fn.operationType,
-          parameters: fn.parameters,
+          ...(fn.autoApprove != null && { autoApprove: fn.autoApprove }),
+          // JSON Schema parameters are already serializable — pass through as-is.
+          // Legacy ParameterDefinition[] needs column render functions stripped.
+          parameters: isJSONSchemaParameters(fn.parameters)
+            ? fn.parameters
+            : fn.parameters.map((p) => {
+                if (!p.columns) return p;
+                const stripped = { ...p, columns: {} as typeof p.columns };
+                for (const [key, cfg] of Object.entries(p.columns)) {
+                  stripped.columns![key] = { label: cfg.label };
+                }
+                return stripped;
+              }),
         }),
       ),
     }));
