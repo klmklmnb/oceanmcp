@@ -1,21 +1,11 @@
 import React from "react";
 import type { DemoStrings } from "./demo-i18n";
 
-export type DemoTab = "form" | "todo" | "flow";
-
 interface DemoNavbarProps {
-  activeTab: DemoTab;
-  onTabChange: (tab: DemoTab) => void;
   strings: DemoStrings;
 }
 
-const TABS: { key: DemoTab; labelKey: keyof DemoStrings; icon: string }[] = [
-  { key: "form", labelKey: "tabForm", icon: "M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01" },
-  { key: "todo", labelKey: "tabTodo", icon: "M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" },
-  { key: "flow", labelKey: "tabFlow", icon: "M4 6h16M4 12h8m-8 6h16M20 6l-4 6 4 6" },
-];
-
-export function DemoNavbar({ activeTab, onTabChange, strings }: DemoNavbarProps) {
+export function DemoNavbar({ strings }: DemoNavbarProps) {
   return (
     <nav
       style={{
@@ -30,7 +20,7 @@ export function DemoNavbar({ activeTab, onTabChange, strings }: DemoNavbarProps)
       }}
     >
       {/* Logo & Title */}
-      <div style={{ display: "flex", alignItems: "center", gap: 10, marginRight: 24 }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 10, flex: 1 }}>
         <img
           src="https://pub-46b4307a6ac249dda431cdfd7f715021.r2.dev/uploads/oceanmcp_icon.png"
           alt="OceanMCP"
@@ -49,62 +39,6 @@ export function DemoNavbar({ activeTab, onTabChange, strings }: DemoNavbarProps)
             {strings.subtitle}
           </span>
         </div>
-      </div>
-
-      {/* Tabs */}
-      <div style={{ display: "flex", gap: 4, flex: 1 }}>
-        {TABS.map(({ key, labelKey, icon }) => {
-          const isActive = key === activeTab;
-          return (
-            <button
-              key={key}
-              onClick={() => onTabChange(key)}
-              style={{
-                display: "flex",
-                alignItems: "center",
-                gap: 6,
-                padding: "8px 16px",
-                borderRadius: 8,
-                border: "none",
-                background: isActive
-                  ? "rgba(59, 130, 246, 0.2)"
-                  : "transparent",
-                color: isActive ? "#60a5fa" : "#94a3b8",
-                fontSize: 13,
-                fontWeight: isActive ? 600 : 400,
-                cursor: "pointer",
-                transition: "all 0.15s ease",
-                whiteSpace: "nowrap",
-              }}
-              onMouseEnter={(e) => {
-                if (!isActive) {
-                  e.currentTarget.style.background = "rgba(255,255,255,0.05)";
-                  e.currentTarget.style.color = "#cbd5e1";
-                }
-              }}
-              onMouseLeave={(e) => {
-                if (!isActive) {
-                  e.currentTarget.style.background = "transparent";
-                  e.currentTarget.style.color = "#94a3b8";
-                }
-              }}
-            >
-              <svg
-                width="16"
-                height="16"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              >
-                <path d={icon} />
-              </svg>
-              {strings[labelKey] as string}
-            </button>
-          );
-        })}
       </div>
 
       {/* GitHub link */}

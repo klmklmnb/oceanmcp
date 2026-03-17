@@ -84,9 +84,59 @@ class TodoStore {
     this.nextId = 1;
     this.emit();
   }
+
+  /** Bulk-load initial items without emitting per-item. */
+  seed(items: Omit<TodoItem, "id" | "createdAt">[]): void {
+    for (const item of items) {
+      this.items.push({
+        ...item,
+        id: `todo-${this.nextId++}`,
+        createdAt: new Date().toISOString(),
+      });
+    }
+  }
 }
 
 export const todoStore = new TodoStore();
+
+// ── Pre-populate with sample data so the demo is immediately interactive ─────
+todoStore.seed([
+  {
+    title: "Set up CI/CD pipeline",
+    description: "Configure GitHub Actions for automated testing and deployment",
+    status: "in-progress",
+    priority: "high",
+    dueDate: "2026-03-20",
+  },
+  {
+    title: "Write unit tests for auth module",
+    description: "Cover login, signup, token refresh, and password reset flows",
+    status: "pending",
+    priority: "high",
+    dueDate: "2026-03-22",
+  },
+  {
+    title: "Refactor database queries",
+    description: "Optimize N+1 queries in the user dashboard endpoint",
+    status: "pending",
+    priority: "medium",
+    dueDate: "2026-03-25",
+  },
+  {
+    title: "Update API documentation",
+    description: "Sync OpenAPI spec with the latest endpoint changes",
+    status: "pending",
+    priority: "low",
+    dueDate: "2026-03-28",
+  },
+  {
+    title: "Design review for v2.0",
+    description: "Review mockups and finalize the new dashboard layout",
+    status: "done",
+    priority: "medium",
+    dueDate: "2026-03-15",
+  },
+]);
 
 // ─── Flow Store ──────────────────────────────────────────────────────────────
 
@@ -279,3 +329,40 @@ class FormStore {
 }
 
 export const formStore = new FormStore();
+
+// ─── Tab Store ───────────────────────────────────────────────────────────────
+
+export type DemoTab = "form" | "todo" | "flow";
+
+class TabStore {
+  private current: DemoTab = "todo";
+  private listeners = new Set<Listener>();
+
+  subscribe = (listener: Listener): (() => void) => {
+    this.listeners.add(listener);
+    return () => this.listeners.delete(listener);
+  };
+
+  getSnapshot = (): DemoTab => {
+    return this.current;
+  };
+
+  private emit() {
+    this.listeners.forEach((l) => l());
+  }
+
+  get(): DemoTab {
+    return this.current;
+  }
+
+  set(tab: DemoTab): void {
+    if (tab !== this.current) {
+      this.current = tab;
+      // Keep URL hash in sync
+      window.location.hash = tab;
+      this.emit();
+    }
+  }
+}
+
+export const tabStore = new TabStore();

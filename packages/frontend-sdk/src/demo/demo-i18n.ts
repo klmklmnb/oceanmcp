@@ -23,7 +23,8 @@ const strings = {
       "Ask the AI to create dynamic forms — contact forms, surveys, feedback forms, or any custom schema. The AI generates JSON Schema definitions and previews them live.",
     formSuggestion1: "Create a contact form",
     formSuggestion1Text:
-      "Create a contact form with name, email, phone, and message fields. Preview it in the Form Preview area, then let me fill it out.",
+      'Preview a contact form with these fields: Name (string, required), Email (string, email format, required), Phone (string), Inquiry Type (enum: "sales", "support", "partnership", "other" with labels "Sales", "Technical Support", "Partnership", "Other", required), and Message (textarea, required). ' +
+      "After previewing, use askUser to collect my responses. Pre-fill Name as \"Alice Chen\", Email as \"alice@example.com\", Phone as \"555-0123\", and Message as \"I'd like to learn more about OceanMCP SDK integration.\" — but leave Inquiry Type empty so I can choose it myself.",
     formSuggestion2: "Build a survey",
     formSuggestion2Text:
       "Build a customer satisfaction survey with rating, feedback textarea, and recommendation radio buttons. Preview it and collect my responses.",
@@ -37,13 +38,13 @@ const strings = {
     todoTitle: "TODO List",
     todoDescription:
       "Let the AI manage your TODO list. It can add tasks, mark them complete, set priorities, and organize your workflow — all through browser-side tool calls.",
-    todoSuggestion1: "Plan a sprint",
+    todoSuggestion1: "Finish the CI/CD setup",
     todoSuggestion1Text:
-      "Add 5 tasks for a two-week sprint: set up CI/CD pipeline (high), write unit tests (high), refactor auth module (medium), update documentation (low), and design review (medium). Set appropriate due dates.",
+      "The CI/CD pipeline task is currently in progress — mark it as done and give me a summary of what's left on my list.",
     todoSuggestion2: "What's my task list?",
-    todoSuggestion2Text: "Show me the current TODO list and summarize the status of each task.",
-    todoSuggestion3: "Clean up completed",
-    todoSuggestion3Text: "Remove all completed tasks from the TODO list and give me a summary of what was cleared.",
+    todoSuggestion2Text: "Show me the current TODO list and summarize the status of each task. How many are pending, in progress, or done?",
+    todoSuggestion3: "Reprioritize my tasks",
+    todoSuggestion3Text: "Review my pending tasks and reprioritize them. The database query refactor is now urgent — set it to high priority. Also clean up any completed tasks.",
     todoEmpty: "No tasks yet. Ask the AI to add some!",
     todoPending: "Pending",
     todoInProgress: "In Progress",
@@ -82,7 +83,8 @@ const strings = {
       "让 AI 创建动态表单 — 联系表单、调查问卷、反馈表等。AI 生成 JSON Schema 定义并实时预览。",
     formSuggestion1: "创建联系表单",
     formSuggestion1Text:
-      "创建一个包含姓名、邮箱、电话和留言字段的联系表单。在表单预览区展示，然后让我填写。",
+      '预览一个联系表单，包含以下字段：姓名（字符串，必填）、邮箱（字符串，email 格式，必填）、电话（字符串）、咨询类型（枚举："sales"、"support"、"partnership"、"other"，显示标签为"销售咨询"、"技术支持"、"合作洽谈"、"其他"，必填）和留言（textarea，必填）。' +
+      '预览后使用 askUser 收集我的回答。预填姓名为 "Alice Chen"、邮箱为 "alice@example.com"、电话为 "555-0123"、留言为 "我想了解更多关于 OceanMCP SDK 集成的信息。" — 但咨询类型留空让我自己选择。',
     formSuggestion2: "构建问卷调查",
     formSuggestion2Text:
       "构建一个客户满意度调查问卷，包含评分、反馈文本框和推荐单选按钮。预览后让我填写。",
@@ -96,13 +98,13 @@ const strings = {
     todoTitle: "待办列表",
     todoDescription:
       "让 AI 管理你的待办列表。它可以添加任务、标记完成、设置优先级，并通过浏览器端工具调用来组织你的工作流。",
-    todoSuggestion1: "规划一个 Sprint",
+    todoSuggestion1: "完成 CI/CD 搭建",
     todoSuggestion1Text:
-      "添加 5 个两周 Sprint 的任务：搭建 CI/CD 流水线（高优先级）、编写单元测试（高）、重构认证模块（中）、更新文档（低）、设计评审（中）。设置合适的截止日期。",
+      "CI/CD 流水线任务正在进行中 — 把它标记为已完成，然后给我总结一下待办列表里还剩什么。",
     todoSuggestion2: "查看任务列表",
-    todoSuggestion2Text: "展示当前待办列表，并总结每个任务的状态。",
-    todoSuggestion3: "清理已完成任务",
-    todoSuggestion3Text: "从待办列表中移除所有已完成的任务，并给我一个清理摘要。",
+    todoSuggestion2Text: "展示当前待办列表，并总结每个任务的状态。有多少待处理、进行中、已完成？",
+    todoSuggestion3: "调整任务优先级",
+    todoSuggestion3Text: "检查我的待处理任务并重新排列优先级。数据库查询重构现在很紧急 — 设为高优先级。同时清理所有已完成的任务。",
     todoEmpty: "暂无任务。让 AI 添加一些吧！",
     todoPending: "待处理",
     todoInProgress: "进行中",

@@ -1,9 +1,10 @@
-import React, { useSyncExternalStore, useCallback, useMemo } from "react";
+import React, { useSyncExternalStore, useCallback, useMemo, useEffect, useRef } from "react";
 import {
   ReactFlow,
   Background,
   Controls,
   MiniMap,
+  useReactFlow,
   type Node,
   type Edge,
   type OnNodesChange,
@@ -22,6 +23,20 @@ interface DemoFlowTabProps {
 
 function FlowCanvas() {
   const state = useSyncExternalStore(flowStore.subscribe, flowStore.getSnapshot);
+  const { fitView } = useReactFlow();
+  const prevNodeCountRef = useRef(state.nodes.length);
+
+  // Auto-fit the viewport whenever nodes are added or removed
+  useEffect(() => {
+    if (state.nodes.length !== prevNodeCountRef.current) {
+      prevNodeCountRef.current = state.nodes.length;
+      // Short delay so React Flow finishes laying out the new node first
+      const timer = setTimeout(() => {
+        fitView({ padding: 0.3, duration: 300 });
+      }, 50);
+      return () => clearTimeout(timer);
+    }
+  }, [state.nodes.length, fitView]);
 
   // Map our store nodes/edges to xyflow format
   const nodes: Node[] = useMemo(

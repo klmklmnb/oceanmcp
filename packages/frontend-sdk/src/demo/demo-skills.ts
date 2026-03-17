@@ -8,7 +8,7 @@ import {
   type ExecutorFunctionDefinition,
 } from "oceanmcp-shared";
 import type { SkillDefinition } from "../registry/skill-registry";
-import { todoStore, flowStore, formStore } from "./demo-store";
+import { todoStore, flowStore, formStore, tabStore, type DemoTab } from "./demo-store";
 
 // ─── Form Builder Skill ──────────────────────────────────────────────────────
 
@@ -779,5 +779,113 @@ The canvas is roughly 800×600 pixels. When creating a flow:
 - Add edge labels for branching logic (e.g., "yes"/"no" on decision paths)
 `,
     tools: createFlowTools(),
+  };
+}
+
+// ─── Navigation Skill ────────────────────────────────────────────────────────
+
+const VALID_TABS: DemoTab[] = ["form", "todo", "flow"];
+
+function createNavigationTools(): ExecutorFunctionDefinition[] {
+  return [
+    {
+      id: "getCurrentTab",
+      name: "Get Current Tab",
+      cnName: "获取当前标签页",
+      description:
+        "Returns the currently active demo tab. Possible values: 'form', 'todo', 'flow'.",
+      type: FUNCTION_TYPE.EXECUTOR,
+      operationType: OPERATION_TYPE.READ,
+      parameters: [],
+      executor: async () => {
+        const tab = tabStore.get();
+        return {
+          currentTab: tab,
+          availableTabs: VALID_TABS,
+          message: `The currently active tab is "${tab}".`,
+        };
+      },
+    },
+    {
+      id: "setCurrentTab",
+      name: "Set Current Tab",
+      cnName: "切换标签页",
+      description:
+        "Switches the active demo tab. Use this to navigate the user to the relevant tab " +
+        "before performing tab-specific operations. For example, switch to 'todo' before managing tasks, " +
+        "or switch to 'flow' before creating flow diagrams.",
+      type: FUNCTION_TYPE.EXECUTOR,
+      operationType: OPERATION_TYPE.WRITE,
+      autoApprove: true,
+      parameters: {
+        type: "object",
+        required: ["tab"],
+        properties: {
+          tab: {
+            type: "string",
+            description: "The tab to switch to: 'form', 'todo', or 'flow'",
+            enum: ["form", "todo", "flow"],
+          },
+        },
+        additionalProperties: false,
+      },
+      executor: async (args) => {
+        const tab = args.tab as DemoTab;
+        if (!VALID_TABS.includes(tab)) {
+          return {
+            success: false,
+            error: `Invalid tab "${tab}". Valid tabs: ${VALID_TABS.join(", ")}`,
+          };
+        }
+        const previousTab = tabStore.get();
+        tabStore.set(tab);
+        return {
+          success: true,
+          previousTab,
+          currentTab: tab,
+          message: previousTab === tab
+            ? `Already on the "${tab}" tab.`
+            : `Switched from "${previousTab}" to "${tab}" tab.`,
+        };
+      },
+    },
+  ];
+}
+
+export function createNavigationSkill(): SkillDefinition {
+  return {
+    name: "demo-navigation",
+    cnName: "页面导航",
+    description:
+      "Navigate between demo tabs. Read the current tab or switch to a different one. " +
+      "Use this to direct the user to the correct panel before performing domain-specific tasks.",
+    instructions: `
+# Tab Navigation
+
+The demo page has three tabs, each with its own set of tools:
+
+| Tab | Key | Description |
+|-----|-----|-------------|
+| Form Builder | form | Build and preview dynamic forms using JSON Schema |
+| TODO List | todo | Manage a visual task list with priorities and due dates |
+| React Flow | flow | Create and edit interactive flow diagrams on a canvas |
+
+## When to Switch Tabs
+
+- **Always switch to the relevant tab before using its tools.** For example, if the user asks
+  to "add a TODO item", call \`setCurrentTab\` with \`tab: "todo"\` first so the user can see the
+  result, then use the TODO tools.
+- If the user asks about forms, switch to "form" first.
+- If the user asks about flow diagrams or pipelines, switch to "flow" first.
+- Use \`getCurrentTab\` if you need to check which tab is already active.
+
+## Tips
+
+- Switching tabs is instant and does not lose any data — each tab's state is preserved.
+- The chat is universal across all tabs, so the user can ask about any domain at any time.
+- When the user's intent is ambiguous, check the current tab first — they likely want to
+  interact with whichever tab they're already viewing.
+`,
+    tools: createNavigationTools(),
   };
 }
