@@ -14,6 +14,9 @@ export type Theme = (typeof THEME)[keyof typeof THEME];
 
 const VALID_THEMES: ReadonlySet<string> = new Set(Object.values(THEME));
 
+export const DEFAULT_WELCOME_BRAND_IMAGE =
+  "https://fastcdn.mihoyo.com/static-resource-v2/2026/03/17/ca49e32c78006290c00186a33de06bff_4831739655655111183.png";
+
 /**
  * A suggestion question shown on the chat welcome screen.
  *
@@ -59,7 +62,7 @@ export type SubagentConfig = {
 export type SDKConfig = {
   locale?: SupportedLocale;
   avatar?: string;
-  welcomeTitle?: string;
+  welcomeTitle?: string | null;
   welcomeDescription?: string;
   /** LLM model configuration sent to the api-server on each chat request. */
   model?: ModelConfig;
@@ -107,6 +110,7 @@ function normalizeSessionConfig(value: SessionConfig | undefined): SessionConfig
 }
 
 const config: SDKConfig = {
+  welcomeTitle: null,
   session: { ...DEFAULT_SESSION_CONFIG },
 };
 
@@ -135,11 +139,11 @@ export const sdkConfig = {
     config.avatar = value;
   },
 
-  get welcomeTitle(): string | undefined {
+  get welcomeTitle(): string | null | undefined {
     return config.welcomeTitle;
   },
 
-  set welcomeTitle(value: string | undefined) {
+  set welcomeTitle(value: string | null | undefined) {
     config.welcomeTitle = value;
   },
 

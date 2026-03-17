@@ -79,8 +79,8 @@ export interface MountOptions {
   locale?: import("./runtime/sdk-config").SupportedLocale;
   /** URL or data-URI for the assistant avatar image. */
   avatar?: string;
-  /** Custom welcome screen title. */
-  welcomeTitle?: string;
+  /** Custom welcome screen title. Set to `null` to hide the title. */
+  welcomeTitle?: string | null;
   /** Custom welcome screen description / subtitle. */
   welcomeDescription?: string;
   /**
