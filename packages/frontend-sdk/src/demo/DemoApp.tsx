@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useSyncExternalStore } from "react";
+import React, { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
 import OceanMCPSDK from "../main";
 import { DemoNavbar } from "./DemoNavbar";
 import { DemoFormTab } from "./DemoFormTab";
@@ -18,6 +18,10 @@ import { TestPanel } from "../components/TestPanel";
 
 const ICON_URL =
   "https://pub-46b4307a6ac249dda431cdfd7f715021.r2.dev/uploads/oceanmcp_icon.png";
+
+const CHAT_WIDTH_DEFAULT = 420;
+const CHAT_WIDTH_MIN = 320;
+const CHAT_WIDTH_MAX = 700;
 
 /** Tab metadata for the pill tab bar. */
 const TAB_META: { key: DemoTab; labelKey: keyof DemoStrings; icon: string }[] = [
@@ -71,6 +75,43 @@ export function DemoApp() {
 
   // Subscribe to tabStore so we re-render when the LLM (or user) switches tabs
   const tab = useSyncExternalStore(tabStore.subscribe, tabStore.getSnapshot);
+
+  // ── Resizable chat pane state ──────────────────────────────────────────────
+  const [chatWidth, setChatWidth] = useState(CHAT_WIDTH_DEFAULT);
+  const isDraggingRef = useRef(false);
+
+  const onDragStart = useCallback((e: React.MouseEvent) => {
+    e.preventDefault();
+    isDraggingRef.current = true;
+    document.body.style.cursor = "col-resize";
+    // Prevent text selection while dragging
+    document.body.style.userSelect = "none";
+  }, []);
+
+  useEffect(() => {
+    const onMouseMove = (e: MouseEvent) => {
+      if (!isDraggingRef.current) return;
+      // Chat pane is on the right, so width = viewport width - mouse X
+      const newWidth = Math.min(
+        CHAT_WIDTH_MAX,
+        Math.max(CHAT_WIDTH_MIN, window.innerWidth - e.clientX),
+      );
+      setChatWidth(newWidth);
+    };
+    const onMouseUp = () => {
+      if (isDraggingRef.current) {
+        isDraggingRef.current = false;
+        document.body.style.cursor = "";
+        document.body.style.userSelect = "";
+      }
+    };
+    window.addEventListener("mousemove", onMouseMove);
+    window.addEventListener("mouseup", onMouseUp);
+    return () => {
+      window.removeEventListener("mousemove", onMouseMove);
+      window.removeEventListener("mouseup", onMouseUp);
+    };
+  }, []);
 
   // Initialize tabStore from URL hash on first render
   useEffect(() => {
@@ -133,7 +174,7 @@ export function DemoApp() {
         {/* Left Pane: Tab Bar + Demo Content */}
         <div
           style={{
-            flex: "1 1 60%",
+            flex: 1,
             minWidth: 0,
             display: "flex",
             flexDirection: "column",
@@ -218,13 +259,33 @@ export function DemoApp() {
           </div>
         </div>
 
-        {/* Right Pane: Chat Widget (mounted once, universal) */}
+        {/* Drag Handle */}
+        <div
+          onMouseDown={onDragStart}
+          style={{
+            flex: "0 0 4px",
+            cursor: "col-resize",
+            background: "#e2e8f0",
+            transition: "background 0.15s",
+            position: "relative",
+            zIndex: 10,
+          }}
+          onMouseEnter={(e) => {
+            e.currentTarget.style.background = "#94a3b8";
+          }}
+          onMouseLeave={(e) => {
+            if (!isDraggingRef.current) {
+              e.currentTarget.style.background = "#e2e8f0";
+            }
+          }}
+        />
+
+        {/* Right Pane: Chat Widget (mounted once, universal, resizable) */}
         <div
           style={{
-            flex: "0 0 420px",
-            minWidth: 360,
-            maxWidth: 500,
-            borderLeft: "1px solid #e2e8f0",
+            flex: `0 0 ${chatWidth}px`,
+            minWidth: CHAT_WIDTH_MIN,
+            maxWidth: CHAT_WIDTH_MAX,
             display: "flex",
             flexDirection: "column",
             position: "relative",
