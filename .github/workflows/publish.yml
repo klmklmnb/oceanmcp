@@ -39,6 +39,17 @@ jobs:
       - name: Build shared package
         run: bun run build:shared
 
+      # Extract version from git tag (e.g. v0.1.2 -> 0.1.2) and
+      # sync it into package.json so the published version always
+      # matches the tag. This avoids "cannot publish over previously
+      # published versions" errors from forgetting to bump manually.
+      - name: Set version from tag
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          echo "Publishing version: $VERSION"
+          npm pkg set version="$VERSION"
+        working-directory: packages/frontend-sdk
+
       - name: Build frontend-sdk
         run: bun run build:frontend
 
