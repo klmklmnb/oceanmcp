@@ -5,7 +5,17 @@
     "packages/*"
   ],
   "scripts": {
-    "postinstall": "cd packages/shared && bun run build"
+    "postinstall": "cd packages/shared && bun run build",
+    "typecheck": "bun run typecheck:shared && bun run typecheck:frontend && bun run typecheck:server",
+    "typecheck:shared": "cd packages/shared && bun run typecheck",
+    "typecheck:frontend": "cd packages/frontend-sdk && bun run typecheck",
+    "typecheck:server": "cd packages/api-server && bun run typecheck",
+    "test": "bun run test:frontend && bun run test:server",
+    "test:frontend": "cd packages/frontend-sdk && bun run test",
+    "test:server": "cd packages/api-server && bun run test",
+    "build:shared": "cd packages/shared && bun run build",
+    "build:frontend": "cd packages/frontend-sdk && bun run build:prod",
+    "build:server": "cd packages/api-server && bun run build"
   },
   "devDependencies": {},
   "dependencies": {

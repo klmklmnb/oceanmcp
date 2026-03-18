@@ -35,3 +35,6 @@ coverage/
 .tmp/
 .cache/
 .next
+
+# Vercel
+.vercel

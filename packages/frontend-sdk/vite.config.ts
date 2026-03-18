@@ -6,7 +6,6 @@ import packageJson from "./package.json";
 
 export default defineConfig(({ command }) => {
   return {
-    base: command === "serve" ? "/" : "/ocean-mcp/",
     define: {
       __SDK_VERSION__: JSON.stringify(packageJson.version),
       __SDK_BUILD__: JSON.stringify("demo"),
