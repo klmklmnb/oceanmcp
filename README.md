@@ -13,9 +13,11 @@
   <a href="https://react.dev/"><img src="https://img.shields.io/badge/React-19-61dafb?style=flat-square&logo=react&logoColor=white" alt="React" /></a>
   <a href="https://bun.sh/"><img src="https://img.shields.io/badge/Bun-runtime-f9f1e1?style=flat-square&logo=bun&logoColor=000" alt="Bun" /></a>
   <a href="https://github.com/klmklmnb/oceanmcp/pulls"><img src="https://img.shields.io/badge/PRs-welcome-brightgreen.svg?style=flat-square" alt="PRs Welcome" /></a>
+  <a href="https://oceanmcp.vercel.app/"><img src="https://img.shields.io/badge/Live_Demo-oceanmcp.vercel.app-00b4d8?style=flat-square&logo=vercel&logoColor=white" alt="Live Demo" /></a>
 </p>
 
 <p align="center">
+  <a href="https://oceanmcp.vercel.app/">Live Demo</a> &bull;
   <a href="./README_ZH.md">中文文档</a> &bull;
   <a href="./INTEGRATE.md">Integration Guide</a> &bull;
   <a href="./INTEGRATE_ZH.md">接入指南</a>
@@ -180,6 +182,10 @@ We welcome contributions! Please feel free to submit a Pull Request. For major c
 3. Commit your changes (`git commit -m 'feat: add amazing feature'`)
 4. Push to the branch (`git push origin feature/amazing-feature`)
 5. Open a Pull Request
+
+## Why "OceanMCP"?
+
+With OceanMCP, you get an **ocean of MCP tools** from a single SDK integration. Every frontend capability becomes an AI-callable tool — fetching URLs, submitting forms, clicking buttons, reading DOM state, navigating pages — anything your browser can do, the AI can orchestrate. One SDK, limitless tools.
 
 ## License
 
