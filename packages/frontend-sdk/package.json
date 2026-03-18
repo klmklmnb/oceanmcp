@@ -2,6 +2,11 @@
   "name": "oceanmcp",
   "version": "0.1.1",
   "type": "module",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/klmklmnb/oceanmcp",
+    "directory": "packages/frontend-sdk"
+  },
   "main": "./dist/sdk.umd.js",
   "module": "./dist/sdk.esm.js",
   "types": "./dist/sdk.esm.d.ts",
