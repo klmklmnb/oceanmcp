@@ -4,11 +4,13 @@ import { DemoNavbar } from "./DemoNavbar";
 import { DemoFormTab } from "./DemoFormTab";
 import { DemoTodoTab } from "./DemoTodoTab";
 import { DemoFlowTab } from "./DemoFlowTab";
+import { DemoTableTab } from "./DemoTableTab";
 import { detectLocale, getStrings, type DemoLocale, type DemoStrings } from "./demo-i18n";
 import {
   createFormSkill,
   createTodoSkill,
   createFlowSkill,
+  createTableSkill,
   createNavigationSkill,
 } from "./demo-skills";
 import { tabStore, type DemoTab } from "./demo-store";
@@ -37,13 +39,18 @@ const TAB_META: { key: DemoTab; labelKey: keyof DemoStrings; icon: string }[] = 
     labelKey: "tabFlow",
     icon: "M4 6h16M4 12h8m-8 6h16M20 6l-4 6 4 6",
   },
+  {
+    key: "table",
+    labelKey: "tabTable",
+    icon: "M3 10h18M3 14h18M3 6h18M3 18h18M8 6v12M16 6v12",
+  },
 ];
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
 function getTabFromHash(): DemoTab {
   const hash = window.location.hash.replace("#", "");
-  if (hash === "form" || hash === "todo" || hash === "flow") return hash;
+  if (hash === "form" || hash === "todo" || hash === "flow" || hash === "table") return hash;
   return "todo";
 }
 
@@ -59,6 +66,9 @@ function buildSuggestions(strings: DemoStrings) {
     // Flow (2)
     { label: strings.flowSuggestion1, text: strings.flowSuggestion1Text },
     { label: strings.flowSuggestion2, text: strings.flowSuggestion2Text },
+    // Table (2)
+    { label: strings.tableSuggestion1, text: strings.tableSuggestion1Text },
+    { label: strings.tableSuggestion2, text: strings.tableSuggestion2Text },
   ];
 }
 
@@ -133,10 +143,11 @@ export function DemoApp() {
     if (!container || sdkMountedRef.current) return;
     sdkMountedRef.current = true;
 
-    // Register all 4 skills (form, todo, flow, navigation)
-    OceanMCPSDK.registerSkill(createFormSkill());
+    // Register all 5 skills (todo, form, flow, table, navigation)
     OceanMCPSDK.registerSkill(createTodoSkill());
+    OceanMCPSDK.registerSkill(createFormSkill());
     OceanMCPSDK.registerSkill(createFlowSkill());
+    OceanMCPSDK.registerSkill(createTableSkill());
     OceanMCPSDK.registerSkill(createNavigationSkill());
 
     // Mount the chat widget once — it stays across all tab switches
@@ -249,9 +260,10 @@ export function DemoApp() {
 
           {/* Tab Content */}
           <div style={{ flex: 1, padding: 24, overflow: "auto" }}>
-            {tab === "form" && <DemoFormTab strings={strings} />}
             {tab === "todo" && <DemoTodoTab strings={strings} />}
+            {tab === "form" && <DemoFormTab strings={strings} />}
             {tab === "flow" && <DemoFlowTab strings={strings} />}
+            {tab === "table" && <DemoTableTab strings={strings} />}
           </div>
         </div>
 

@@ -67,6 +67,26 @@ const strings = {
     flowSuggestion3Text:
       "Create a microservice architecture diagram with: API Gateway (input), Auth Service, User Service, Order Service, Payment Service, Notification Service, and Database (output). Connect them showing the request flow.",
     flowEmpty: "Ask the AI to create a flow diagram — nodes will appear here.",
+
+    // Query Table tab
+    tabTable: "Query Table",
+    tableTitle: "Order Query Table",
+    tableDescription:
+      "An e-commerce order dashboard with 13 filters. Tell the AI what you're looking for in natural language — it will set the appropriate filter values and the table updates instantly.",
+    tableSuggestion1: "Show high-value European orders",
+    tableSuggestion1Text:
+      "Show me all orders shipped to Europe with an amount over $200. I want to see which products and customers are driving high-value European sales.",
+    tableSuggestion2: "Find cancelled electronics orders",
+    tableSuggestion2Text:
+      "Filter the table to show only cancelled or refunded orders in the Electronics category. I want to analyze our return patterns.",
+    tableSuggestion3: "Mobile orders with coupons",
+    tableSuggestion3Text:
+      "Show me all orders placed from mobile platforms (iOS and Android) where a coupon was used. I want to see how effective our mobile promotions are.",
+    tableEmpty: "No orders match the current filters. Try adjusting the criteria.",
+    tableResetFilters: "Reset Filters",
+    tableShowingResults: "results",
+    tableOf: "of",
+    tableOrders: "orders",
   },
 
   zh: {
@@ -127,6 +147,26 @@ const strings = {
     flowSuggestion3Text:
       "创建一个微服务架构图，包含：API 网关（input）、认证服务、用户服务、订单服务、支付服务、通知服务和数据库（output）。用连线展示请求流向。",
     flowEmpty: "让 AI 创建流程图 — 节点会在这里显示。",
+
+    // Query Table tab
+    tabTable: "查询表格",
+    tableTitle: "订单查询表",
+    tableDescription:
+      "一个包含 13 个筛选条件的电商订单面板。用自然语言告诉 AI 你想查找什么 — 它会自动设置对应的筛选值，表格即时更新。",
+    tableSuggestion1: "查看欧洲高价订单",
+    tableSuggestion1Text:
+      "展示所有发往欧洲且金额超过 200 美元的订单。我想看看哪些产品和客户带来了高价值的欧洲销售。",
+    tableSuggestion2: "查找已取消的电子产品订单",
+    tableSuggestion2Text:
+      "筛选表格只显示电子产品类别中已取消或已退款的订单。我想分析我们的退货模式。",
+    tableSuggestion3: "使用优惠券的移动端订单",
+    tableSuggestion3Text:
+      "展示所有从移动端平台（iOS 和 Android）下单且使用了优惠券的订单。我想看看移动端促销的效果如何。",
+    tableEmpty: "没有匹配当前筛选条件的订单。请尝试调整筛选条件。",
+    tableResetFilters: "重置筛选",
+    tableShowingResults: "条结果",
+    tableOf: "/",
+    tableOrders: "条订单",
   },
 };
 

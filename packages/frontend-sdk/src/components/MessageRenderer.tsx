@@ -358,12 +358,14 @@ function ToolCallCard({
             </>
           )}
           {(state === TOOL_PART_STATE.OUTPUT_ERROR || isOutputError) && (
-            <div className="p-4">
-              <p className="text-xs text-red-500">
-                {isOutputError
-                  ? output.error
-                  : typeof errorText === "string" ? errorText : JSON.stringify(errorText)}
-              </p>
+            <div className="px-4 pb-3">
+              <CollapsibleError
+                error={
+                  isOutputError
+                    ? output.error
+                    : typeof errorText === "string" ? errorText : JSON.stringify(errorText)
+                }
+              />
             </div>
           )}
         </>

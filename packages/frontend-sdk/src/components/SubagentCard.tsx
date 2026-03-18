@@ -10,6 +10,7 @@ import { MessageReasoning } from "./MessageReasoning";
 import { functionRegistry } from "../registry";
 import { sdkConfig } from "../runtime/sdk-config";
 import { t } from "../locale";
+import { CollapsibleError } from "./FlowNodeCard";
 
 // ── Helper: detect subagent-specific states ──────────────────────────────────
 
@@ -370,8 +371,10 @@ export function SubagentCard({
 
           {/* Error display */}
           {state === TOOL_PART_STATE.OUTPUT_ERROR && errorText && (
-            <div className="mt-2 px-3 py-2 bg-red-50 border border-red-200 rounded-lg text-xs text-red-600">
-              {typeof errorText === "string" ? errorText : JSON.stringify(errorText)}
+            <div className="mt-2 px-3 py-2 bg-red-50 border border-red-200 rounded-lg">
+              <CollapsibleError
+                error={typeof errorText === "string" ? errorText : JSON.stringify(errorText)}
+              />
             </div>
           )}
 

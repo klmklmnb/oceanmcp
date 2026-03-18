@@ -9,8 +9,8 @@ import { ArrayTable, RawDataBlock, tryParseArray, isObjectArray } from "./ArrayT
 
 // ─── CollapsibleError ───────────────────────────────────────────────────────
 
-/** Max height (in px) when collapsed — roughly 3 lines of text-xs */
-const COLLAPSED_MAX_HEIGHT = 60;
+/** Max height (in px) when collapsed — roughly 2 lines of text-xs */
+const COLLAPSED_MAX_HEIGHT = 40;
 
 /**
  * Collapsible error message block — collapsed by default for long errors.

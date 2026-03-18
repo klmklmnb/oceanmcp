@@ -8,7 +8,7 @@ import {
   type ExecutorFunctionDefinition,
 } from "oceanmcp-shared";
 import type { SkillDefinition } from "../registry/skill-registry";
-import { todoStore, flowStore, formStore, tabStore, type DemoTab } from "./demo-store";
+import { todoStore, flowStore, formStore, tabStore, orderStore, type DemoTab } from "./demo-store";
 
 // ─── Form Builder Skill ──────────────────────────────────────────────────────
 
@@ -789,9 +789,243 @@ The canvas is roughly 800×600 pixels. When creating a flow:
   };
 }
 
+// ─── Query Table Skill ───────────────────────────────────────────────────────
+
+function createTableTools(): ExecutorFunctionDefinition[] {
+  return [
+    {
+      id: "getFilters",
+      name: "Get Table Filters",
+      cnName: "获取表格筛选条件",
+      description:
+        "Returns the current filter state of the order query table, including all 13 filter values " +
+        "and the list of valid options for each filter. Use this to understand what filters are " +
+        "currently applied before modifying them.",
+      type: FUNCTION_TYPE.EXECUTOR,
+      operationType: OPERATION_TYPE.READ,
+      parameters: [],
+      executor: async () => {
+        const filters = orderStore.getFilters();
+        const filtered = orderStore.getFilteredOrders();
+        return {
+          currentFilters: filters,
+          matchingOrderCount: filtered.length,
+          totalOrderCount: orderStore.getAllOrders().length,
+          availableOptions: {
+            category: ["Electronics", "Clothing", "Home & Kitchen", "Books", "Sports", "Beauty"],
+            status: ["delivered", "shipped", "processing", "cancelled", "refunded"],
+            paymentMethod: ["credit_card", "paypal", "bank_transfer", "crypto"],
+            shippingRegion: ["North America", "Europe", "Asia", "Oceania", "South America"],
+            couponUsed: ["any", "yes", "no"],
+            rating: ["", "5", "4", "3", "2", "1", "none"],
+            platform: ["web", "mobile_ios", "mobile_android"],
+            fulfillment: ["", "standard", "express", "same_day"],
+          },
+        };
+      },
+    },
+    {
+      id: "setFilters",
+      name: "Set Table Filters",
+      cnName: "设置表格筛选条件",
+      description:
+        "Sets one or more filter values on the order query table. The table updates instantly " +
+        "to show only matching orders. You can set any combination of the 13 filters in a single call. " +
+        "Filters not included in the call remain unchanged. " +
+        "Pass an empty string or empty array to clear a specific filter.",
+      type: FUNCTION_TYPE.EXECUTOR,
+      operationType: OPERATION_TYPE.WRITE,
+      autoApprove: true,
+      parameters: {
+        type: "object",
+        properties: {
+          search: {
+            type: "string",
+            description: "Free-text search across order ID, customer name, email, and product name",
+          },
+          category: {
+            type: "array",
+            description: 'Filter by product category. Array of: "Electronics", "Clothing", "Home & Kitchen", "Books", "Sports", "Beauty"',
+            items: { type: "string", enum: ["Electronics", "Clothing", "Home & Kitchen", "Books", "Sports", "Beauty"] },
+          },
+          status: {
+            type: "array",
+            description: 'Filter by order status. Array of: "delivered", "shipped", "processing", "cancelled", "refunded"',
+            items: { type: "string", enum: ["delivered", "shipped", "processing", "cancelled", "refunded"] },
+          },
+          dateFrom: {
+            type: "string",
+            description: "Start of date range in YYYY-MM-DD format",
+          },
+          dateTo: {
+            type: "string",
+            description: "End of date range in YYYY-MM-DD format",
+          },
+          amountMin: {
+            type: "string",
+            description: "Minimum order amount (as string, e.g. '100')",
+          },
+          amountMax: {
+            type: "string",
+            description: "Maximum order amount (as string, e.g. '500')",
+          },
+          paymentMethod: {
+            type: "string",
+            description: 'Single payment method filter: "credit_card", "paypal", "bank_transfer", "crypto", or "" for any',
+            enum: ["", "credit_card", "paypal", "bank_transfer", "crypto"],
+          },
+          shippingRegion: {
+            type: "array",
+            description: 'Filter by shipping region. Array of: "North America", "Europe", "Asia", "Oceania", "South America"',
+            items: { type: "string", enum: ["North America", "Europe", "Asia", "Oceania", "South America"] },
+          },
+          couponUsed: {
+            type: "string",
+            description: 'Filter by coupon usage: "any", "yes", or "no"',
+            enum: ["any", "yes", "no"],
+          },
+          rating: {
+            type: "string",
+            description: 'Filter by rating: "5", "4", "3", "2", "1", "none" (not rated), or "" for any',
+            enum: ["", "5", "4", "3", "2", "1", "none"],
+          },
+          platform: {
+            type: "array",
+            description: 'Filter by platform. Array of: "web", "mobile_ios", "mobile_android"',
+            items: { type: "string", enum: ["web", "mobile_ios", "mobile_android"] },
+          },
+          fulfillment: {
+            type: "string",
+            description: 'Filter by fulfillment type: "standard", "express", "same_day", or "" for any',
+            enum: ["", "standard", "express", "same_day"],
+          },
+        },
+        additionalProperties: false,
+      },
+      executor: async (args) => {
+        const updates: Record<string, any> = {};
+        for (const [key, value] of Object.entries(args)) {
+          if (value !== undefined) updates[key] = value;
+        }
+        const newFilters = orderStore.setFilters(updates);
+        const filtered = orderStore.getFilteredOrders();
+        return {
+          success: true,
+          appliedFilters: newFilters,
+          matchingOrderCount: filtered.length,
+          totalOrderCount: orderStore.getAllOrders().length,
+          message: `Filters updated. ${filtered.length} orders match the current criteria.`,
+        };
+      },
+    },
+    {
+      id: "getTableData",
+      name: "Get Table Data",
+      cnName: "获取表格数据",
+      description:
+        "Returns the currently filtered order data from the table. Use this after setting filters " +
+        "to retrieve the matching orders for analysis or summarization. " +
+        "Returns up to 20 rows by default; use the limit and offset parameters for pagination.",
+      type: FUNCTION_TYPE.EXECUTOR,
+      operationType: OPERATION_TYPE.READ,
+      parameters: {
+        type: "object",
+        properties: {
+          limit: {
+            type: "number",
+            description: "Maximum number of rows to return (default: 20, max: 50)",
+          },
+          offset: {
+            type: "number",
+            description: "Number of rows to skip from the start (default: 0)",
+          },
+        },
+        additionalProperties: false,
+      },
+      executor: async (args) => {
+        const filtered = orderStore.getFilteredOrders();
+        const limit = Math.min(typeof args.limit === "number" ? args.limit : 20, 50);
+        const offset = typeof args.offset === "number" ? args.offset : 0;
+        const page = filtered.slice(offset, offset + limit);
+        return {
+          totalFiltered: filtered.length,
+          totalOrders: orderStore.getAllOrders().length,
+          offset,
+          limit,
+          returned: page.length,
+          orders: page,
+        };
+      },
+    },
+  ];
+}
+
+export function createTableSkill(): SkillDefinition {
+  return {
+    name: "demo-query-table",
+    cnName: "查询表格",
+    description:
+      "Query and filter an e-commerce order table with 13 filter dimensions. " +
+      "Set filters by reasoning about the user's natural language query, " +
+      "and retrieve the filtered results for analysis.",
+    instructions: `
+# Order Query Table Demo
+
+You are a data analysis assistant. You can filter and query an e-commerce order table displayed on the page.
+
+**IMPORTANT — Tab Navigation:** Before using any table tools, you MUST first call \`setCurrentTab\` with \`tab: "table"\` to switch to the Query Table tab so the user can see the filter changes. Do this as your very first step, before any other tool calls.
+
+## Available Tools
+
+| Tool | Type | Description |
+|------|------|-------------|
+| getFilters | read | Get current filter state and available options |
+| setFilters | write (auto) | Set one or more filter values |
+| getTableData | read | Retrieve filtered order rows (with pagination) |
+
+## 13 Available Filters
+
+| Filter | Type | Values |
+|--------|------|--------|
+| search | text | Free-text search across order ID, customer, email, product |
+| category | multi-select | Electronics, Clothing, Home & Kitchen, Books, Sports, Beauty |
+| status | multi-select | delivered, shipped, processing, cancelled, refunded |
+| dateFrom | date | YYYY-MM-DD format |
+| dateTo | date | YYYY-MM-DD format |
+| amountMin | number string | Minimum dollar amount (e.g. "100") |
+| amountMax | number string | Maximum dollar amount (e.g. "500") |
+| paymentMethod | single select | credit_card, paypal, bank_transfer, crypto, or "" |
+| shippingRegion | multi-select | North America, Europe, Asia, Oceania, South America |
+| couponUsed | toggle | "any", "yes", or "no" |
+| rating | single select | "5", "4", "3", "2", "1", "none", or "" |
+| platform | multi-select | web, mobile_ios, mobile_android |
+| fulfillment | single select | standard, express, same_day, or "" |
+
+## Workflow
+
+1. **Switch Tab**: Call \`setCurrentTab\` with \`tab: "table"\`.
+2. **Understand the Query**: Parse the user's natural language request to determine which filters to set.
+3. **Set Filters**: Call \`setFilters\` with the appropriate filter values. Set only what's needed — unspecified filters remain unchanged.
+4. **Report Results**: After setting filters, tell the user how many orders match and summarize the key findings.
+5. **Retrieve Data** (optional): Call \`getTableData\` if the user wants to see specific order details or needs data for analysis.
+
+## Tips
+
+- **Always reset irrelevant filters** when the user asks a new question. Pass empty strings/arrays for filters you want to clear.
+- When the user says "show all", call \`setFilters\` with all filters reset to their defaults.
+- Multi-select filters (category, status, shippingRegion, platform) accept arrays.
+- Single-select filters (paymentMethod, rating, fulfillment) accept a single string.
+- The couponUsed filter only accepts "any", "yes", or "no".
+- Amount filters are strings, not numbers (e.g., "200" not 200).
+- Dates must be in YYYY-MM-DD format.
+`,
+    tools: createTableTools(),
+  };
+}
+
 // ─── Navigation Skill ────────────────────────────────────────────────────────
 
-const VALID_TABS: DemoTab[] = ["form", "todo", "flow"];
+const VALID_TABS: DemoTab[] = ["form", "todo", "flow", "table"];
 
 function createNavigationTools(): ExecutorFunctionDefinition[] {
   return [
@@ -800,7 +1034,7 @@ function createNavigationTools(): ExecutorFunctionDefinition[] {
       name: "Get Current Tab",
       cnName: "获取当前标签页",
       description:
-        "Returns the currently active demo tab. Possible values: 'form', 'todo', 'flow'.",
+        "Returns the currently active demo tab. Possible values: 'form', 'todo', 'flow', 'table'.",
       type: FUNCTION_TYPE.EXECUTOR,
       operationType: OPERATION_TYPE.READ,
       parameters: [],
@@ -830,8 +1064,8 @@ function createNavigationTools(): ExecutorFunctionDefinition[] {
         properties: {
           tab: {
             type: "string",
-            description: "The tab to switch to: 'form', 'todo', or 'flow'",
-            enum: ["form", "todo", "flow"],
+            description: "The tab to switch to: 'todo', 'form', 'flow', or 'table'",
+            enum: ["todo", "form", "flow", "table"],
           },
         },
         additionalProperties: false,
@@ -869,13 +1103,14 @@ export function createNavigationSkill(): SkillDefinition {
     instructions: `
 # Tab Navigation
 
-The demo page has three tabs, each with its own set of tools:
+The demo page has four tabs, each with its own set of tools:
 
 | Tab | Key | Description |
 |-----|-----|-------------|
-| Form Builder | form | Build and preview dynamic forms using JSON Schema |
 | TODO List | todo | Manage a visual task list with priorities and due dates |
+| Form Builder | form | Build and preview dynamic forms using JSON Schema |
 | React Flow | flow | Create and edit interactive flow diagrams on a canvas |
+| Query Table | table | Filter and query an e-commerce order table with 13 filters |
 
 ## When to Switch Tabs
 
@@ -884,6 +1119,7 @@ The demo page has three tabs, each with its own set of tools:
   result, then use the TODO tools.
 - If the user asks about forms, switch to "form" first.
 - If the user asks about flow diagrams or pipelines, switch to "flow" first.
+- If the user asks about orders, filtering data, or querying a table, switch to "table" first.
 - Use \`getCurrentTab\` if you need to check which tab is already active.
 
 ## Tips

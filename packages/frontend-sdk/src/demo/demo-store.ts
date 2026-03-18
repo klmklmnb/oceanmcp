@@ -330,9 +330,234 @@ class FormStore {
 
 export const formStore = new FormStore();
 
+// ─── Order / Query Table Store ───────────────────────────────────────────────
+
+export interface Order {
+  id: string;
+  customer: string;
+  email: string;
+  product: string;
+  category: "Electronics" | "Clothing" | "Home & Kitchen" | "Books" | "Sports" | "Beauty";
+  status: "delivered" | "shipped" | "processing" | "cancelled" | "refunded";
+  orderDate: string; // YYYY-MM-DD
+  amount: number;
+  paymentMethod: "credit_card" | "paypal" | "bank_transfer" | "crypto";
+  shippingRegion: "North America" | "Europe" | "Asia" | "Oceania" | "South America";
+  couponUsed: boolean;
+  rating: number | null; // 1-5 or null
+  platform: "web" | "mobile_ios" | "mobile_android";
+  fulfillment: "standard" | "express" | "same_day";
+  quantity: number;
+}
+
+export interface OrderFilters {
+  search: string;
+  category: string[];
+  status: string[];
+  dateFrom: string;
+  dateTo: string;
+  amountMin: string;
+  amountMax: string;
+  paymentMethod: string;
+  shippingRegion: string[];
+  couponUsed: "any" | "yes" | "no";
+  rating: string;
+  platform: string[];
+  fulfillment: string;
+}
+
+export interface OrderStoreState {
+  filters: OrderFilters;
+  filteredOrders: Order[];
+  totalOrders: number;
+}
+
+const DEFAULT_FILTERS: OrderFilters = {
+  search: "",
+  category: [],
+  status: [],
+  dateFrom: "",
+  dateTo: "",
+  amountMin: "",
+  amountMax: "",
+  paymentMethod: "",
+  shippingRegion: [],
+  couponUsed: "any",
+  rating: "",
+  platform: [],
+  fulfillment: "",
+};
+
+class OrderStore {
+  private orders: Order[] = [];
+  private filters: OrderFilters = { ...DEFAULT_FILTERS };
+  private _snapshot: OrderStoreState | null = null;
+  private listeners = new Set<Listener>();
+
+  subscribe = (listener: Listener): (() => void) => {
+    this.listeners.add(listener);
+    return () => this.listeners.delete(listener);
+  };
+
+  getSnapshot = (): OrderStoreState => {
+    if (!this._snapshot) {
+      const filtered = this.applyFilters();
+      this._snapshot = { filters: this.filters, filteredOrders: filtered, totalOrders: this.orders.length };
+    }
+    return this._snapshot;
+  };
+
+  private emit() {
+    this._snapshot = null;
+    this.listeners.forEach((l) => l());
+  }
+
+  private applyFilters(): Order[] {
+    const f = this.filters;
+    return this.orders.filter((o) => {
+      // Text search
+      if (f.search) {
+        const q = f.search.toLowerCase();
+        if (
+          !o.id.toLowerCase().includes(q) &&
+          !o.customer.toLowerCase().includes(q) &&
+          !o.email.toLowerCase().includes(q) &&
+          !o.product.toLowerCase().includes(q)
+        ) return false;
+      }
+      if (f.category.length > 0 && !f.category.includes(o.category)) return false;
+      if (f.status.length > 0 && !f.status.includes(o.status)) return false;
+      if (f.dateFrom && o.orderDate < f.dateFrom) return false;
+      if (f.dateTo && o.orderDate > f.dateTo) return false;
+      if (f.amountMin && o.amount < Number(f.amountMin)) return false;
+      if (f.amountMax && o.amount > Number(f.amountMax)) return false;
+      if (f.paymentMethod && o.paymentMethod !== f.paymentMethod) return false;
+      if (f.shippingRegion.length > 0 && !f.shippingRegion.includes(o.shippingRegion)) return false;
+      if (f.couponUsed === "yes" && !o.couponUsed) return false;
+      if (f.couponUsed === "no" && o.couponUsed) return false;
+      if (f.rating) {
+        if (f.rating === "none" && o.rating !== null) return false;
+        if (f.rating !== "none" && o.rating !== Number(f.rating)) return false;
+      }
+      if (f.platform.length > 0 && !f.platform.includes(o.platform)) return false;
+      if (f.fulfillment && o.fulfillment !== f.fulfillment) return false;
+      return true;
+    });
+  }
+
+  getFilters(): OrderFilters {
+    return { ...this.filters };
+  }
+
+  setFilters(updates: Partial<OrderFilters>): OrderFilters {
+    this.filters = { ...this.filters, ...updates };
+    this.emit();
+    return this.getFilters();
+  }
+
+  resetFilters(): OrderFilters {
+    this.filters = { ...DEFAULT_FILTERS };
+    this.emit();
+    return this.getFilters();
+  }
+
+  getFilteredOrders(): Order[] {
+    return this.applyFilters();
+  }
+
+  getAllOrders(): Order[] {
+    return this.orders;
+  }
+
+  seed(orders: Order[]): void {
+    this.orders = orders;
+  }
+}
+
+export const orderStore = new OrderStore();
+
+// ── Seed with 50 realistic e-commerce orders ─────────────────────────────────
+
+const SEED_CUSTOMERS = [
+  { name: "Alice Chen", email: "alice@example.com" },
+  { name: "Bob Williams", email: "bob@example.com" },
+  { name: "Carol Martinez", email: "carol@example.com" },
+  { name: "David Kim", email: "david@example.com" },
+  { name: "Emma Johnson", email: "emma@example.com" },
+  { name: "Frank Liu", email: "frank@example.com" },
+  { name: "Grace Park", email: "grace@example.com" },
+  { name: "Henry Brown", email: "henry@example.com" },
+  { name: "Ivy Thompson", email: "ivy@example.com" },
+  { name: "Jack Wilson", email: "jack@example.com" },
+  { name: "Karen Davis", email: "karen@example.com" },
+  { name: "Leo Garcia", email: "leo@example.com" },
+];
+
+const SEED_PRODUCTS: { name: string; category: Order["category"]; price: number }[] = [
+  { name: "Wireless Headphones", category: "Electronics", price: 129.99 },
+  { name: "Smart Watch Pro", category: "Electronics", price: 299.99 },
+  { name: "USB-C Hub", category: "Electronics", price: 49.99 },
+  { name: "Bluetooth Speaker", category: "Electronics", price: 79.99 },
+  { name: "Laptop Stand", category: "Electronics", price: 39.99 },
+  { name: "Running Shoes", category: "Sports", price: 119.99 },
+  { name: "Yoga Mat", category: "Sports", price: 34.99 },
+  { name: "Tennis Racket", category: "Sports", price: 89.99 },
+  { name: "Winter Jacket", category: "Clothing", price: 189.99 },
+  { name: "Cotton T-Shirt Pack", category: "Clothing", price: 29.99 },
+  { name: "Denim Jeans", category: "Clothing", price: 69.99 },
+  { name: "Silk Scarf", category: "Clothing", price: 45.99 },
+  { name: "Coffee Maker", category: "Home & Kitchen", price: 149.99 },
+  { name: "Air Fryer", category: "Home & Kitchen", price: 99.99 },
+  { name: "Ceramic Knife Set", category: "Home & Kitchen", price: 59.99 },
+  { name: "Scented Candle Set", category: "Home & Kitchen", price: 24.99 },
+  { name: "JavaScript Patterns", category: "Books", price: 44.99 },
+  { name: "System Design Interview", category: "Books", price: 39.99 },
+  { name: "The Art of War", category: "Books", price: 12.99 },
+  { name: "Face Serum Kit", category: "Beauty", price: 64.99 },
+  { name: "Organic Shampoo", category: "Beauty", price: 18.99 },
+  { name: "Sunscreen SPF50", category: "Beauty", price: 22.99 },
+];
+
+const SEED_STATUSES: Order["status"][] = ["delivered", "delivered", "delivered", "shipped", "shipped", "processing", "processing", "cancelled", "refunded"];
+const SEED_PAYMENTS: Order["paymentMethod"][] = ["credit_card", "credit_card", "credit_card", "paypal", "paypal", "bank_transfer", "crypto"];
+const SEED_REGIONS: Order["shippingRegion"][] = ["North America", "North America", "Europe", "Europe", "Asia", "Asia", "Oceania", "South America"];
+const SEED_PLATFORMS: Order["platform"][] = ["web", "web", "web", "mobile_ios", "mobile_ios", "mobile_android"];
+const SEED_FULFILLMENTS: Order["fulfillment"][] = ["standard", "standard", "standard", "express", "express", "same_day"];
+
+function seedOrders(): Order[] {
+  const orders: Order[] = [];
+  for (let i = 0; i < 50; i++) {
+    const cust = SEED_CUSTOMERS[i % SEED_CUSTOMERS.length];
+    const prod = SEED_PRODUCTS[i % SEED_PRODUCTS.length];
+    const qty = 1 + (i % 5);
+    const day = String(1 + (i % 28)).padStart(2, "0");
+    const month = i < 25 ? "02" : "03";
+    orders.push({
+      id: `ORD-${String(i + 1).padStart(3, "0")}`,
+      customer: cust.name,
+      email: cust.email,
+      product: prod.name,
+      category: prod.category,
+      status: SEED_STATUSES[i % SEED_STATUSES.length],
+      orderDate: `2026-${month}-${day}`,
+      amount: Math.round(prod.price * qty * 100) / 100,
+      paymentMethod: SEED_PAYMENTS[i % SEED_PAYMENTS.length],
+      shippingRegion: SEED_REGIONS[i % SEED_REGIONS.length],
+      couponUsed: i % 3 === 0,
+      rating: i % 7 === 0 ? null : 1 + (i % 5),
+      platform: SEED_PLATFORMS[i % SEED_PLATFORMS.length],
+      fulfillment: SEED_FULFILLMENTS[i % SEED_FULFILLMENTS.length],
+      quantity: qty,
+    });
+  }
+  return orders;
+}
+
+orderStore.seed(seedOrders());
+
 // ─── Tab Store ───────────────────────────────────────────────────────────────
 
-export type DemoTab = "form" | "todo" | "flow";
+export type DemoTab = "form" | "todo" | "flow" | "table";
 
 class TabStore {
   private current: DemoTab = "todo";

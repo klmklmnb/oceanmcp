@@ -1,6 +1,7 @@
 import React from "react";
 import { TOOL_PART_STATE } from "oceanmcp-shared";
 import { t } from "../locale";
+import { CollapsibleError } from "./FlowNodeCard";
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -433,8 +434,10 @@ export function AskUserCard({
             {t("askUser.deniedMessage")}
           </div>
         ) : state === TOOL_PART_STATE.OUTPUT_ERROR ? (
-          <div className="p-4 text-sm text-red-500">
-            {typeof errorText === "string" ? errorText : t("askUser.failed")}
+          <div className="p-4">
+            <CollapsibleError
+              error={typeof errorText === "string" ? errorText : t("askUser.failed")}
+            />
           </div>
         ) : (
           <div className="p-4 space-y-1">
