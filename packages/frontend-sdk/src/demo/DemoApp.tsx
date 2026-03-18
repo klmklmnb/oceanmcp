@@ -16,6 +16,7 @@ import {
 import { tabStore, type DemoTab } from "./demo-store";
 import { TestPanel } from "../components/TestPanel";
 import { Analytics } from "@vercel/analytics/next"
+import { SpeedInsights } from "@vercel/speed-insights/next"
 
 // ─── Constants ───────────────────────────────────────────────────────────────
 
@@ -307,6 +308,7 @@ export function DemoApp() {
       {/* Dev Test Panel (floating button) */}
       {import.meta.env.DEV && <TestPanel />}
       <Analytics />
+      <SpeedInsights />
     </div>
   );
 }
