@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="https://pub-46b4307a6ac249dda431cdfd7f715021.r2.dev/uploads/oceanmcp.png" width="80" alt="OceanMCP Logo" />
+  <img src="https://pub-46b4307a6ac249dda431cdfd7f715021.r2.dev/uploads/oceanmcp.png" width="300" alt="OceanMCP Logo" />
 </p>
 
 <p align="center">
