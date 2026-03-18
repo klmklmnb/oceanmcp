@@ -8,7 +8,6 @@
 
 <p align="center">
   <a href="https://www.npmjs.com/package/oceanmcp"><img src="https://img.shields.io/npm/v/oceanmcp.svg?style=flat-square&color=00b4d8" alt="npm version" /></a>
-  <a href="https://www.npmjs.com/package/oceanmcp"><img src="https://img.shields.io/npm/dm/oceanmcp.svg?style=flat-square&color=38bdf8" alt="npm downloads" /></a>
   <a href="./LICENSE"><img src="https://img.shields.io/github/license/klmklmnb/oceanmcp.svg?style=flat-square&color=22c55e" alt="license" /></a>
   <a href="https://www.typescriptlang.org/"><img src="https://img.shields.io/badge/TypeScript-5.6+-3178c6?style=flat-square&logo=typescript&logoColor=white" alt="TypeScript" /></a>
   <a href="https://react.dev/"><img src="https://img.shields.io/badge/React-19-61dafb?style=flat-square&logo=react&logoColor=white" alt="React" /></a>
