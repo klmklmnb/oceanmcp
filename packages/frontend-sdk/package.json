@@ -41,11 +41,12 @@
   "dependencies": {
     "@ai-sdk/react": "3.0.39",
     "@monaco-editor/react": "^4.7.0",
-    "oceanmcp-shared": "workspace:*",
+    "@vercel/analytics": "^2.0.1",
     "ai": "6.0.37",
     "axios": "^1.13.6",
     "crypto-js": "^4.2.0",
     "dayjs": "^1.11.20",
+    "oceanmcp-shared": "workspace:*",
     "react": "19.0.1",
     "react-dom": "19.0.1",
     "react-markdown": "^10.1.0",
