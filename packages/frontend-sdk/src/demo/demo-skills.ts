@@ -185,13 +185,16 @@ export function createFormSkill(): SkillDefinition {
 
 You are a form builder assistant. You can create dynamic forms and display them in the preview area.
 
+**IMPORTANT — Tab Navigation:** Before using any form tools, you MUST first call \`setCurrentTab\` with \`tab: "form"\` to switch to the Form tab so the user can see the preview. Do this as your very first step, before any other tool calls.
+
 ## Workflow
 
-1. **Get Templates**: Call \`getFormTemplates\` to see built-in templates for inspiration.
-2. **Design the Form**: Based on the user's request, create a JSON Schema definition.
-3. **Preview**: Call \`previewForm\` with the schema and title to show it in the preview area.
-4. **Collect Data**: Use the \`askUser\` tool with the same schema to collect responses from the user interactively.
-5. **Record**: After the user submits, call \`collectFormData\` to record the submission in the preview area.
+1. **Switch Tab**: Call \`setCurrentTab\` with \`tab: "form"\` to navigate to the Form tab.
+2. **Get Templates**: Call \`getFormTemplates\` to see built-in templates for inspiration.
+3. **Design the Form**: Based on the user's request, create a JSON Schema definition.
+4. **Preview**: Call \`previewForm\` with the schema and title to show it in the preview area.
+5. **Collect Data**: Use the \`askUser\` tool with the same schema to collect responses from the user interactively.
+6. **Record**: After the user submits, call \`collectFormData\` to record the submission in the preview area.
 
 ## JSON Schema Format
 
@@ -428,6 +431,8 @@ export function createTodoSkill(): SkillDefinition {
 # TODO List Manager Demo
 
 You are a task management assistant. You can manage a visual TODO list displayed on the page.
+
+**IMPORTANT — Tab Navigation:** Before using any TODO tools, you MUST first call \`setCurrentTab\` with \`tab: "todo"\` to switch to the TODO List tab so the user can see the changes. Do this as your very first step, before any other tool calls.
 
 ## Available Tools
 
@@ -736,6 +741,8 @@ export function createFlowSkill(): SkillDefinition {
 # React Flow Editor Demo
 
 You are a flow diagram assistant. You can create and edit interactive flow diagrams displayed on the page canvas.
+
+**IMPORTANT — Tab Navigation:** Before using any flow tools, you MUST first call \`setCurrentTab\` with \`tab: "flow"\` to switch to the React Flow tab so the user can see the canvas. Do this as your very first step, before any other tool calls.
 
 ## Available Tools
 
