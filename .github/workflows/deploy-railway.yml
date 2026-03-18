@@ -3,7 +3,7 @@ name: Deploy API to Railway
 on:
   push:
     tags:
-      - "v*"
+      - "v2*"
 
 concurrency:
   group: deploy-railway-${{ github.ref }}
